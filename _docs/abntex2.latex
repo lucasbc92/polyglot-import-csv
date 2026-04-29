@@ -236,6 +236,10 @@ $endif$
 \usepackage{fvextra}
 \RecustomVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,breakanywhere,fontsize=\small}
 
+%% Impede que o LaTeX "estique" os espaços em branco (ex: antes e depois de títulos)
+%% quando uma figura com [H] força a quebra de página antes de encher a página toda.
+\raggedbottom
+
 \begin{document}
 $if(capa)$
 \imprimircapa	% Imprimindo a capa
