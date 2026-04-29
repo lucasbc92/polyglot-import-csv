@@ -1,0 +1,7 @@
+*.exe
+neo4j\plugins
+dist
+build
+2013_mb_dataset_Total_New_Zealand_CSV
+__pycache__
+.git
