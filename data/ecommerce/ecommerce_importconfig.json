@@ -1,0 +1,111 @@
+{
+  "redis": {
+    "e_shopping_cart": {
+      "c_shopping_cart_id": {
+        "is_key": true,
+        "alias_db": "cart_key"
+      },
+      "c_shopping_cart": {
+        "alias_db": "cart_items"
+      }
+    }
+  },
+  "postgres": {
+    "e_categories": {
+      "c_category_id": {
+        "is_key": true
+      },
+      "c_category_name": {}
+    },
+    "e_products": {
+      "c_product_id": {
+        "is_key": true
+      },
+      "c_product_name": {},
+      "c_product_variant": {},
+      "c_product_brand": {},
+      "c_product_description": {},
+      "c_product_image": {},
+      "c_category_id": {},
+      "c_price": {}
+    },
+    "e_inventory": {
+      "c_product_id": {
+        "is_key": true
+      },
+      "c_quantity_available": {},
+      "c_last_restock_date": {}
+    },
+    "r_product_category": {
+      "e1": "products",
+      "e2": "categories"
+    }
+  },
+  "mongodb": {
+    "e_orders": {
+      "c_order_number": {},
+      "c_order_date": {},
+      "c_order_status": {},
+      "c_payment_method": {},
+      "c_quantity": {},
+      "c_comment": {},
+      "c_rating": {},
+      "c_timestamp": {
+        "alias_db": "log_timestamp"
+      },
+      "c_action": {},
+      "e_buyer": {
+        "c_user_id": {},
+        "c_user_name": {},
+        "c_user_email": {},
+        "e_address": {
+          "c_street": {},
+          "c_neighborhood": {},
+          "c_state": {},
+          "c_country": {},
+          "c_zip_code": {}
+        }
+      },
+      "e_product": {
+        "c_product_id": {},
+        "c_product_name": {},
+        "c_product_variant": {},
+        "c_product_brand": {},
+        "c_price": {}
+      }
+    }
+  },
+  "cassandra": {
+    "e_product_selection_log": {
+      "c_timestamp": {},
+      "c_user_id": {},
+      "c_action": {},
+      "e_selected_product_detail": {
+        "c_selected_product": {},
+        "c_suggested_products": {}
+      }
+    }
+  },
+  "neo4j": {
+    "e_buyers": {
+      "c_user_id": {},
+      "c_user_name": {},
+      "c_user_email": {}
+    },
+    "e_sellers": {
+      "c_traded_with": {
+        "alias_db": "user_id"
+      }
+    },
+    "r_purchased_from": {
+      "e1": "buyers",
+      "e2": "sellers",
+      "c_order_number": {},
+      "c_order_date": {},
+      "c_quantity": {},
+      "c_price": {},
+      "c_rating": {},
+      "c_comment": {}
+    }
+  }
+}
