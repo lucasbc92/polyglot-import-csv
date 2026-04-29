@@ -8,6 +8,24 @@ _docs/tcc-pandoc-abnt-corrigido-v3/*.tex
 _docs/tcc-pandoc-abnt-corrigido-v3/*.log
 _docs/tcc-pandoc-abnt-corrigido-v3/*.aux
 
+# Local scratch / failed clone dirs (never commit)
+_temp_skills/
+
+# Large local datasets not tracked in git
+2018-census-totals-by-topic-national-highlights-csv/
+
+# Legacy duplicate entrypoint at repo root (use src/polyglotimportcsv + scripts/)
+/polyglotimportcsv.py
+/BusinessException.py
+/EnumDatabaseParsers.py
+/__doc__.py
+/database_parsers.py
+/data.csv
+/db.json
+/polyglotimportcsv.exe
+/run_example_macos.sh
+/run_example_windows.bat
+
 # LibreOffice / editor lock files
 .~lock.*
 **/.~lock.*
