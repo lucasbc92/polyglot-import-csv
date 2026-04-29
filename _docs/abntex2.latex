@@ -137,23 +137,15 @@ $if(tables)$
 $endif$
 $if(graphics)$
 \usepackage{graphicx}
-% Redefine \includegraphics so that, unless explicit options are
-% given, the image width will not exceed the width of the page.
-% Images get their normal width if they fit onto the page, but
-% are scaled down if they would overflow the margins.
-\makeatletter
-\def\ScaleIfNeeded{%
-  \ifdim\Gin@nat@width>\linewidth
-    \linewidth
-  \else
-    \Gin@nat@width
-  \fi
-}
-\makeatother
-\let\Oldincludegraphics\includegraphics
-{%
- \catcode`\@=11\relax%
- \gdef\includegraphics{\@ifnextchar[{\Oldincludegraphics}{\Oldincludegraphics[width=\ScaleIfNeeded]}}%
+\usepackage{adjustbox}
+% Pandoc 3 always passes optional args (e.g. keepaspectratio, alt=...), so the
+% classic "only add width when no []" trick never applies. Wrap every figure so
+% images never exceed the text block (no upscaling of small icons).
+\let\PandocOrigIncludegraphics\includegraphics
+\renewcommand{\includegraphics}[2][]{%
+  \begin{adjustbox}{max width=\linewidth,max height=0.85\textheight,center}%
+    \PandocOrigIncludegraphics[#1]{#2}%
+  \end{adjustbox}%
 }%
 $endif$
 \hypersetup{breaklinks=true,
