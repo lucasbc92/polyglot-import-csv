@@ -114,7 +114,9 @@ A seguir, há um exemplo de aplicação prática da persistência poliglota em u
 
 ## 2.2 Bancos de Dados NoSQL
 
-Os bancos de dados NoSQL podem ser divididos em subcategorias com base em seus modelos de dados. Este trabalho utiliza a classificação de Hecht e Jablonski [@hecht2011nosql], que categoriza os bancos de dados NoSQL em quatro tipos principais: chave-valor, colunas, documentos e grafos. A Figura 2 ilustra esses modelos.
+Os bancos de dados NoSQL podem ser divididos em subcategorias com base em seus modelos de dados. Este trabalho utiliza a classificação de Hecht e Jablonski [@hecht2011nosql], que categoriza os bancos de dados NoSQL em quatro tipos principais: chave-valor, colunas, documentos e grafos.
+
+A Figura 2 ilustra esses modelos, de forma respectiva:
 
 ![Diferentes tipos de modelos de dados NoSQL.](<images/Figura 2_Diferentes tipos de modelos de dados NoSQL.png>)
 
