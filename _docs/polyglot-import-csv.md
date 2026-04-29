@@ -110,13 +110,13 @@ A seguir, há um exemplo de aplicação prática da persistência poliglota em u
 - **Dados de Atividade do Usuário:** Estes dados podem ser armazenados em bancos de dados NoSQL colunares como o Apache Cassandra.
 - **Dados de Recomendação:** Esses dados de recomendação podem ser armazenados em um banco de dados NoSQL baseado em grafos, como o Neo4j.
 
-![Figura 1 — Exemplo de aplicação da Persistência Poliglota em um e-commerce.](<images/Figura 1_Exemplo de aplicação da Persistência Poliglota em um e-commerce.png>)
+![Exemplo de aplicação da Persistência Poliglota em um e-commerce.](<images/Figura 1_Exemplo de aplicação da Persistência Poliglota em um e-commerce.png>)
 
 ## 2.2 Bancos de Dados NoSQL
 
 Os bancos de dados NoSQL podem ser divididos em subcategorias com base em seus modelos de dados. Este trabalho utiliza a classificação de Hecht e Jablonski [@hecht2011nosql], que categoriza os bancos de dados NoSQL em quatro tipos principais: chave-valor, colunas, documentos e grafos. A Figura 2 ilustra esses modelos.
 
-![Figura 2 — Diferentes tipos de modelos de dados NoSQL.](<images/Figura 2_Diferentes tipos de modelos de dados NoSQL.png>)
+![Diferentes tipos de modelos de dados NoSQL.](<images/Figura 2_Diferentes tipos de modelos de dados NoSQL.png>)
 
 <!-- Figura 3 (uso futuro): Persistência poliglota na Azure — ficheiro `images/Figura 3_Persistência Poliglota na Azure.png`. -->
 
