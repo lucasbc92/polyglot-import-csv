@@ -147,6 +147,16 @@ $if(graphics)$
     \PandocOrigIncludegraphics[#1]{#2}%
   \end{adjustbox}%
 }%
+% Pandoc omits optional placement; default [tbp] floats figures away from the
+% source (wrong order vs. Word). Here [H] keeps each figure at the insertion point.
+\usepackage{float}
+\makeatletter
+\renewenvironment{figure}{%
+  \@float{figure}[H]%
+}{%
+  \end@float
+}
+\makeatother
 $endif$
 \hypersetup{breaklinks=true,
             bookmarks=true,
