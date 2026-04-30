@@ -29,13 +29,13 @@ header-includes: |
   SEÇÕES PENDENTES
 =======================================================================
 
-  - 2.2.3 Documento
-  - 2.2.4 Grafo
-  - 2.3 Bancos de Dados Multimodelo
-  - 3.2 Importação CSV para SGBD multimodelo
-  - 3.3 Considerações sobre os trabalhos relacionados
-  - 4 A Proposta da Ferramenta PolyglotImportCSV
-  - 5 Atividades Futuras
+  - 2.2.3 Documento (rascunho preenchido)
+  - 2.2.4 Grafo (rascunho preenchido)
+  - 2.3 Bancos de Dados Multimodelo (rascunho preenchido)
+  - 3.2 Importação CSV para SGBD multimodelo (rascunho preenchido)
+  - 3.3 Considerações sobre os trabalhos relacionados (rascunho preenchido)
+  - 4 A Proposta da Ferramenta PolyglotImportCSV (rascunho preenchido)
+  - 5 Atividades Futuras (rascunho preenchido)
 
 =======================================================================
 -->
@@ -90,7 +90,7 @@ As últimas etapas, que estão em andamento, se tratam da implementação da sol
 
 ## 1.4 Estrutura do Trabalho
 
-Este trabalho está estruturado em seis capítulos. O primeiro aborda os objetivos, a metodologia e o contexto que levaram à elaboração deste TCC. O capítulo subsequente oferece uma revisão dos fundamentos teóricos essenciais para a compreensão do desenvolvimento da ferramenta proposta. No terceiro capítulo, realiza-se uma análise da ferramenta proposta, destacando também o status atual do trabalho. O quinto capítulo dedica-se à descrição das atividades futuras planejadas para o TCC II.
+Este trabalho está estruturado em cinco capítulos principais. O primeiro aborda os objetivos, a metodologia e o contexto que levaram à elaboração deste TCC. O capítulo 2 revisa fundamentos teóricos. O capítulo 3 apresenta trabalhos relacionados. O capítulo 4 descreve a proposta da ferramenta *Polyglot Import CSV* e o capítulo 5 as atividades futuras (TCC II).
 
 # 2 FUNDAMENTAÇÃO TEÓRICA
 
@@ -146,15 +146,21 @@ Semelhante aos bancos de dados de chave-valor, qualquer lógica que exija relaç
 
 ### 2.2.3 Documento
 
-<!-- Seção a ser detalhada. -->
+Bancos de dados orientados a documento armazenam registros como documentos autocontidos, em geral em JSON ou BSON. Cada documento possui um identificador e um conjunto de campos que podem variar entre documentos da mesma coleção, o que favorece esquemas flexíveis e agregados de leitura (*read-optimized*). O MongoDB é um exemplo popular: coleções de documentos, índices secundários e pipelines de agregação permitem consultas ricas sem exigir junções (*joins*) no servidor como no modelo relacional clássico.
+
+Para o *Polyglot Import CSV*, o modelo documental é adequado a entidades com subestruturas aninhadas (por exemplo, um pedido com subdocumentos ``buyer`` e ``product``), desde que o CSV de origem exponha colunas planas que o mapeamento JSON agrupe em subdocumentos.
 
 ### 2.2.4 Grafo
 
-<!-- Seção a ser detalhada. -->
+Bancos de dados em grafo representam dados como **nós** (entidades) e **arestas** (relacionamentos tipados), com propriedades em ambos. Consultas exploram caminhos e vizinhanças de forma natural, o que é útil para recomendação, detecção de fraude e redes sociais. O Neo4j utiliza a linguagem Cypher para ``MERGE``/``CREATE`` de nós e relacionamentos.
+
+Na ferramenta proposta, o destino grafo exige que o usuário declare explicitamente quais colunas do CSV identificam cada rótulo de nó e quais colunas alimentam propriedades do relacionamento (por exemplo, comprador $\rightarrow$ vendedor com atributos do pedido).
 
 ## 2.3 Bancos de Dados Multimodelo
 
-<!-- Seção a ser detalhada. -->
+SGBDs **multimodelo** integram mais de um paradigma de dados no mesmo motor (por exemplo, documento + chave-valor + grafo). Isso reduz o número de produtos operados, mas concentra riscos de *lock-in* e de tuning em um único fornecedor [@ye2023benchmark].
+
+A **persistência poliglota**, por outro lado, combina **vários SGBDs heterogêneos** escolhidos por adequação a cada caso de uso [@sadalage2013nosql]. O *Polyglot Import CSV* segue esta segunda linha: o usuário direciona entidades e filtros para PostgreSQL, Redis, MongoDB, Cassandra e Neo4j conforme o padrão de acesso desejado.
 
 # 3 TRABALHOS RELACIONADOS
 
@@ -290,16 +296,52 @@ Substitua `Rotulo1`, `Rotulo2`, `nos.csv`, `nos2.csv`, `TIPO_RELACIONAMENTO` e `
 
 ## 3.2 Importação de arquivo CSV para SGBD multimodelo
 
-<!-- Seção a ser detalhada (ArangoDB, …). -->
+Ferramentas comerciais e de código aberto tratam de **migração** ou **modelagem** entre tecnologias heterogêneas, embora raramente com o foco deste TCC (um único CSV largo + regras declarativas + cinco paradigmas).
+
+- **ArangoDB** é um SGBD multimodelo nativo (documento/chave-valor/grafo) com ``arangoimport`` para CSV; a importação é para **um** motor multimodelo, não para cinco backends independentes.
+- **``mongoimport`` / ``COPY`` / ``redis-cli --pipe`` / ``cqlsh`` / ``neo4j-admin``** (seção 3.1) cobrem importação **para um único** produto por vez.
+- **dbcrossbar** [@dbcrossbar2024] copia dados tabulares entre PostgreSQL, BigQuery, armazenamento em nuvem e CSV, incluindo conversão de esquemas; a ênfase é *pipeline* de migração, não mapeamento semântico de entidades aninhadas com filtros por valor.
+- **Hackolade** [@hackolade2024polyglot] oferece *polyglot data modeling* com engenharia de esquema para dezenas de alvos; trata-se de **modelagem visual** e geração de artefatos, e não de um utilitário CLI único para importar um CSV operacional com validação prévia de filtros.
 
 ## 3.3 Considerações sobre os trabalhos relacionados
 
-<!-- Seção a ser detalhada. -->
+A literatura sobre **metamodelos unificados** para SQL e NoSQL (por exemplo, U-Schema [@berlanga2021unified]) e sobre **evolução de esquema** em ambientes heterogêneos [@chillon2023propagating] informa decisões de validação e de representação de entidades, mas não substitui uma ferramenta de *bulk import* orientada a CSV.
+
+Sistemas **polystore** como o BigDAWG [@duggan2017bigdawg] e middlewares de portabilidade em nuvem [@wang2020cmc] tratam de consultas e movimentação de dados em ecossistemas complexos, enquanto o escopo deste TCC é propositalmente mais estreito: **importação declarativa** a partir de um arquivo CSV e configuração JSON, com validação estática e suporte inicial a cinco SGBDs representativos.
 
 # 4 A PROPOSTA DA FERRAMENTA PolyglotImportCSV
 
-<!-- Seção a ser detalhada. -->
+## 4.1 Visão geral
+
+A ferramenta **PolyglotImportCSV** (pacote Python ``polyglot-import-csv``) lê um arquivo CSV e um arquivo de configuração JSON validado por um **JSON Schema** embutido. A CLI executa, em sequência:
+
+1. Carregamento do CSV (como texto, para evitar erros de *parse* em campos com ``+`` em timestamps).
+2. Inferência de *kinds* de coluna (inteiro, *float*, data/hora, texto) para validar operadores de filtro.
+3. Validação cruzada: colunas referenciadas existem no CSV; relacionamentos PostgreSQL e Neo4j referenciam entidades conhecidas; chaves de partição Cassandra estão declaradas quando necessário.
+4. Para cada backend configurado: aplicação de filtros (incluindo o operador ``each`` para particionar por valor distinto), materialização de entidades e importação (ou apenas resumo em ``--dry-run``).
+
+Comando principal:
+
+```bash
+python -m polyglotimportcsv caminho/dados.csv --config caminho/import_config.json [--dry-run] [--create-schema / --no-create-schema] [--only postgres,redis]
+```
+
+## 4.2 Formato de configuração
+
+A raiz do JSON contém ``version`` e blocos opcionais ``postgres``, ``redis``, ``mongodb``, ``cassandra`` e ``neo4j``. Cada bloco declara ``connection`` (credenciais), ``entities`` (mapeamento coluna $\rightarrow$ metadados ``is_key``, ``db_column``, ``db_type``) e ``filters`` (lista de predicados: ``==``, ``!=``, ``>``, ``<``, ``>=``, ``<=``, ``in``, ``not_in``, ``each``). Entidades MongoDB podem conter ``nested`` para subdocumentos. Entidades Cassandra podem declarar ``cassandra_partition`` e ``cassandra_cluster`` para a chave primária.
+
+O repositório inclui o exemplo ``data/ecommerce/ecommerce_join.csv`` (visão *larga* de e-commerce) e ``data/ecommerce/import_config.json`` alinhados ao cenário de persistência poliglota descrito na introdução.
+
+## 4.3 Validação e execução
+
+Erros de configuração levantam ``BusinessException`` antes de qualquer conexão. O modo ``--dry-run`` lista contagens por entidade sem contatar os SGBDs. O *driver* Apache Cassandra é importado de forma tardia para permitir ``--dry-run`` em ambientes onde a extensão C do *driver* não está disponível (por exemplo, versões recentes do Python).
+
+Testes automatizados (``pytest``) cobrem filtros e um *smoke test* de validação + *dry-run*. O ficheiro ``docker-compose.yml`` na raiz sobe PostgreSQL, Redis, MongoDB, Cassandra e Neo4j para testes de integração manuais ou futuros testes de integração contínua.
 
 # 5 ATIVIDADES FUTURAS
 
-<!-- Seção a ser detalhada. -->
+- **Interface gráfica desktop** (semestre seguinte) que monte o comando CLI e visualize o JSON de configuração.
+- **Suporte a TSV/Excel** e a *chunked* processing para CSV maiores que a RAM.
+- **Operadores de filtro adicionais** e políticas de coerção de tipos configuráveis.
+- **Testes de integração** contra ``docker compose`` em CI.
+- **Generalização** do núcleo de importação para novos conectores (mensageria, *data lakes*, outros SGBDs).
