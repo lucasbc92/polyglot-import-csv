@@ -4,6 +4,7 @@ _docs/*.tex
 _docs/*.aux
 _docs/*.log
 _docs/*.out
+_docs/*.odt
 _docs/tcc-pandoc-abnt-corrigido-v3/*.tex
 _docs/tcc-pandoc-abnt-corrigido-v3/*.log
 _docs/tcc-pandoc-abnt-corrigido-v3/*.aux
