@@ -1,24 +1,51 @@
 ---
 name: software-architecture
-description: Implements design patterns including Clean Architecture, SOLID principles, and comprehensive software design best practices. Use when planning system architecture, refactoring code, or designing new modules.
+description: >-
+  Applies layered architecture, clear module boundaries, SOLID, and dependency
+  inversion for data pipelines and multi-backend tools. Use when designing or
+  refactoring imports, CLI orchestration, persistence adapters, configuration
+  formats, or when the user mentions architecture, coupling, Clean Architecture,
+  ports and adapters, or maintainability.
 ---
 
-# Software Architecture & Design Principles
+# Software architecture (project skill)
 
-## Core Principles (SOLID)
-1. **Single Responsibility Principle**: A class should have one, and only one, reason to change.
-2. **Open/Closed Principle**: Software entities should be open for extension, but closed for modification.
-3. **Liskov Substitution Principle**: Objects in a program should be replaceable with instances of their subtypes without altering the correctness of that program.
-4. **Interface Segregation Principle**: Many client-specific interfaces are better than one general-purpose interface.
-5. **Dependency Inversion Principle**: Depend upon abstractions, not concretions.
+## When to read this skill
 
-## Clean Architecture Guidance
-- **Domain/Entities**: Core business logic and models. No external dependencies.
-- **Use Cases/Interactors**: Application specific business rules.
-- **Interface Adapters**: Controllers, Presenters, and Gateways.
-- **Frameworks and Drivers**: Web frameworks, Databases, UI, etc. (Outermost layer).
+Use it for **new features**, **refactors**, or **reviews** that touch how code is split across modules—especially CSV/config parsing, validation, filtering, and database-specific importers.
 
-## When building new features:
-- Separate the parsing logic from the database storage logic.
-- Use abstract interfaces (e.g., `BaseParser`, `BaseDatabaseConnector`) to allow adding new DBs or file types without changing the core engine.
-- Favor dependency injection for database connections.
+## Principles (apply in this order)
+
+1. **Separate concerns**
+   - **Parsing / config**: no database drivers (e.g. JSON Schema + CSV reading only).
+   - **Use case / orchestration**: validate inputs, choose backends, call importers through narrow contracts—not concrete driver types everywhere.
+   - **Infrastructure**: driver code and SQL/Cypher/CQL live at the edge (importer modules, CLI wiring).
+
+2. **Stable direction of dependencies**
+   - Inner layers must not import outer layers.
+   - Prefer **protocols / callables** (e.g. importer registry) so tests and future backends can substitute behavior without editing core orchestration.
+
+3. **SOLID (practical checklist)**
+   - **SRP**: one module per backend; schema DDL generation separate from row insert paths where it helps clarity.
+   - **OCP**: add a backend by registering an importer + config keys, not by scattering `if backend ==` across unrelated files.
+   - **LSP**: importers honor the same contract (same inputs/outputs, same error semantics for “skip vs fail” as documented).
+   - **ISP**: small interfaces for what the runner actually needs (import function + config slice), not “god” types.
+   - **DIP**: `runner` depends on abstractions (registry of callables / protocol), not on `psycopg2` / `redis` types directly.
+
+4. **Configuration as data**
+   - Treat the import JSON as **declarative** contract: validate with schema; keep “business rules” in code, not hidden magic in config.
+
+5. **Documentation stays honest**
+   - When architecture changes, update `docs/ARCHITECTURE.md` and keep the README “layout” table accurate.
+
+## Anti-patterns to avoid
+
+- Importing drivers from `config_parser`, `csv_reader`, or `filter_engine`.
+- Duplicating the same column→entity mapping logic in every importer without shared helpers.
+- Growing `cli.py` into orchestration + business rules + DB details—push orchestration to `runner` and keep CLI thin.
+
+## Project anchors (read before large edits)
+
+- `src/polyglotimportcsv/runner.py` — orchestration and importer injection.
+- `src/polyglotimportcsv/importers/base.py` — importer contract.
+- `docs/ARCHITECTURE.md` — layering map for contributors.
