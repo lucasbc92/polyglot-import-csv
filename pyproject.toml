@@ -10,10 +10,22 @@ requires-python = ">=3.9"
 dependencies = [
     "click",
     "pandas",
+    "jsonschema",
+    "psycopg2-binary",
+    "pymongo",
+    "cassandra-driver",
+    "redis",
+    "neo4j",
 ]
+
+[project.optional-dependencies]
+dev = ["pytest"]
 
 [project.scripts]
 polyglotimportcsv = "polyglotimportcsv.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+polyglotimportcsv = ["schemas/*.json"]

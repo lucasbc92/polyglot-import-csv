@@ -8,7 +8,7 @@ a = Analysis(
     ['src/polyglotimportcsv/cli.py'],
     pathex=['.'],
     binaries=[],
-    datas=[],
+    datas=[('src/polyglotimportcsv/schemas', 'polyglotimportcsv/schemas')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
