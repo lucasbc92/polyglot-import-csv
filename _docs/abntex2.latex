@@ -168,12 +168,8 @@ $endif$
             linkcolor=$if(linkcolor)$$linkcolor$$else$magenta$endif$,
             pdfborder={0 0 0}}
 \urlstyle{same}  % don't use monospace font for urls
-%% Inline code from Pandoc (\texttt{...}): allow line breaks (paths, long tokens).
-\usepackage{xurl}
-\DeclareRobustCommand{\PandocBreakableTexttt}[1]{%
-  \begingroup\urlstyle{tt}\path{#1}\endgroup
-}
-\let\texttt\PandocBreakableTexttt
+%% Evitar substituir o texttt inline do Pandoc por path/xurl (quebra flags com hifen
+%% duplo e placeholders com < >). Blocos de codigo ``` usam verbatim quebravel abaixo.
 $if(links-as-notes)$
 % Make links footnotes instead of hotlinks:
 \renewcommand{\href}[2]{#2\footnote{\url{#1}}}
