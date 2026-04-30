@@ -292,7 +292,7 @@ neo4j-admin import --database=nome_do_seu_banco_de_dados \
   --relationships:TIPO_RELACIONAMENTO relacionamentos.csv
 ```
 
-Substitua `Rotulo1`, `Rotulo2`, `nos.csv`, `nos2.csv`, `TIPO_RELACIONAMENTO` e `relacionamentos.csv` pelos seus rótulos específicos e nomes de arquivo.
+Substitua *Rotulo1*, *Rotulo2*, *nos.csv*, *nos2.csv*, *TIPO_RELACIONAMENTO* e *relacionamentos.csv* pelos seus rótulos específicos e nomes de arquivo.
 
 ## 3.2 Importação de arquivo CSV para SGBD multimodelo
 
@@ -323,7 +323,11 @@ A ferramenta **PolyglotImportCSV** (pacote Python ``polyglot-import-csv``) lê u
 Comando principal:
 
 ```bash
-python -m polyglotimportcsv caminho/dados.csv --config caminho/import_config.json [--dry-run] [--create-schema / --no-create-schema] [--only postgres,redis]
+python -m polyglotimportcsv caminho/dados.csv \
+  --config caminho/import_config.json \
+  [--dry-run] \
+  [--create-schema / --no-create-schema] \
+  [--only postgres,redis]
 ```
 
 ## 4.2 Formato de configuração

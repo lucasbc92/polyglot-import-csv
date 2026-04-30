@@ -168,6 +168,12 @@ $endif$
             linkcolor=$if(linkcolor)$$linkcolor$$else$magenta$endif$,
             pdfborder={0 0 0}}
 \urlstyle{same}  % don't use monospace font for urls
+%% Inline code from Pandoc (\texttt{...}): allow line breaks (paths, long tokens).
+\usepackage{xurl}
+\DeclareRobustCommand{\PandocBreakableTexttt}[1]{%
+  \begingroup\urlstyle{tt}\path{#1}\endgroup
+}
+\let\texttt\PandocBreakableTexttt
 $if(links-as-notes)$
 % Make links footnotes instead of hotlinks:
 \renewcommand{\href}[2]{#2\footnote{\url{#1}}}
@@ -235,6 +241,8 @@ $endif$
 \newenvironment{Shaded}{}{}
 \usepackage{fvextra}
 \RecustomVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,breakanywhere,fontsize=\small}
+%% Com --syntax-highlighting=none o Pandoc usa ``verbatim`` (sem Highlighting): torná-lo quebrável.
+\RecustomVerbatimEnvironment{verbatim}{Verbatim}{breaklines,breakanywhere,fontsize=\small}
 
 %% Impede que o LaTeX "estique" os espaços em branco (ex: antes e depois de títulos)
 %% quando uma figura com [H] força a quebra de página antes de encher a página toda.
