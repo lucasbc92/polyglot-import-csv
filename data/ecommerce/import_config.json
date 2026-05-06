@@ -1,5 +1,6 @@
 {
   "version": 1,
+
   "postgres": {
     "connection": {
       "host": "127.0.0.1",
@@ -23,8 +24,6 @@
           "product_name": { "db_type": "TEXT" },
           "product_variant": { "db_type": "TEXT" },
           "product_brand": { "db_type": "TEXT" },
-          "product_description": { "db_type": "TEXT" },
-          "product_image": { "db_type": "TEXT" },
           "category_id": { "db_type": "BIGINT" },
           "price": { "db_type": "NUMERIC(14,2)" }
         },
@@ -34,9 +33,25 @@
         "columns": {
           "product_id": { "is_key": true, "db_type": "BIGINT" },
           "quantity_available": { "db_type": "BIGINT" },
-          "last_restock_date": { "db_type": "TIMESTAMPTZ" }
+          "last_restock_date": { "db_type": "TIMESTAMPTZ" },
+          "price": { "db_type": "NUMERIC(14,2)" }
         },
         "filters": [{ "column": "action", "operator": "==", "value": "stock" }]
+      },
+      "orders": {
+        "columns": {
+          "order_number": { "is_key": true, "db_type": "TEXT" },
+          "user_id": { "db_type": "TEXT" },
+          "order_date": { "db_type": "TIMESTAMPTZ" },
+          "order_status": { "db_type": "TEXT" },
+          "payment_method": { "db_type": "TEXT" },
+          "quantity": { "db_type": "BIGINT" },
+          "product_id": { "db_type": "BIGINT" },
+          "price": { "db_type": "NUMERIC(14,2)" },
+          "comment": { "db_type": "TEXT" },
+          "rating": { "db_type": "BIGINT" }
+        },
+        "filters": [{ "column": "action", "operator": "==", "value": "purchase" }]
       }
     },
     "relationships": {
@@ -45,9 +60,75 @@
         "to": "categories",
         "foreign_key": "category_id",
         "references_key": "category_id"
+      },
+      "order_product": {
+        "from": "orders",
+        "to": "products",
+        "foreign_key": "product_id",
+        "references_key": "product_id"
       }
     }
   },
+
+  "mongodb": {
+    "connection": {
+      "uri": "mongodb://127.0.0.1:27017",
+      "database": "ecommerce"
+    },
+    "entities": {
+      "product_catalog": {
+        "columns": {
+          "product_id": {},
+          "product_name": {},
+          "product_variant": {},
+          "product_brand": {},
+          "product_description": {},
+          "product_image": {},
+          "price": {}
+        },
+        "nested": {
+          "category": {
+            "columns": {
+              "category_id": {},
+              "category_name": {}
+            }
+          },
+          "stock": {
+            "columns": {
+              "quantity_available": {},
+              "last_restock_date": {}
+            }
+          }
+        },
+        "filters": [{ "column": "action", "operator": "==", "value": "stock" }]
+      }
+    }
+  },
+
+  "cassandra": {
+    "connection": {
+      "hosts": ["127.0.0.1"],
+      "port": 9042,
+      "keyspace": "ecommerce"
+    },
+    "entities": {
+      "user_activity_log": {
+        "columns": {
+          "user_id": {},
+          "timestamp": { "db_column": "event_time" },
+          "action": { "db_column": "event_type" },
+          "product_id": {},
+          "order_number": {},
+          "selected_product_id": {},
+          "shopping_cart_id": {}
+        },
+        "cassandra_partition": ["user_id"],
+        "cassandra_cluster": ["timestamp"],
+        "filters": []
+      }
+    }
+  },
+
   "redis": {
     "connection": { "host": "127.0.0.1", "port": 6379, "db": 0 },
     "entities": {
@@ -58,75 +139,19 @@
           "cart_quantity": {}
         },
         "filters": [{ "column": "action", "operator": "==", "value": "add_to_cart" }]
-      }
-    }
-  },
-  "mongodb": {
-    "connection": {
-      "uri": "mongodb://127.0.0.1:27017",
-      "database": "ecommerce"
-    },
-    "entities": {
-      "orders": {
+      },
+      "user_session": {
         "columns": {
-          "order_number": {},
-          "order_date": {},
-          "order_status": {},
-          "payment_method": {},
-          "quantity": {},
-          "comment": {},
-          "rating": {},
-          "timestamp": { "db_column": "log_timestamp" },
-          "action": {}
+          "user_id": { "is_key": true },
+          "user_name": {},
+          "user_email": {},
+          "timestamp": { "db_column": "last_seen" }
         },
-        "nested": {
-          "buyer": {
-            "columns": {
-              "user_id": {},
-              "user_name": {},
-              "user_email": {},
-              "street": {},
-              "neighborhood": {},
-              "state": {},
-              "country": {},
-              "zip_code": {}
-            }
-          },
-          "product": {
-            "columns": {
-              "product_id": {},
-              "product_name": {},
-              "product_variant": {},
-              "product_brand": {},
-              "price": {}
-            }
-          }
-        },
-        "filters": [{ "column": "action", "operator": "==", "value": "purchase" }]
-      }
-    }
-  },
-  "cassandra": {
-    "connection": {
-      "hosts": ["127.0.0.1"],
-      "port": 9042,
-      "keyspace": "ecommerce"
-    },
-    "entities": {
-      "product_selection_log": {
-        "columns": {
-          "timestamp": { "db_column": "log_ts" },
-          "user_id": {},
-          "action": {},
-          "selected_product_id": {},
-          "suggested_product_count": {}
-        },
-        "cassandra_partition": ["user_id"],
-        "cassandra_cluster": ["timestamp"],
         "filters": [{ "column": "action", "operator": "==", "value": "select_product" }]
       }
     }
   },
+
   "neo4j": {
     "connection": {
       "uri": "bolt://127.0.0.1:7687",
@@ -135,7 +160,7 @@
       "database": "neo4j"
     },
     "entities": {
-      "Buyer": {
+      "User": {
         "columns": {
           "user_id": { "is_key": true },
           "user_name": {},
@@ -143,25 +168,25 @@
         },
         "filters": [{ "column": "action", "operator": "==", "value": "purchase" }]
       },
-      "Seller": {
+      "Product": {
         "columns": {
-          "traded_with": { "is_key": true, "db_column": "user_id" }
+          "product_id": { "is_key": true },
+          "product_name": {},
+          "product_brand": {}
         },
-        "filters": [{ "column": "action", "operator": "==", "value": "purchase" }]
+        "filters": [{ "column": "action", "operator": "==", "value": "stock" }]
       }
     },
     "relationships": {
-      "PURCHASED_FROM": {
-        "from": "Buyer",
-        "to": "Seller",
-        "type": "PURCHASED_FROM",
+      "PURCHASED": {
+        "from": "User",
+        "to": "Product",
+        "type": "PURCHASED",
         "columns": {
-          "order_number": {},
-          "order_date": {},
+          "order_number": { "is_key": true },
           "quantity": {},
           "price": {},
-          "rating": {},
-          "comment": {}
+          "rating": {}
         }
       }
     }

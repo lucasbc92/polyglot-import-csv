@@ -101,30 +101,38 @@ def run_neo4j_import(
             from_key = output_column_name(fk_from[0], fk_from[1])
             to_key = output_column_name(fk_to[0], fk_to[1])
             rel_cols = rspec.get("columns") or {}
+            merge_key_cols = [
+                (src, output_column_name(src, spec))
+                for src, spec in rel_cols.items()
+                if spec.get("is_key")
+            ]
             f1 = [x for x in (from_ent.get("filters") or []) if x.get("operator") != "each"]
             dff = apply_filters(df, f1, column_kinds)
             count = 0
             for _, row in dff.iterrows():
-                buyer_id = cell_scalar(row[fk_from[0]] if fk_from[0] in row.index else None)
-                seller_id = cell_scalar(row[fk_to[0]] if fk_to[0] in row.index else None)
-                if buyer_id is None or seller_id is None:
+                a_id = cell_scalar(row[fk_from[0]] if fk_from[0] in row.index else None)
+                b_id = cell_scalar(row[fk_to[0]] if fk_to[0] in row.index else None)
+                if a_id is None or b_id is None:
                     continue
                 rel_props: Dict[str, Any] = {}
                 for src, spec in rel_cols.items():
                     name = output_column_name(src, spec)
                     rel_props[name] = cell_scalar(row[src] if src in row.index else None)
-                ord_key = rel_props.get("order_number")
+                merge_keys = {db_name: rel_props[db_name] for _, db_name in merge_key_cols}
+                rest_props = {k: v for k, v in rel_props.items() if k not in merge_keys}
+                if merge_keys:
+                    mk_clause = ", ".join(f"{k}: $mk_{k}" for k in merge_keys)
+                    mk_params = {f"mk_{k}": v for k, v in merge_keys.items()}
+                else:
+                    mk_clause = ""
+                    mk_params = {}
+                mk_block = f" {{{mk_clause}}}" if mk_clause else ""
                 q = (
-                    f"MATCH (a:{from_label} {{{from_key}: $a_id}}), (b:{to_label} {{{to_key}: $b_id}}) "
-                    f"MERGE (a)-[r:{rel_type} {{order_number: $ord}}]->(b) SET r += $rprops"
+                    f"MATCH (a:{from_label} {{{from_key}: $a_id}}), "
+                    f"(b:{to_label} {{{to_key}: $b_id}}) "
+                    f"MERGE (a)-[r:{rel_type}{mk_block}]->(b) SET r += $rprops"
                 )
-                session.run(
-                    q,
-                    a_id=buyer_id,
-                    b_id=seller_id,
-                    ord=ord_key,
-                    rprops={k: v for k, v in rel_props.items() if k != "order_number"},
-                )
+                session.run(q, a_id=a_id, b_id=b_id, rprops=rest_props, **mk_params)
                 count += 1
             lines.append(f"[neo4j] merged {count} relationship(s) :{rel_type}")
 

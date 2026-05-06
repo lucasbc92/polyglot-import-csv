@@ -24,6 +24,8 @@ def flatten_entity_dataframe(df: pd.DataFrame, entity_cfg: Dict[str, Any]) -> pd
         if spec.get("is_key")
     ]
     if key_outs:
+        for kc in key_outs:
+            sub[kc] = sub[kc].replace("", pd.NA)
         sub = sub.dropna(subset=key_outs, how="any")
         sub = sub.drop_duplicates(subset=key_outs, keep="last")
     return sub
