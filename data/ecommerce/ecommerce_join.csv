@@ -15,19 +15,19 @@ purchase,2023-11-17 22:46:30Z,0331463b-7e62-44ed-945f-6b3c8195245b,user5,user5@e
 purchase,2023-11-18 10:46:30Z,f4857da9-c991-4bc6-b0a9-a4277c005956,user6,user6@example.com,"Street 6, 42",PQR,SP,Brasil,92083256,ORD6,2023-11-10T12:30:00-03:00,Completed,d0416923-7c07-4690-a2b1-4a6bd886985e,"Street 9, 42",YZ,AM,Brasil,18439666,,5,credit_card,1,7,Product7,grey,Audi,Description6,https://example.com/image6.jpg,7,Categoria7,1,100000,2023-11-01T00:00:00-03:00,,,,,
 purchase,2023-11-18 23:46:30Z,a87df805-ad1b-4ae9-b5ad-cbb64ce9e475,user7,user7@example.com,"Street 7, 42",STU,SP,Brasil,67065799,ORD7,2023-11-11T12:30:00-03:00,Completed,c11a1ef2-c7c0-4a47-8128-16dc3da9d72b,"Street 8, 42",VWX,SE,Brasil,18439703,Reprovado,1,credit_card,1,8,Product8,white,Google,Description7,https://example.com/image7.jpg,8,Categoria8,60,46.79,2023-11-02 12:00:00Z,,,,,
 purchase,2023-11-19 15:46:30Z,c11a1ef2-c7c0-4a47-8128-16dc3da9d72b,user8,user8@example.com,"Street 8, 42",VWX,SE,Brasil,18439703,ORD8,2023-11-14T12:30:00-03:00,Completed,f246fb91-e47d-44e8-a015-ce5dfd2cb8d1,"Street 2, 42",DEF,SC,Brasil,84102149,"Bom, bonito e barato",4,credit_card,1,9,Product9,black,Pepsi,Description8,https://example.com/image8.jpg,9,Categoria9,67,32.78,2023-11-02 09:15:00Z,,,,,
-select_product,2023-11-15 15:09:30Z,7fd7eee7-4675-4f56-ad81-108da6cecebc,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,11,3,,,
-select_product,2023-11-16 03:11:30Z,f246fb91-e47d-44e8-a015-ce5dfd2cb8d1,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,12,3,,,
-select_product,2023-11-16 17:50:30Z,09b3458a-9d1d-4708-8d2d-3eb5fadbac9b,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,22,3,,,
-select_product,2023-11-17 06:05:30Z,1fd3d09a-a310-4a46-bfdf-37f2f9935a8c,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,14,3,,,
-select_product,2023-11-17 21:56:30Z,0331463b-7e62-44ed-945f-6b3c8195245b,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,14,3,,,
-select_product,2023-11-18 10:09:30Z,f4857da9-c991-4bc6-b0a9-a4277c005956,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,21,3,,,
-select_product,2023-11-18 23:20:30Z,a87df805-ad1b-4ae9-b5ad-cbb64ce9e475,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,33,3,,,
-select_product,2023-11-19 15:18:30Z,c11a1ef2-c7c0-4a47-8128-16dc3da9d72b,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,17,3,,,
-add_to_cart,2023-11-15 15:17:30Z,7fd7eee7-4675-4f56-ad81-108da6cecebc,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,user:7fd7eee7-4675-4f56-ad81-108da6cecebc:cart,3,1
-add_to_cart,2023-11-16 03:27:30Z,f246fb91-e47d-44e8-a015-ce5dfd2cb8d1,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,user:f246fb91-e47d-44e8-a015-ce5dfd2cb8d1:cart,2,1
-add_to_cart,2023-11-16 18:08:30Z,09b3458a-9d1d-4708-8d2d-3eb5fadbac9b,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,user:09b3458a-9d1d-4708-8d2d-3eb5fadbac9b:cart,2,1
-add_to_cart,2023-11-17 06:14:30Z,1fd3d09a-a310-4a46-bfdf-37f2f9935a8c,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,user:1fd3d09a-a310-4a46-bfdf-37f2f9935a8c:cart,2,1
-add_to_cart,2023-11-17 22:11:30Z,0331463b-7e62-44ed-945f-6b3c8195245b,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,user:0331463b-7e62-44ed-945f-6b3c8195245b:cart,2,1
-add_to_cart,2023-11-18 10:21:30Z,f4857da9-c991-4bc6-b0a9-a4277c005956,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,user:f4857da9-c991-4bc6-b0a9-a4277c005956:cart,2,1
-add_to_cart,2023-11-18 23:34:30Z,a87df805-ad1b-4ae9-b5ad-cbb64ce9e475,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,user:a87df805-ad1b-4ae9-b5ad-cbb64ce9e475:cart,2,1
-add_to_cart,2023-11-19 15:29:30Z,c11a1ef2-c7c0-4a47-8128-16dc3da9d72b,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,user:c11a1ef2-c7c0-4a47-8128-16dc3da9d72b:cart,2,1
+select_product,2023-11-15 15:09:30Z,7fd7eee7-4675-4f56-ad81-108da6cecebc,user1,user1@example.com,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,11,3,,,
+select_product,2023-11-16 03:11:30Z,f246fb91-e47d-44e8-a015-ce5dfd2cb8d1,user2,user2@example.com,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,12,3,,,
+select_product,2023-11-16 17:50:30Z,09b3458a-9d1d-4708-8d2d-3eb5fadbac9b,user3,user3@example.com,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,22,3,,,
+select_product,2023-11-17 06:05:30Z,1fd3d09a-a310-4a46-bfdf-37f2f9935a8c,user4,user4@example.com,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,14,3,,,
+select_product,2023-11-17 21:56:30Z,0331463b-7e62-44ed-945f-6b3c8195245b,user5,user5@example.com,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,14,3,,,
+select_product,2023-11-18 10:09:30Z,f4857da9-c991-4bc6-b0a9-a4277c005956,user6,user6@example.com,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,21,3,,,
+select_product,2023-11-18 23:20:30Z,a87df805-ad1b-4ae9-b5ad-cbb64ce9e475,user7,user7@example.com,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,33,3,,,
+select_product,2023-11-19 15:18:30Z,c11a1ef2-c7c0-4a47-8128-16dc3da9d72b,user8,user8@example.com,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,17,3,,,
+add_to_cart,2023-11-15 15:17:30Z,7fd7eee7-4675-4f56-ad81-108da6cecebc,user1,user1@example.com,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,user:7fd7eee7-4675-4f56-ad81-108da6cecebc:cart,3,1
+add_to_cart,2023-11-16 03:27:30Z,f246fb91-e47d-44e8-a015-ce5dfd2cb8d1,user2,user2@example.com,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,user:f246fb91-e47d-44e8-a015-ce5dfd2cb8d1:cart,2,1
+add_to_cart,2023-11-16 18:08:30Z,09b3458a-9d1d-4708-8d2d-3eb5fadbac9b,user3,user3@example.com,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,user:09b3458a-9d1d-4708-8d2d-3eb5fadbac9b:cart,2,1
+add_to_cart,2023-11-17 06:14:30Z,1fd3d09a-a310-4a46-bfdf-37f2f9935a8c,user4,user4@example.com,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,user:1fd3d09a-a310-4a46-bfdf-37f2f9935a8c:cart,2,1
+add_to_cart,2023-11-17 22:11:30Z,0331463b-7e62-44ed-945f-6b3c8195245b,user5,user5@example.com,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,user:0331463b-7e62-44ed-945f-6b3c8195245b:cart,2,1
+add_to_cart,2023-11-18 10:21:30Z,f4857da9-c991-4bc6-b0a9-a4277c005956,user6,user6@example.com,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,user:f4857da9-c991-4bc6-b0a9-a4277c005956:cart,2,1
+add_to_cart,2023-11-18 23:34:30Z,a87df805-ad1b-4ae9-b5ad-cbb64ce9e475,user7,user7@example.com,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,user:a87df805-ad1b-4ae9-b5ad-cbb64ce9e475:cart,2,1
+add_to_cart,2023-11-19 15:29:30Z,c11a1ef2-c7c0-4a47-8128-16dc3da9d72b,user8,user8@example.com,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,user:c11a1ef2-c7c0-4a47-8128-16dc3da9d72b:cart,2,1
