@@ -7,7 +7,13 @@ from typing import Any, Dict, List, Set
 import pandas as pd
 
 from polyglotimportcsv.business_exception import BusinessException
-from polyglotimportcsv.entity_utils import collect_source_columns, iter_leaf_columns
+from polyglotimportcsv.entity_utils import (
+    FLAT_BACKENDS,
+    collect_source_columns,
+    entity_has_nested_branches,
+    iter_leaf_columns,
+    resolve_csv_column,
+)
 
 
 BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
@@ -21,10 +27,15 @@ def _all_entity_configs(backend_cfg: Dict[str, Any]) -> List[tuple[str, Dict[str
     return out
 
 
-def _collect_all_columns_from_entities(backend_cfg: Dict[str, Any]) -> Set[str]:
+def _collect_all_columns_from_entities(
+    backend_cfg: Dict[str, Any], csv_column_list: List[str]
+) -> Set[str]:
     cols: Set[str] = set()
     for _, ecfg in _all_entity_configs(backend_cfg):
-        cols.update(collect_source_columns(ecfg))
+        try:
+            cols.update(collect_source_columns(ecfg, csv_column_list))
+        except ValueError as e:
+            raise BusinessException(str(e)) from e
     return cols
 
 
@@ -46,13 +57,36 @@ def _validate_filters(filters: List[Dict[str, Any]], csv_columns: Set[str]) -> N
             raise BusinessException(f"Filter with operator {op} requires 'value'.")
 
 
+def _validate_leaf_columns(
+    ename: str, backend: str, ecfg: Dict[str, Any], csv_column_list: List[str], csv_columns: Set[str]
+) -> None:
+    for _, field_key, spec in iter_leaf_columns(ecfg):
+        try:
+            resolved = resolve_csv_column(field_key, spec, csv_column_list)
+        except ValueError as e:
+            raise BusinessException(
+                f"Entity '{ename}' in '{backend}': {e}"
+            ) from e
+        if resolved not in csv_columns:
+            raise BusinessException(
+                f"Entity '{ename}' in '{backend}' references unknown column: {resolved}"
+            )
+
+
 def validate_import_config(config: Dict[str, Any], df: pd.DataFrame, kinds: Dict[str, str]) -> None:
-    csv_columns = set(df.columns)
+    csv_column_list = list(df.columns)
+    csv_columns = set(csv_column_list)
     for backend in BACKENDS:
         if backend not in config:
             continue
         bcfg = config[backend]
-        referenced = _collect_all_columns_from_entities(bcfg)
+        for ename, ecfg in _all_entity_configs(bcfg):
+            if backend in FLAT_BACKENDS and entity_has_nested_branches(ecfg):
+                raise BusinessException(
+                    f"Entity '{ename}' in '{backend}' uses nested columns; "
+                    f"only flat column mappings are allowed for this backend."
+                )
+        referenced = _collect_all_columns_from_entities(bcfg, csv_column_list)
         missing = sorted(referenced - csv_columns)
         if missing:
             raise BusinessException(
@@ -60,13 +94,7 @@ def validate_import_config(config: Dict[str, Any], df: pd.DataFrame, kinds: Dict
             )
         for ename, ecfg in _all_entity_configs(bcfg):
             _validate_filters(ecfg.get("filters") or [], csv_columns)
-            # nested entities columns already in collect_source_columns
-            for _, src, _ in iter_leaf_columns(ecfg):
-                if src not in csv_columns:
-                    raise BusinessException(
-                        f"Entity '{ename}' in '{backend}' references unknown column: {src}"
-                    )
-            # Cassandra PK columns
+            _validate_leaf_columns(ename, backend, ecfg, csv_column_list, csv_columns)
             for pk in ecfg.get("cassandra_partition") or []:
                 if pk not in csv_columns:
                     raise BusinessException(
@@ -94,8 +122,7 @@ def validate_import_config(config: Dict[str, Any], df: pd.DataFrame, kinds: Dict
                     raise BusinessException(
                         f"Relationship '{rname}' foreign_key '{fk}' not found in CSV columns."
                     )
-                # references_key should exist on target entity columns
-                to_cols = collect_source_columns(bcfg["entities"][to])
+                to_cols = collect_source_columns(bcfg["entities"][to], csv_column_list)
                 if refk not in to_cols:
                     raise BusinessException(
                         f"Relationship '{rname}': references_key '{refk}' not mapped in entity '{to}'."
@@ -109,11 +136,16 @@ def validate_import_config(config: Dict[str, Any], df: pd.DataFrame, kinds: Dict
                     raise BusinessException(
                         f"Neo4j relationship '{rname}' references unknown node entity."
                     )
-                for c in (rspec.get("columns") or {}).keys():
-                    if c not in csv_columns:
+                for field_key, spec in (rspec.get("columns") or {}).items():
+                    try:
+                        resolved = resolve_csv_column(field_key, spec, csv_column_list)
+                    except ValueError as e:
                         raise BusinessException(
-                            f"Neo4j relationship '{rname}' property column '{c}' not in CSV."
+                            f"Neo4j relationship '{rname}': {e}"
+                        ) from e
+                    if resolved not in csv_columns:
+                        raise BusinessException(
+                            f"Neo4j relationship '{rname}' property column '{resolved}' not in CSV."
                         )
 
-    # kinds warning: empty columns used in filters with numeric compare — still allowed
     _ = kinds  # reserved for stricter checks later
