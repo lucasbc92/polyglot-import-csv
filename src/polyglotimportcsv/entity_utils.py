@@ -2,37 +2,133 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterator, List, Tuple
+from typing import Any, Dict, Iterator, List, Sequence, Tuple
+
+COLUMN_SPEC_KEYS = frozenset(
+    {"is_key", "db_column", "db_type", "alias_db", "csv_column", "schema_column"}
+)
+
+FLAT_BACKENDS = frozenset({"postgres", "redis", "cassandra", "neo4j"})
+
+
+def is_column_spec(node: Any) -> bool:
+    """True when *node* is a leaf columnSpec (not a nested branch)."""
+    return isinstance(node, dict) and all(k in COLUMN_SPEC_KEYS for k in node)
+
+
+def is_column_branch(node: Any) -> bool:
+    return isinstance(node, dict) and not is_column_spec(node) and len(node) > 0
+
+
+def target_field_name(field_key: str, spec: Dict[str, Any]) -> str:
+    """JSON field key -> target attribute name in the destination store."""
+    return (
+        spec.get("schema_column")
+        or spec.get("db_column")
+        or spec.get("alias_db")
+        or field_key
+    )
 
 
 def output_column_name(source_col: str, spec: Dict[str, Any]) -> str:
-    """CSV/source column name -> target attribute name."""
-    return spec.get("db_column") or spec.get("alias_db") or source_col
+    """Backward-compatible alias for target_field_name (first arg is the field key)."""
+    return target_field_name(source_col, spec)
+
+
+def resolve_csv_column(
+    field_key: str, spec: Dict[str, Any], csv_columns: Sequence[str]
+) -> str:
+    """Resolve csv_column (name or 0-based index) to the actual CSV header."""
+    csv = spec.get("csv_column")
+    if isinstance(csv, int):
+        if csv < 0 or csv >= len(csv_columns):
+            raise ValueError(
+                f"csv_column index {csv} out of range (CSV has {len(csv_columns)} column(s))."
+            )
+        return csv_columns[csv]
+    if isinstance(csv, str):
+        return csv
+    return field_key
+
+
+def iter_column_tree(
+    columns: Dict[str, Any], prefix: Tuple[str, ...] = ()
+) -> Iterator[Tuple[Tuple[str, ...], str, Dict[str, Any]]]:
+    """
+    Walk a recursive ``columns`` map.
+
+    Yields (nested_path_tuple, field_key, column_spec) for each leaf.
+    """
+    for field_key, node in (columns or {}).items():
+        if is_column_spec(node):
+            yield prefix, field_key, node
+        elif is_column_branch(node):
+            yield from iter_column_tree(node, prefix + (field_key,))
 
 
 def iter_leaf_columns(
     entity_cfg: Dict[str, Any], prefix: Tuple[str, ...] = ()
-) -> Iterator[Tuple[str, ...], str, Dict[str, Any]]:
+) -> Iterator[Tuple[Tuple[str, ...], str, Dict[str, Any]]]:
     """
-    Yields (nested_path_tuple, source_csv_column, column_spec).
-    nested_path_tuple is e.g. () for top-level, ('buyer',) for nested buyer columns.
+    Yields (nested_path_tuple, field_key, column_spec) for all leaves,
+    including legacy ``nested`` blocks.
     """
-    cols = entity_cfg.get("columns") or {}
-    for src, spec in cols.items():
-        yield prefix, src, spec
+    yield from iter_column_tree(entity_cfg.get("columns") or {}, prefix)
     nested = entity_cfg.get("nested") or {}
     for nest_name, nest_cfg in nested.items():
-        yield from iter_leaf_columns(nest_cfg, prefix + (nest_name,))
+        nest_columns = nest_cfg.get("columns") if isinstance(nest_cfg, dict) else {}
+        yield from iter_column_tree(nest_columns or {}, prefix + (nest_name,))
 
 
-def collect_source_columns(entity_cfg: Dict[str, Any]) -> List[str]:
+def entity_has_nested_branches(entity_cfg: Dict[str, Any]) -> bool:
+    """True when ``columns`` contains nested objects or legacy ``nested`` is set."""
+    if entity_cfg.get("nested"):
+        return True
+    for node in (entity_cfg.get("columns") or {}).values():
+        if is_column_branch(node):
+            return True
+    return False
+
+
+def collect_source_columns(
+    entity_cfg: Dict[str, Any], csv_columns: Sequence[str] | None = None
+) -> List[str]:
     """All CSV column names referenced by an entity (including nested)."""
-    return [src for _, src, _ in iter_leaf_columns(entity_cfg)]
+    out: List[str] = []
+    for _, field_key, spec in iter_leaf_columns(entity_cfg):
+        if csv_columns is not None:
+            out.append(resolve_csv_column(field_key, spec, csv_columns))
+        else:
+            csv = spec.get("csv_column")
+            if isinstance(csv, int):
+                out.append(str(csv))
+            elif isinstance(csv, str):
+                out.append(csv)
+            else:
+                out.append(field_key)
+    return out
 
 
-def primary_key_source_columns(entity_cfg: Dict[str, Any]) -> List[str]:
+def primary_key_source_columns(
+    entity_cfg: Dict[str, Any], csv_columns: Sequence[str] | None = None
+) -> List[str]:
     keys: List[str] = []
-    for _, src, spec in iter_leaf_columns(entity_cfg):
+    for _, field_key, spec in iter_leaf_columns(entity_cfg):
         if spec.get("is_key"):
-            keys.append(src)
+            if csv_columns is not None:
+                keys.append(resolve_csv_column(field_key, spec, csv_columns))
+            else:
+                keys.append(field_key)
     return keys
+
+
+def flat_leaf_columns(
+    entity_cfg: Dict[str, Any],
+) -> Iterator[Tuple[str, str, Dict[str, Any]]]:
+    """
+    Yields (field_key, resolved_source_placeholder, spec) for top-level leaves only.
+    Used by flat backends after validation ensures no nesting.
+    """
+    for field_key, node in (entity_cfg.get("columns") or {}).items():
+        if is_column_spec(node):
+            yield field_key, field_key, node
