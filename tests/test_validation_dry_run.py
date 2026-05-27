@@ -51,3 +51,50 @@ def test_invalid_column_raises():
     df, kinds = load_csv_with_inference(CSV)
     with pytest.raises(BusinessException):
         validate_import_config(cfg, df, kinds)
+
+
+def test_postgres_rejects_nested_columns():
+    cfg = load_config(CFG)
+    cfg = dict(cfg)
+    cfg["postgres"] = dict(cfg["postgres"])
+    cfg["postgres"]["entities"] = dict(cfg["postgres"]["entities"])
+    cfg["postgres"]["entities"]["bad"] = {
+        "columns": {"outer": {"inner": {}}},
+        "filters": [],
+    }
+    df, kinds = load_csv_with_inference(CSV)
+    with pytest.raises(BusinessException, match="nested columns"):
+        validate_import_config(cfg, df, kinds)
+
+
+def test_csv_column_index_out_of_range():
+    cfg = {
+        "version": 1,
+        "redis": {
+            "entities": {
+                "x": {
+                    "columns": {"k": {"csv_column": 9999, "is_key": True}},
+                    "filters": [],
+                }
+            }
+        },
+    }
+    df, kinds = load_csv_with_inference(CSV)
+    with pytest.raises(BusinessException, match="out of range"):
+        validate_import_config(cfg, df, kinds)
+
+
+def test_csv_column_by_name_resolves():
+    cfg = load_config(CFG)
+    cfg = dict(cfg)
+    cfg["redis"] = dict(cfg["redis"])
+    cfg["redis"]["entities"] = dict(cfg["redis"]["entities"])
+    cfg["redis"]["entities"]["alias_test"] = {
+        "columns": {
+            "redis_key": {"csv_column": "user_id", "is_key": True},
+            "name": {"csv_column": "user_name"},
+        },
+        "filters": [{"column": "action", "operator": "==", "value": "select_product"}],
+    }
+    df, kinds = load_csv_with_inference(CSV)
+    validate_import_config(cfg, df, kinds)
