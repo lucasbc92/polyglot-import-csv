@@ -12,7 +12,7 @@ from psycopg2.extras import execute_values
 
 from polyglotimportcsv.business_exception import BusinessException
 from polyglotimportcsv.filter_engine import apply_filters, expand_each
-from polyglotimportcsv.entity_utils import output_column_name
+from polyglotimportcsv.entity_utils import flat_leaf_columns, target_field_name
 from polyglotimportcsv.materialize import flatten_entity_dataframe
 from polyglotimportcsv.schema_generator import build_postgres_create_tables, build_postgres_foreign_keys
 
@@ -91,8 +91,8 @@ def run_postgres_import(
                 fq = sql.SQL("{}.{}").format(sql.Identifier(schema), sql.Identifier(part_name))
                 col_sql = sql.SQL(", ").join(map(sql.Identifier, cols))
                 pks = [
-                    output_column_name(src, spec)
-                    for src, spec in ecfg["columns"].items()
+                    target_field_name(fk, spec)
+                    for fk, _, spec in flat_leaf_columns(ecfg)
                     if spec.get("is_key")
                 ]
                 base = sql.SQL("INSERT INTO {} ({}) VALUES %s").format(fq, col_sql)
