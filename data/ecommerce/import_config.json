@@ -84,20 +84,14 @@
           "product_brand": {},
           "product_description": {},
           "product_image": {},
-          "price": {}
-        },
-        "nested": {
+          "price": {},
           "category": {
-            "columns": {
-              "category_id": {},
-              "category_name": {}
-            }
+            "category_id": {},
+            "category_name": {}
           },
           "stock": {
-            "columns": {
-              "quantity_available": {},
-              "last_restock_date": {}
-            }
+            "quantity_available": {},
+            "last_restock_date": {}
           }
         },
         "filters": [{ "column": "action", "operator": "==", "value": "stock" }]
@@ -115,8 +109,8 @@
       "user_activity_log": {
         "columns": {
           "user_id": {},
-          "timestamp": { "db_column": "event_time" },
-          "action": { "db_column": "event_type" },
+          "timestamp": { "schema_column": "event_time" },
+          "action": { "schema_column": "event_type" },
           "product_id": {},
           "order_number": {},
           "selected_product_id": {},
@@ -145,7 +139,7 @@
           "user_id": { "is_key": true },
           "user_name": {},
           "user_email": {},
-          "timestamp": { "db_column": "last_seen" }
+          "timestamp": { "schema_column": "last_seen" }
         },
         "filters": [{ "column": "action", "operator": "==", "value": "select_product" }]
       }
