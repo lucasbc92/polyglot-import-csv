@@ -133,7 +133,9 @@ $if(verbatim-in-note)$
 \usepackage{fancyvrb}
 $endif$
 $if(tables)$
-\usepackage{longtable,booktabs}
+\usepackage{longtable,booktabs,array,calc}
+\providecommand{\real}[1]{#1}
+\newcounter{none}
 $endif$
 $if(graphics)$
 \usepackage{graphicx}
@@ -212,6 +214,12 @@ $endif$
 $if(institution)$
 \instituicao{$institution$}	% Adicionando a instituição
 $endif$
+$if(orientador)$
+\orientador{$orientador$}
+$endif$
+$if(coorientador)$
+\coorientador{$coorientador$}
+$endif$
 $if(tipotrabalho)$
 \tipotrabalho{$tipotrabalho$}	% Adicionando a natureza do trabalho
 $endif$
@@ -250,6 +258,54 @@ $if(capa)$
 $if(folhaderosto)$
 \imprimirfolhaderosto	% Imprimindo a folha de rosto
 $endif$
+$if(folhaorientadores)$
+\cleardoublepage
+\thispagestyle{empty}
+\enlargethispage{6\baselineskip}
+\begin{center}
+\begin{minipage}{0.88\textwidth}
+\footnotesize
+\begin{center}
+{\ABNTEXfontereduzida\imprimirautor}
+
+\vspace{0.35cm}
+
+{\large\bfseries\imprimirtitulo}
+
+\vspace{0.35cm}
+\end{center}
+
+\imprimirpreambulo
+
+\vspace{0.35cm}
+
+\raggedright
+{\bfseries Banca Examinadora:}
+
+\vspace{0.3cm}
+
+$for(membrosbanca)$
+$it.nome$\\[0.1cm]
+$if(it.funcao)$
+$it.funcao$\\[0.1cm]
+$endif$
+$if(it.instituicao)$
+$it.instituicao$\\[0.1cm]
+$endif$
+\vspace{0.35cm}
+\noindent\rule{0.78\textwidth}{0.4pt}\\[0.4cm]
+$endfor$
+
+$if(place)$
+$place$\\[0.1cm]
+$endif$
+$if(date)$
+$date$
+$endif$
+\end{minipage}
+\end{center}
+\clearpage
+$endif$
 $else$
 $if(title)$
 \maketitle	% Imprimindo um título, caso não seja usada a capa
@@ -260,24 +316,42 @@ $for(include-before)$
 $include-before$
 
 $endfor$
-$if(toc)$
-{
-\hypersetup{linkcolor=black}
-\setcounter{tocdepth}{$toc-depth$}
-\noindent\tableofcontents	% Adicionando sumário
-}
-$endif$
 $if(abstract)$
 \begin{resumoumacoluna}
-$abstract$	% Adicionando o resumo
+$abstract$	% Resumo (antes do sumário, padrão UFSC)
 
 $if(tags)$
 \vspace{\onelineskip}
 
 \noindent
-\textbf{$if(tagstitle)$$tagstitle$$else$Palavras-chaves$endif$}: $for(tags)$$tags$$sep$. $endfor$.	% Adicionando as palavras-chaves
+\textbf{$if(tagstitle)$$tagstitle$$else$Palavras-chave$endif$}: $for(tags)$$tags$$sep$; $endfor$.
 $endif$
 \end{resumoumacoluna}
+$endif$
+$if(listoffigures)$
+\listoffigures*
+$endif$
+$if(listofabbreviations)$
+\begin{siglas}
+\item[API] \emph{Application Programming Interface}
+\item[BSON] \emph{Binary JSON}
+\item[CLI] \emph{Command Line Interface}
+\item[CSV] \emph{Comma-Separated Values}
+\item[DDL] \emph{Data Definition Language}
+\item[JSON] \emph{JavaScript Object Notation}
+\item[NoSQL] \emph{Not Only SQL} ou \emph{Not SQL}
+\item[SGBD] Sistema de Gerenciamento de Banco de Dados
+\item[SGPD] Sistema de Gerenciamento Poliglota de Dados
+\item[TCC] Trabalho de Conclusão de Curso
+\item[UFSC] Universidade Federal de Santa Catarina
+\end{siglas}
+$endif$
+$if(toc)$
+{
+\hypersetup{linkcolor=black}
+\setcounter{tocdepth}{$toc-depth$}
+\tableofcontents
+}
 $endif$
 
 \textual	% Início do texto convertido do arquivo original
