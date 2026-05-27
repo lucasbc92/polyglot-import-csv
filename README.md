@@ -23,7 +23,13 @@ pip install -e ".[dev]"
 python -m polyglotimportcsv data/ecommerce/ecommerce_join.csv --config data/ecommerce/import_config.json --dry-run
 ```
 
-Remove `--dry-run` after `docker compose up -d` (see repo root `docker-compose.yml`).
+**Full running example (Docker + dry-run + import):**
+
+```powershell
+.\run_example.ps1
+```
+
+Requires Docker Desktop. The script starts all five databases, runs `--dry-run`, then imports with `--create-schema`. You can also run manually after `docker compose up -d` (see `docker-compose.yml` at repo root).
 
 Options:
 
@@ -32,7 +38,7 @@ Options:
 
 ### Architecture
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (English + PT) for layering, SOLID mapping, and how **injectable importer registries** keep tests free of real databases.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (English + PT) for layering, SOLID mapping, and how **injectable importer registries** keep tests free of real databases. The TCC report lives in [docs-tcc/](docs-tcc/).
 
 ### Layout
 
@@ -43,12 +49,13 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (English + PT) for layering, SO
 | `src/polyglotimportcsv/schemas/` | Bundled JSON Schema |
 | `data/ecommerce/` | Sample CSV + `import_config.json` |
 | `tests/` | `pytest` (stubs for I/O per TDD skill) |
-| `_docs/` | Thesis (Markdown, BibTeX); `_docs/scripts/` has `.ps1` (Windows) and `.sh` (Unix) for Pandoc |
+| `docs-tcc/` | TCC I report (Markdown, BibTeX); `docs-tcc/scripts/` for Pandoc PDF/ODT |
 
 ### Scripts
 
-- **Windows:** `scripts/run_example_windows.ps1` (or `run_example_windows.bat`, which calls PowerShell).
-- **macOS / Linux:** `scripts/run_example_macos.sh`.
+- **Windows (recommended):** `run_example.ps1` at repo root — Docker stack + dry-run + import.
+- **Windows (dry-run only):** `scripts/run_example_windows.ps1`
+- **macOS / Linux:** `scripts/run_example_macos.sh` (dry-run); use `docker compose` + CLI for full import.
 
 ### License
 
@@ -76,7 +83,13 @@ pip install -e ".[dev]"
 python -m polyglotimportcsv data/ecommerce/ecommerce_join.csv --config data/ecommerce/import_config.json --dry-run
 ```
 
-Remova `--dry-run` após subir os bancos (por exemplo com `docker compose up -d` na raiz do repositório).
+**Exemplo completo (Docker + dry-run + importação):**
+
+```powershell
+.\run_example.ps1
+```
+
+Requer Docker Desktop. O script sobe os cinco bancos, executa `--dry-run` e depois importa com `--create-schema`. Também é possível usar `docker compose up -d` na raiz e rodar o CLI manualmente.
 
 Opções úteis:
 
@@ -85,7 +98,7 @@ Opções úteis:
 
 ### Arquitetura
 
-Consulte [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (inglês + PT) para camadas, princípios SOLID e *registry* de importadores injetável nos testes.
+Consulte [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (inglês + PT) para camadas, princípios SOLID e *registry* de importadores injetável nos testes. O relatório do TCC está em [docs-tcc/](docs-tcc/).
 
 ### Layout
 
@@ -96,12 +109,13 @@ Consulte [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (inglês + PT) para camada
 | `src/polyglotimportcsv/schemas/` | JSON Schema embutido |
 | `data/ecommerce/` | CSV de exemplo + `import_config.json` |
 | `tests/` | `pytest` (stubs, sem I/O real) |
-| `_docs/` | TCC (Markdown + BibTeX); em `_docs/scripts/` existem `.ps1` (Windows) e `.sh` (Unix) para Pandoc |
+| `docs-tcc/` | Relatório TCC I (Markdown + BibTeX); `docs-tcc/scripts/` para PDF/ODT via Pandoc |
 
 ### Scripts
 
-- **Windows:** `scripts/run_example_windows.ps1` (ou `run_example_windows.bat`, que chama o PowerShell).
-- **macOS / Linux:** `scripts/run_example_macos.sh`.
+- **Windows (recomendado):** `run_example.ps1` na raiz — Docker + dry-run + importação.
+- **Windows (só dry-run):** `scripts/run_example_windows.ps1`
+- **macOS / Linux:** `scripts/run_example_macos.sh` (dry-run); use `docker compose` + CLI para importação completa.
 
 ### Licença
 

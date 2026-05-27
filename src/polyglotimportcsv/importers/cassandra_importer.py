@@ -8,14 +8,21 @@ from typing import Any, Dict, List
 import pandas as pd
 
 from polyglotimportcsv.business_exception import BusinessException
-from polyglotimportcsv.entity_utils import output_column_name
+from polyglotimportcsv.entity_utils import (
+    flat_leaf_columns,
+    resolve_csv_column,
+    target_field_name,
+)
 from polyglotimportcsv.filter_engine import apply_filters, expand_each
 
 logger = logging.getLogger(__name__)
 
 
-def _all_db_columns(ecfg: Dict[str, Any]) -> Dict[str, str]:
-    return {src: output_column_name(src, spec) for src, spec in (ecfg.get("columns") or {}).items()}
+def _source_to_db_map(ecfg: Dict[str, Any], csv_columns: List[str]) -> Dict[str, str]:
+    return {
+        resolve_csv_column(fk, spec, csv_columns): target_field_name(fk, spec)
+        for fk, _, spec in flat_leaf_columns(ecfg)
+    }
 
 
 def _cassandra_type_for(spec: Dict[str, Any]) -> str:
@@ -89,15 +96,23 @@ def run_cassandra_import(
     session.set_keyspace(keyspace)
 
     for ename, ecfg in entities.items():
-        pmap = _all_db_columns(ecfg)
+        csv_columns = list(df.columns)
+        pmap = _source_to_db_map(ecfg, csv_columns)
         part_src = ecfg.get("cassandra_partition") or []
         clust_src = ecfg.get("cassandra_cluster") or []
         part_db = [pmap[c] for c in part_src]
         clust_db = [pmap[c] for c in clust_src]
-        all_src = list((ecfg.get("columns") or {}).keys())
+        all_src = [
+            resolve_csv_column(fk, spec, csv_columns)
+            for fk, _, spec in flat_leaf_columns(ecfg)
+        ]
         other_src = [s for s in all_src if s not in list(part_src) + list(clust_src)]
         ordered_src = list(part_src) + list(clust_src) + other_src
         ordered_db: List[str] = [pmap[s] for s in ordered_src]
+        spec_by_src = {
+            resolve_csv_column(fk, spec, csv_columns): spec
+            for fk, _, spec in flat_leaf_columns(ecfg)
+        }
         pk_clause = _primary_key_clause(part_db, clust_db)
 
         non_each = [f for f in (ecfg.get("filters") or []) if f.get("operator") != "each"]
@@ -106,7 +121,7 @@ def run_cassandra_import(
             if create_schema:
                 col_defs = []
                 for src in ordered_src:
-                    spec = ecfg["columns"][src]
+                    spec = spec_by_src[src]
                     col_defs.append(f'"{pmap[src]}" {_cassandra_type_for(spec)}')
                 ddl = f'CREATE TABLE IF NOT EXISTS "{table}" (' + ", ".join(col_defs) + f", {pk_clause});"
                 session.execute(ddl)

@@ -1,0 +1,29 @@
+%% Figure 4 — Polyglot Import CSV execution algorithm
+flowchart TD
+    Start(["CLI: CSV + config JSON"])
+    LoadCfg["load_config<br/>+ JSON Schema"]
+    LoadCSV["load_csv_with_inference"]
+    CrossVal["validate_import_config"]
+    BackendLoop{"Para cada<br/>backend"}
+    EntityLoop{"Para cada<br/>entidade"}
+    Filters["apply_filters"]
+    EachSplit["expand_each"]
+    Materialize{"Materializar"}
+    Flat["flatten_entity_dataframe<br/>(PostgreSQL / Cassandra)"]
+    Doc["mongo_document<br/>(MongoDB)"]
+    KV["redis_payload_from_row<br/>(Redis)"]
+    Graph["props / relationships<br/>(Neo4j)"]
+    Persist["Conectar + DDL + persistir"]
+    Log["Registrar contagens"]
+    EndNode(["Fim"])
+
+    Start --> LoadCfg --> LoadCSV --> CrossVal --> BackendLoop
+    BackendLoop --> EntityLoop
+    EntityLoop --> Filters --> EachSplit --> Materialize
+    Materialize --> Flat --> Persist
+    Materialize --> Doc --> Persist
+    Materialize --> KV --> Persist
+    Materialize --> Graph --> Persist
+    Persist --> Log --> EntityLoop
+    EntityLoop --> BackendLoop
+    BackendLoop --> EndNode

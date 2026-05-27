@@ -1,0 +1,26 @@
+%% Figure 3 — NoSQL data models (Hecht and Jablonski)
+flowchart TB
+    subgraph KV["1. Chave-valor"]
+        direction LR
+        K["chave"] --> V["valor<br/>(opaco ao SGBD)"]
+    end
+
+    subgraph COL["2. Colunar"]
+        direction LR
+        RK["chave de linha"] --> CF["famílias de colunas<br/>(pares nome-valor)"]
+    end
+
+    subgraph DOC["3. Documento"]
+        direction LR
+        ID["identificador"] --> BSON["documento<br/>JSON / BSON"]
+    end
+
+    subgraph GRA["4. Grafo"]
+        direction LR
+        N1["nó A"] -->|aresta tipada| N2["nó B"]
+    end
+
+    style KV fill:#f0f9ff,stroke:#0284c7
+    style COL fill:#f0fdf4,stroke:#16a34a
+    style DOC fill:#fff7ed,stroke:#ea580c
+    style GRA fill:#faf5ff,stroke:#9333ea

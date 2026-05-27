@@ -2,10 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://polyglot-import-csv.local/schemas/polyglot_import_config.schema.json",
   "title": "PolyglotImportCSV configuration",
+  "description": "Declarative mapping from a wide CSV file to one or more database backends.",
   "type": "object",
   "required": ["version"],
   "properties": {
-    "version": { "type": "integer", "minimum": 1 },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Configuration format version."
+    },
     "postgres": { "$ref": "#/$defs/postgresBackend" },
     "mongodb": { "$ref": "#/$defs/mongoBackend" },
     "cassandra": { "$ref": "#/$defs/cassandraBackend" },
@@ -16,16 +21,53 @@
   "$defs": {
     "columnSpec": {
       "type": "object",
+      "description": "Leaf mapping from a CSV column to a destination field.",
       "properties": {
-        "is_key": { "type": "boolean" },
-        "db_column": { "type": "string" },
-        "db_type": { "type": "string" },
-        "alias_db": { "type": "string" }
+        "is_key": {
+          "type": "boolean",
+          "description": "Primary or merge key for the entity."
+        },
+        "csv_column": {
+          "description": "CSV header name or 0-based column index when it differs from the JSON key.",
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "integer", "minimum": 0 }
+          ]
+        },
+        "schema_column": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Destination field name when it differs from the JSON key."
+        },
+        "db_column": {
+          "type": "string",
+          "description": "Deprecated alias for schema_column."
+        },
+        "db_type": {
+          "type": "string",
+          "description": "SQL/CQL type for DDL generation (PostgreSQL, Cassandra)."
+        },
+        "alias_db": {
+          "type": "string",
+          "description": "Deprecated alias for schema_column."
+        }
       },
       "additionalProperties": false
     },
+    "columnEntry": {
+      "description": "Either a leaf columnSpec or a nested object (MongoDB subdocuments).",
+      "oneOf": [
+        { "$ref": "#/$defs/columnSpec" },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/$defs/columnEntry" }
+        }
+      ]
+    },
     "filter": {
       "type": "object",
+      "description": "Row predicate applied to the full CSV before materialization.",
       "required": ["column", "operator"],
       "properties": {
         "column": { "type": "string", "minLength": 1 },
@@ -43,14 +85,17 @@
     },
     "entity": {
       "type": "object",
+      "description": "One logical target (table, collection, label, or Redis entity).",
       "required": ["columns"],
       "properties": {
         "columns": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/columnSpec" }
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/$defs/columnEntry" }
         },
         "nested": {
           "type": "object",
+          "description": "Deprecated: use nested keys inside columns instead.",
           "additionalProperties": { "$ref": "#/$defs/entity" }
         },
         "filters": {
@@ -68,7 +113,7 @@
           "description": "Clustering columns (optional)"
         }
       },
-      "additionalProperties": true
+      "additionalProperties": false
     },
     "postgresBackend": {
       "type": "object",

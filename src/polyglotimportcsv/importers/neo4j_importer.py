@@ -10,7 +10,11 @@ import pandas as pd
 from neo4j import GraphDatabase
 
 from polyglotimportcsv.business_exception import BusinessException
-from polyglotimportcsv.entity_utils import output_column_name
+from polyglotimportcsv.entity_utils import (
+    flat_leaf_columns,
+    resolve_csv_column,
+    target_field_name,
+)
 from polyglotimportcsv.filter_engine import apply_filters, expand_each
 from polyglotimportcsv.materialize import cell_scalar
 
@@ -58,19 +62,24 @@ def run_neo4j_import(
         raise BusinessException(f"Neo4j connection failed: {e}") from e
 
     def props_from_row(row: pd.Series, ecfg: Dict[str, Any]) -> Dict[str, Any]:
+        csv_columns = list(row.index)
         out: Dict[str, Any] = {}
-        for src, spec in (ecfg.get("columns") or {}).items():
-            name = output_column_name(src, spec)
+        for field_key, _, spec in flat_leaf_columns(ecfg):
+            name = target_field_name(field_key, spec)
+            src = resolve_csv_column(field_key, spec, csv_columns)
             out[name] = cell_scalar(row[src] if src in row.index else None)
         return out
 
     with driver.session(database=database) as session:
         for ename, ecfg in entities.items():
-            key_cols = [(s, sp) for s, sp in (ecfg.get("columns") or {}).items() if sp.get("is_key")]
+            key_cols = [
+                (fk, sp) for fk, _, sp in flat_leaf_columns(ecfg) if sp.get("is_key")
+            ]
             if len(key_cols) != 1:
                 raise BusinessException(f"Neo4j entity '{ename}' must have exactly one is_key column.")
-            key_src, key_spec = key_cols[0]
-            key_name = output_column_name(key_src, key_spec)
+            key_field, key_spec = key_cols[0]
+            key_name = target_field_name(key_field, key_spec)
+            key_src = resolve_csv_column(key_field, key_spec, list(df.columns))
             label = _sanitize_label(ename)
             non_each = [f for f in (ecfg.get("filters") or []) if f.get("operator") != "each"]
             dff = apply_filters(df, non_each, column_kinds)
@@ -96,27 +105,31 @@ def run_neo4j_import(
             rel_type = _sanitize_label(rspec.get("type") or rname)
             from_ent = entities[rspec["from"]]
             to_ent = entities[rspec["to"]]
-            fk_from = [(s, sp) for s, sp in from_ent["columns"].items() if sp.get("is_key")][0]
-            fk_to = [(s, sp) for s, sp in to_ent["columns"].items() if sp.get("is_key")][0]
-            from_key = output_column_name(fk_from[0], fk_from[1])
-            to_key = output_column_name(fk_to[0], fk_to[1])
+            fk_from = [(fk, sp) for fk, _, sp in flat_leaf_columns(from_ent) if sp.get("is_key")][0]
+            fk_to = [(fk, sp) for fk, _, sp in flat_leaf_columns(to_ent) if sp.get("is_key")][0]
+            from_key = target_field_name(fk_from[0], fk_from[1])
+            to_key = target_field_name(fk_to[0], fk_to[1])
+            from_src = resolve_csv_column(fk_from[0], fk_from[1], list(df.columns))
+            to_src = resolve_csv_column(fk_to[0], fk_to[1], list(df.columns))
             rel_cols = rspec.get("columns") or {}
             merge_key_cols = [
-                (src, output_column_name(src, spec))
-                for src, spec in rel_cols.items()
+                (fk, target_field_name(fk, spec))
+                for fk, spec in rel_cols.items()
                 if spec.get("is_key")
             ]
             f1 = [x for x in (from_ent.get("filters") or []) if x.get("operator") != "each"]
             dff = apply_filters(df, f1, column_kinds)
             count = 0
             for _, row in dff.iterrows():
-                a_id = cell_scalar(row[fk_from[0]] if fk_from[0] in row.index else None)
-                b_id = cell_scalar(row[fk_to[0]] if fk_to[0] in row.index else None)
+                a_id = cell_scalar(row[from_src] if from_src in row.index else None)
+                b_id = cell_scalar(row[to_src] if to_src in row.index else None)
                 if a_id is None or b_id is None:
                     continue
                 rel_props: Dict[str, Any] = {}
-                for src, spec in rel_cols.items():
-                    name = output_column_name(src, spec)
+                csv_columns = list(row.index)
+                for field_key, spec in rel_cols.items():
+                    name = target_field_name(field_key, spec)
+                    src = resolve_csv_column(field_key, spec, csv_columns)
                     rel_props[name] = cell_scalar(row[src] if src in row.index else None)
                 merge_keys = {db_name: rel_props[db_name] for _, db_name in merge_key_cols}
                 rest_props = {k: v for k, v in rel_props.items() if k not in merge_keys}
