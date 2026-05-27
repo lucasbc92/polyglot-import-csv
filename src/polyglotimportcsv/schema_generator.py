@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from polyglotimportcsv.entity_utils import flat_leaf_columns, target_field_name
+
 
 def postgres_column_ddl(col_name: str, db_type: str) -> str:
     safe = col_name.replace('"', "")
@@ -21,8 +23,8 @@ def build_postgres_create_tables(
     for table, ecfg in entities.items():
         cols: List[str] = []
         pks: List[str] = []
-        for src, spec in (ecfg.get("columns") or {}).items():
-            db_col = spec.get("db_column") or spec.get("alias_db") or src
+        for field_key, _, spec in flat_leaf_columns(ecfg):
+            db_col = target_field_name(field_key, spec)
             db_type = spec.get("db_type") or "TEXT"
             safe_col = db_col.replace('"', "")
             cols.append(postgres_column_ddl(safe_col, db_type))
