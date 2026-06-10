@@ -23,13 +23,17 @@ pip install -e ".[dev]"
 python -m polyglotimportcsv data/ecommerce/ecommerce_join.csv --config data/ecommerce/import_config.json --dry-run
 ```
 
-**Full running example (Docker + dry-run + import):**
+**Running example** (single script; use [Git Bash](https://git-scm.com/) on Windows or any Unix shell):
 
-```powershell
-.\run_example.ps1
+```bash
+./run_example.sh                  # Docker (if needed) + clean + dry-run + import + inspect
+./run_example.sh --dry-run        # validate CSV/config only (no Docker)
+./run_example.sh --fresh-start      # first-time: wipe volumes/images, re-pull, full default flow
+./run_example.sh --clean --dry-run --import --inspect   # explicit equivalent of default
+./run_example.sh --csv path/to/your.csv --config data/ecommerce/import_config.json
 ```
 
-Requires Docker Desktop. The script starts all five databases, runs `--dry-run`, then imports with `--create-schema`. You can also run manually after `docker compose up -d` (see `docker-compose.yml` at repo root).
+Requires Docker for import/clean/inspect. Use `--fresh-start` for a true first-time run (removes volumes and images, re-pulls, then default flow). Every command is printed as `$ ...` in the terminal and in `logs/`.
 
 Options:
 
@@ -48,14 +52,22 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (English + PT) for layering, SO
 | `src/polyglotimportcsv/importers/` | One module per backend + `base.py` protocol |
 | `src/polyglotimportcsv/schemas/` | Bundled JSON Schema |
 | `data/ecommerce/` | Sample CSV + `import_config.json` |
+| `logs/` | Session logs from `run_example.sh` and direct CLI runs (gitignored) |
 | `tests/` | `pytest` (stubs for I/O per TDD skill) |
 | `docs-tcc/` | TCC I report (Markdown, BibTeX); `docs-tcc/scripts/` for Pandoc PDF/ODT |
 
 ### Scripts
 
-- **Windows (recommended):** `run_example.ps1` at repo root — Docker stack + dry-run + import.
-- **Windows (dry-run only):** `scripts/run_example_windows.ps1`
-- **macOS / Linux:** `scripts/run_example_macos.sh` (dry-run); use `docker compose` + CLI for full import.
+- `./run_example.sh` — orchestrates Docker, import, clean, and inspect (see `--help`).
+- `scripts/inspect_persisted_data.py` — low-level `clean` / `inspect` helpers (usually invoked via `run_example.sh`).
+
+**Tab completion (Git Bash / bash):** add to `~/.bashrc`, then open a new terminal:
+
+```bash
+source "/c/Users/DELL/Documents/polyglot-import-csv/scripts/run_example.completion.bash"
+```
+
+After that, `./run_example.sh --` + TAB suggests flags (`--fresh-start`, `--clean`, `--inspect`, …); `--csv` / `--config` / `--log-file` suggest paths under `data/ecommerce/` and `logs/`.
 
 ### License
 
@@ -83,13 +95,16 @@ pip install -e ".[dev]"
 python -m polyglotimportcsv data/ecommerce/ecommerce_join.csv --config data/ecommerce/import_config.json --dry-run
 ```
 
-**Exemplo completo (Docker + dry-run + importação):**
+**Exemplo de execução** (um único script; no Windows use [Git Bash](https://git-scm.com/) ou WSL):
 
-```powershell
-.\run_example.ps1
+```bash
+./run_example.sh                  # Docker (se necessário) + clean + dry-run + importação + inspect
+./run_example.sh --dry-run        # só validação (sem Docker)
+./run_example.sh --fresh-start      # primeiro uso: apaga volumes/imagens, baixa de novo, fluxo padrão
+./run_example.sh --clean --dry-run --import --inspect   # equivalente explícito ao padrão
 ```
 
-Requer Docker Desktop. O script sobe os cinco bancos, executa `--dry-run` e depois importa com `--create-schema`. Também é possível usar `docker compose up -d` na raiz e rodar o CLI manualmente.
+Requer Docker para importar/limpar/inspecionar. Use `--fresh-start` para simular o primeiro uso (remove volumes e imagens, `pull`, fluxo padrão). Cada comando aparece como `$ ...` no terminal e em `logs/`.
 
 Opções úteis:
 
@@ -113,9 +128,16 @@ Consulte [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (inglês + PT) para camada
 
 ### Scripts
 
-- **Windows (recomendado):** `run_example.ps1` na raiz — Docker + dry-run + importação.
-- **Windows (só dry-run):** `scripts/run_example_windows.ps1`
-- **macOS / Linux:** `scripts/run_example_macos.sh` (dry-run); use `docker compose` + CLI para importação completa.
+- `./run_example.sh` — orquestra Docker, importação, limpeza e inspeção (`--help`).
+- `scripts/inspect_persisted_data.py` — comandos `clean` / `inspect` (chamados pelo `run_example.sh`).
+
+**Autocompletar com TAB (Git Bash / bash):** inclua no `~/.bashrc` e abra um terminal novo:
+
+```bash
+source "/c/Users/DELL/Documents/polyglot-import-csv/scripts/run_example.completion.bash"
+```
+
+Depois, `./run_example.sh --` + TAB sugere flags (`--fresh-start`, `--clean`, `--inspect`, …); `--csv` / `--config` / `--log-file` sugerem caminhos em `data/ecommerce/` e `logs/`.
 
 ### Licença
 

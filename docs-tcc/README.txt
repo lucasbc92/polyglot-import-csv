@@ -4,11 +4,11 @@ Relatorio principal (TCC1):
   LucasBuenoCesario-PolyglotImportCSV-Report-TCC1.md
 
 Gerar PDF ABNT (versao oficial):
-  A partir da raiz do repositorio:
-    .\docs-tcc\scripts\gerar-tcc1.ps1
+  A partir da raiz do repositorio (Git Bash / macOS / Linux):
+    ./docs-tcc/scripts/gerar-tcc1.sh
 
 Gerar PDF + ODT para revisao (LibreOffice / Google Docs):
-    .\docs-tcc\scripts\gerar-tcc1.ps1 -Odt
+    ./docs-tcc/scripts/gerar-tcc1.sh --odt
 
   Saidas:
     LucasBuenoCesario-PolyglotImportCSV-Report-TCC1.pdf  — ABNT completo (abnTeX2)
@@ -27,11 +27,13 @@ Gerar PDF + ODT para revisao (LibreOffice / Google Docs):
   pelo script ajustar-figuras-odt.py apos o Pandoc.
 
 Running example (codigo + Docker):
-  .\run_example.ps1   (na raiz do repositorio)
+  ./run_example.sh              # fluxo completo
+  ./run_example.sh --inspect    # ver dados nos bancos
+  ./run_example.sh --clean --import
 
 Figuras em docs-tcc/images/:
   figure1-polyglot-ecommerce.png — e-commerce poliglota
   figure2-polyglot-persistence-azure.png — Azure (referencia externa)
   figure3-nosql-data-models.png — modelos NoSQL
   figure4-import-algorithm.png — algoritmo de importacao
-  figure*.mmd — fontes Mermaid (regenerar com gerar-diagramas.ps1)
+  figure*.mmd — fontes Mermaid (regenerar com docs-tcc/scripts/gerar-diagramas.sh)

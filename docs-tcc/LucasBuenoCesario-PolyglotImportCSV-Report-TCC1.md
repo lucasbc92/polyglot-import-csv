@@ -46,11 +46,11 @@ header-includes: |
   COMPILAÇÃO (a partir da raiz do repositório)
 =======================================================================
 
-  PowerShell (from repo root):
-    .\docs-tcc\scripts\gerar-tcc1.ps1          # PDF ABNT (oficial)
-    .\docs-tcc\scripts\gerar-tcc1.ps1 -Odt     # PDF + ODT para revisão (LibreOffice / Google Docs)
+  Bash (Git Bash / macOS / Linux, from repo root):
+    ./docs-tcc/scripts/gerar-tcc1.sh             # PDF ABNT (oficial)
+    ./docs-tcc/scripts/gerar-tcc1.sh --odt       # PDF + ODT para revisão (LibreOffice / Google Docs)
 
-  Gera PDF (abnTeX2) e, com -Odt, versão editável estilizada em docs-tcc/.
+  Gera PDF (abnTeX2) e, com --odt, versão editável estilizada em docs-tcc/.
   Assets: abntex2.latex, abnt-ufsc-reference.odt, references.bib, CSL ABNT e images/.
 
 =======================================================================
@@ -590,7 +590,7 @@ Assim, um **único CSV largo** alimenta destinos heterogéneos: tabelas relacion
 
 Erros de configuração levantam ``BusinessException`` antes de qualquer conexão. O modo ``--dry-run`` lista contagens por entidade sem contatar os SGBDs. O *driver* Apache Cassandra é importado de forma tardia para permitir ``--dry-run`` em ambientes onde a extensão C do *driver* não está disponível (por exemplo, versões recentes do Python).
 
-Testes automatizados (``pytest``) cobrem validação de schema, mapeamento de colunas (``csv_column``, ``schema_column``, aninhamento), filtros e *smoke tests* de validação + *dry-run*. O arquivo ``docker-compose.yml`` na raiz sobe PostgreSQL, Redis, MongoDB, Cassandra e Neo4j para testes de integração manuais; o script ``run_example.ps1`` orquestra a subida dos contêineres, um *dry-run* e a importação real com ``--create-schema``.
+Testes automatizados (``pytest``) cobrem validação de schema, mapeamento de colunas (``csv_column``, ``schema_column``, aninhamento), filtros e *smoke tests* de validação + *dry-run*. O arquivo ``docker-compose.yml`` na raiz sobe PostgreSQL, Redis, MongoDB, Cassandra e Neo4j para testes de integração manuais; o script ``run_example.sh`` orquestra a subida dos contêineres, um *dry-run* e a importação real com ``--create-schema``.
 
 ### 4.4.1 Evidência de execução (cenário e-commerce)
 
@@ -610,7 +610,7 @@ O arquivo ``data/ecommerce/ecommerce_join.csv`` contém 32 linhas de eventos (``
 | Neo4j | nó ``Product`` | 8 |
 | Neo4j | aresta ``PURCHASED`` | conforme linhas ``purchase`` |
 
-Com ``docker compose up -d`` e ``run_example.ps1`` (ou importação sem ``--dry-run``), os mesmos volumes são persistidos nos cinco backends configurados, materializando o cenário poliglota da seção 2.1.
+Com ``docker compose up -d`` e ``run_example.sh`` (ou importação sem ``--dry-run``), os mesmos volumes são persistidos nos cinco backends configurados, materializando o cenário poliglota da seção 2.1.
 
 # 5 ATIVIDADES FUTURAS
 
