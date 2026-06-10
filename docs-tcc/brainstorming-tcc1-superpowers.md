@@ -142,7 +142,7 @@ O relatório descreve com fidelidade o pipeline `load_config` → `load_csv` →
 |-------|-----------|
 | **A** | Só correções textuais P0 no relatório |
 | **B** | Relatório polido + running example (recomendada) |
-| **C** | Completo + apêndice de configuração + scripts PS1/bash |
+| **C** | Completo + apêndice de configuração + scripts bash |
 | **B sem conclusão** | Como B, sem seção de Considerações Finais |
 
 **Escolha:** **Opção B** — relatório polido + exemplo executável com Docker.
@@ -159,9 +159,9 @@ O relatório descreve com fidelidade o pipeline `load_config` → `load_csv` →
 2. **Considerações finais** + tabela de evidência no §4.4
 3. **BibTeX:** Neal Ford + `urldate` em entradas web
 4. **Sigla SGPD** em `abntex2.latex`
-5. **`run_example.ps1`** na raiz: `docker compose up -d` → espera serviços → `--dry-run` → import com `--create-schema`
+5. **`run_example.sh`** na raiz: `docker compose up -d` → espera serviços → `--dry-run` → import com `--create-schema`
 6. **README** e `docs-tcc/README.txt` atualizados
-7. **Regenerar PDF** com `gerar-tcc1.ps1`
+7. **Regenerar PDF** com `gerar-tcc1.sh`
 
 ### Ordem de execução
 
@@ -178,7 +178,7 @@ O relatório descreve com fidelidade o pipeline `load_config` → `load_csv` →
 
 | Item | Status |
 |------|--------|
-| `run_example.ps1` | Criado |
+| `run_example.sh` | Criado |
 | Correções P0 no relatório | Feitas |
 | §4.4.1 tabela dry-run (32 linhas CSV; contagens por backend) | Feita |
 | Considerações finais | Feitas |
@@ -186,7 +186,7 @@ O relatório descreve com fidelidade o pipeline `load_config` → `load_csv` →
 | `references.bib` + SGPD | Feitos |
 | README atualizado | Feito |
 | PDF regenerado | Feito |
-| **Figuras ODT desproporcionais** | Script `ajustar-figuras-odt.py` (máx. 16×20 cm A4); integrado em `gerar-tcc1.ps1 -Odt` |
+| **Figuras ODT desproporcionais** | Script `ajustar-figuras-odt.py` (máx. 16×20 cm A4); integrado em `gerar-tcc1.sh --odt` |
 
 ### Contagens do dry-run (cenário e-commerce)
 
@@ -206,8 +206,8 @@ python -m polyglotimportcsv data/ecommerce/ecommerce_join.csv --config data/ecom
 
 Exemplo completo com Docker (Windows):
 
-```powershell
-.\run_example.ps1
+```bash
+./run_example.sh
 ```
 
 ---
@@ -233,7 +233,7 @@ Exemplo completo com Docker (Windows):
 
 ## 8. Nota sobre este arquivo
 
-Este `.md` **não reproduz o chat integral**; resume o raciocínio do brainstorming Superpowers, as decisões tomadas com suas respostas e o encadeamento até o plano “Polimento Relatório + Running Example”. Para o relatório oficial ABNT, use o PDF gerado por `docs-tcc/scripts/gerar-tcc1.ps1`.
+Este `.md` **não reproduz o chat integral**; resume o raciocínio do brainstorming Superpowers, as decisões tomadas com suas respostas e o encadeamento até o plano “Polimento Relatório + Running Example”. Para o relatório oficial ABNT, use o PDF gerado por `docs-tcc/scripts/gerar-tcc1.sh`.
 
 **Arquivos relacionados:**
 
