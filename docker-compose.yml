@@ -1,6 +1,6 @@
 # Local stack for integration testing (TCC / dev).
 # Usage: docker compose up -d
-# Then: python -m polyglotimportcsv data/ecommerce/ecommerce_join.csv --config data/ecommerce/import_config.json
+# Then: ./run_example.sh --import   (or see run_example.sh --help)
 
 services:
   postgres:
@@ -11,16 +11,40 @@ services:
       POSTGRES_DB: ecommerce
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ecommerce"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
 
   mongodb:
     image: mongo:7
     ports:
       - "27017:27017"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--quiet",
+          "--eval",
+          "db.adminCommand({ ping: 1 }).ok ? quit(0) : quit(1)",
+        ]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
 
   cassandra:
     image: cassandra:4.1
@@ -29,6 +53,12 @@ services:
       HEAP_NEWSIZE: 128M
     ports:
       - "9042:9042"
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'SELECT now() FROM system.local'"]
+      interval: 10s
+      timeout: 10s
+      retries: 24
+      start_period: 90s
 
   neo4j:
     image: neo4j:5-community
@@ -37,3 +67,13 @@ services:
     ports:
       - "7474:7474"
       - "7687:7687"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "cypher-shell -u neo4j -p password 'RETURN 1' || exit 1",
+        ]
+      interval: 5s
+      timeout: 10s
+      retries: 18
+      start_period: 40s

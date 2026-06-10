@@ -1,6 +1,11 @@
 # Local scratch / failed clone dirs (never commit)
 _temp_skills/
 
+# Session logs from run_example.sh / CLI (logs/.gitkeep tracks the folder)
+logs/*
+!logs/.gitignore
+
+
 # Large local datasets not tracked in git
 2018-census-totals-by-topic-national-highlights-csv/
 
@@ -13,9 +18,6 @@ _temp_skills/
 /data.csv
 /db.json
 /polyglotimportcsv.exe
-/run_example_macos.sh
-/run_example_windows.bat
-
 # LibreOffice / editor lock files
 .~lock.*
 **/.~lock.*
