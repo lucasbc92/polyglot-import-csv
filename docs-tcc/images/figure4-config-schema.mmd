@@ -1,0 +1,53 @@
+%% Figure 4 — Polyglot Import CSV configuration JSON Schema (structure tree)
+flowchart LR
+    Root["Configuração (root)<br/>version*, additionalProperties: false"]
+
+    Root --> PG["postgres"]
+    Root --> MG["mongodb"]
+    Root --> CA["cassandra"]
+    Root --> RD["redis"]
+    Root --> NE["neo4j"]
+
+    PG --> PGconn["connection<br/>host, port, database,<br/>user, password"]
+    PG --> PGschema["schema (def. public)"]
+    PG --> PGent["entities*"]
+    PG --> PGrel["relationships<br/>from*, to*, foreign_key*,<br/>references_key"]
+
+    MG --> MGconn["connection<br/>uri*, database*"]
+    MG --> MGent["entities*"]
+
+    CA --> CAconn["connection<br/>hosts*, port, keyspace*,<br/>protocol_version"]
+    CA --> CAent["entities*"]
+
+    RD --> RDconn["connection<br/>host, port, db, password"]
+    RD --> RDent["entities*"]
+
+    NE --> NEconn["connection<br/>uri*, user*, password*,<br/>database"]
+    NE --> NEent["entities*"]
+    NE --> NErel["relationships<br/>from*, to*, type*,<br/>columns -> columnSpec"]
+
+    PGent --> Entity
+    MGent --> Entity
+    CAent --> Entity
+    RDent --> Entity
+    NEent --> Entity
+
+    subgraph EntityDef["entity (definição reutilizável)"]
+      Entity["entity"]
+      Entity --> Ecols["columns*<br/>(mapa recursivo)"]
+      Entity --> Efilt["filters: [ filter ]"]
+      Entity --> Epart["cassandra_partition: [string]"]
+      Entity --> Eclus["cassandra_cluster: [string]"]
+    end
+
+    Ecols --> ColEntry{"columnEntry<br/>(oneOf)"}
+    ColEntry --> Spec["columnSpec (folha)<br/>csv_column, schema_column,<br/>is_key, db_type"]
+    ColEntry --> Branch["objeto aninhado<br/>(subdocumento MongoDB)<br/>-> columnEntry"]
+    Branch -.recursivo.-> ColEntry
+
+    Efilt --> Filter["filter<br/>column*, operator*,<br/>value, target_suffix"]
+
+    classDef req fill:#e8f0fe,stroke:#3b6ea5;
+    classDef leaf fill:#eef7ee,stroke:#4a8f4a;
+    class Root,Entity req;
+    class Spec,Filter leaf;
