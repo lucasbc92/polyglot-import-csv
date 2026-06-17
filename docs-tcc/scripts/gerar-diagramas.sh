@@ -26,6 +26,7 @@ render() {
 
 render "figure1-polyglot-ecommerce.mmd" "figure1-polyglot-ecommerce.png" 1400
 render "figure3-nosql-data-models.mmd" "figure3-nosql-data-models.png" 1400
-render "figure4-import-algorithm.mmd" "figure4-import-algorithm.png" 1600
+render "figure4-config-schema.mmd" "figure4-config-schema.png" 1700
+render "figure5-import-algorithm.mmd" "figure5-import-algorithm.png" 1600
 
 echo "Diagramas atualizados em ${IMAGES_ROOT}"

@@ -69,12 +69,8 @@ def _build_document_from_columns(row: pd.Series, columns: Dict[str, Any]) -> Dic
 
 
 def mongo_document_from_row(row: pd.Series, entity_cfg: Dict[str, Any]) -> Dict[str, Any]:
-    """Build one BSON-ready dict from a CSV row (recursive columns + legacy nested)."""
-    doc = _build_document_from_columns(row, entity_cfg.get("columns") or {})
-    for nest_name, nest_cfg in (entity_cfg.get("nested") or {}).items():
-        nest_columns = nest_cfg.get("columns") if isinstance(nest_cfg, dict) else {}
-        doc[nest_name] = _build_document_from_columns(row, nest_columns or {})
-    return doc
+    """Build one BSON-ready dict from a CSV row (recursive columns)."""
+    return _build_document_from_columns(row, entity_cfg.get("columns") or {})
 
 
 def redis_payload_from_row(row: pd.Series, entity_cfg: Dict[str, Any]) -> tuple[str, str]:

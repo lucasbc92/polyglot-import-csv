@@ -22,7 +22,6 @@ def test_is_column_spec_vs_branch():
 
 def test_target_field_name_precedence():
     assert target_field_name("timestamp", {"schema_column": "event_time"}) == "event_time"
-    assert target_field_name("timestamp", {"db_column": "legacy"}) == "legacy"
     assert target_field_name("timestamp", {}) == "timestamp"
 
 
@@ -51,17 +50,8 @@ def test_iter_leaf_columns_nested_in_columns():
     assert (("category",), "category_id") in [(p, fk) for p, fk, _ in leaves]
 
 
-def test_iter_leaf_columns_legacy_nested():
-    ecfg = {
-        "columns": {"product_id": {}},
-        "nested": {"stock": {"columns": {"quantity_available": {}}}},
-    }
-    assert len(list(iter_leaf_columns(ecfg))) == 2
-
-
 def test_entity_has_nested_branches():
     assert entity_has_nested_branches({"columns": {"a": {"b": {}}}})
-    assert entity_has_nested_branches({"columns": {"a": {}}, "nested": {"x": {"columns": {}}}})
     assert not entity_has_nested_branches({"columns": {"a": {}, "b": {"schema_column": "c"}}})
 
 

@@ -372,6 +372,8 @@ python -m polyglotimportcsv caminho/dados.csv \
 
 O arquivo de configuração é um JSON validado estaticamente pelo **JSON Schema** embutido em ``src/polyglotimportcsv/schemas/polyglot_import_config.schema.json`` (rascunho 2020-12). A validação ocorre em ``config_parser.load_config`` antes de qualquer leitura do CSV ou conexão com SGBDs. O exemplo de referência do cenário e-commerce está em ``data/ecommerce/import_config.json``, alinhado ao CSV ``data/ecommerce/ecommerce_join.csv``.
 
+O schema passou por uma **reforma de simplificação** (seção 4.2.6) cujo objetivo foi reduzir o vocabulário do comando ao mínimo necessário, eliminando campos redundantes ou depreciados. A representação completa, na forma universal de *JSON Schema*, e o diagrama de estrutura resultante são apresentados na seção 4.2.6.
+
 ### 4.2.1 Estrutura raiz
 
 | Campo | Tipo | Obrigatório | Descrição |
@@ -395,7 +397,8 @@ Cada **folha** do mapa ``columns`` descreve como um valor do CSV alimenta um atr
 | ``schema_column`` | *string* | não | Nome do atributo no SGBD destino. Se omitido, usa-se a chave JSON. |
 | ``is_key`` | booleano | não | Marca chave primária, chave de ``MERGE`` (Neo4j) ou chave Redis. |
 | ``db_type`` | *string* | não | Tipo SQL/CQL para geração de DDL (PostgreSQL, Cassandra). |
-| ``db_column`` / ``alias_db`` | *string* | não | Sinónimos **depreciados** de ``schema_column`` (mantidos por retrocompatibilidade). |
+
+Propriedades adicionais em um ``columnSpec`` são rejeitadas (``additionalProperties: false``). Apenas estes quatro campos — ``csv_column``, ``schema_column``, ``is_key`` e ``db_type`` — compõem o mapeamento de uma folha, resultado da reforma de simplificação descrita na seção 4.2.6.
 
 **Forma mínima** — coluna CSV e destino com o mesmo nome:
 
@@ -431,9 +434,8 @@ Uma **entidade** representa um alvo lógico: tabela (PostgreSQL/Cassandra), cole
 | ``filters`` | lista | não | Predicados sobre o CSV completo antes da materialização. |
 | ``cassandra_partition`` | lista de *strings* | não | Colunas CSV que formam a chave de partição. |
 | ``cassandra_cluster`` | lista de *strings* | não | Colunas de agrupamento (*clustering*). |
-| ``nested`` | objeto | não | **Depreciado** — preferir chaves aninhadas dentro de ``columns``. |
 
-**Aninhamento MongoDB via chaves JSON:** objetos aninhados em ``columns`` produzem subdocumentos BSON, espelhando a estrutura de um documento JSON:
+**Aninhamento MongoDB via chaves JSON:** objetos aninhados em ``columns`` produzem subdocumentos BSON, espelhando a estrutura de um documento JSON. Após a reforma de simplificação (seção 4.2.6), o aninhamento é expresso **exclusivamente** por chaves aninhadas dentro de ``columns`` — não há mais um bloco ``nested`` separado:
 
 ```json
 "columns": {
@@ -516,6 +518,278 @@ A validação ocorre em **duas camadas**:
 
 Qualquer falha levanta ``BusinessException`` e **impede** o início da importação, conforme o objetivo específico do TCC.
 
+### 4.2.6 Reforma de simplificação e representação na forma universal
+
+O *JSON Schema* de configuração passou por uma **reforma** orientada pelo princípio de manter o comando o mais simples possível: cada conceito deve ter **uma única** forma de ser expresso. Versões anteriores acumulavam campos redundantes, mantidos por retrocompatibilidade, que duplicavam funcionalidades já cobertas por ``csv_column``, ``schema_column`` e pelo mapa recursivo ``columns``. Esses campos foram removidos, conforme a Tabela a seguir.
+
+| Campo removido | Substituto canônico | Justificativa |
+|----------------|---------------------|---------------|
+| ``db_column`` | ``schema_column`` | Sinônimo de renomeação no destino; redundante. |
+| ``alias_db`` | ``schema_column`` | Segundo sinônimo da mesma operação de renomeação. |
+| ``nested`` (em ``entity``) | chaves aninhadas em ``columns`` | O aninhamento de subdocumentos MongoDB já é expresso recursivamente pelo próprio mapa ``columns`` (``columnEntry``), tornando o bloco separado desnecessário. |
+
+Com a reforma, o vocabulário de uma folha (``columnSpec``) reduz-se a quatro campos opcionais (``csv_column``, ``schema_column``, ``is_key``, ``db_type``) e o aninhamento documental fica concentrado em um único mecanismo. A motivação prática para manter ``csv_column`` e ``schema_column`` é que **nem sempre o nome da coluna no CSV coincide com o nome do atributo no banco de destino**: ``csv_column`` indica o nome — ou o índice numérico (base 0) — da coluna de origem no CSV, enquanto ``schema_column`` indica o nome do atributo correspondente no SGBD. Quando ambos coincidem com a chave JSON, nenhum dos dois é necessário (forma mínima ``"campo": {}``).
+
+A reforma preserva a propriedade de *fechamento* do schema: em todos os níveis vale ``additionalProperties: false``, de modo que qualquer campo legado remanescente em configurações antigas é detectado na validação, em vez de ser silenciosamente ignorado.
+
+**Diagrama de estrutura.** A Figura 4 apresenta a árvore de estrutura do schema reformado — da raiz aos blocos por backend, à definição reutilizável ``entity`` e à recursão ``columns → columnEntry → columnSpec`` que sustenta os subdocumentos MongoDB. O diagrama-fonte Mermaid encontra-se em ``docs-tcc/images/figure4-config-schema.mmd`` (campos obrigatórios marcados com ``*``).
+
+![Estrutura do JSON Schema de configuração do PolyglotImportCSV.](images/figure4-config-schema.png){width=15cm}
+
+**Fonte:** Elaborado pelo autor (2026).
+
+**Representação na forma universal.** A seguir reproduz-se o documento *JSON Schema* completo na sua forma serializada canônica (rascunho 2020-12), tal como embutido em ``src/polyglotimportcsv/schemas/polyglot_import_config.schema.json``. Essa é a representação **universal** e portável do contrato de configuração: pode ser consumida por qualquer validador compatível com a especificação, independentemente de linguagem de programação.
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://polyglot-import-csv.local/schemas/polyglot_import_config.schema.json",
+  "title": "PolyglotImportCSV configuration",
+  "description": "Declarative mapping from a wide CSV file to one or more database backends.",
+  "type": "object",
+  "required": ["version"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Configuration format version."
+    },
+    "postgres": { "$ref": "#/$defs/postgresBackend" },
+    "mongodb": { "$ref": "#/$defs/mongoBackend" },
+    "cassandra": { "$ref": "#/$defs/cassandraBackend" },
+    "redis": { "$ref": "#/$defs/redisBackend" },
+    "neo4j": { "$ref": "#/$defs/neo4jBackend" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "columnSpec": {
+      "type": "object",
+      "description": "Leaf mapping from a CSV column to a destination field.",
+      "properties": {
+        "is_key": {
+          "type": "boolean",
+          "description": "Primary or merge key for the entity."
+        },
+        "csv_column": {
+          "description": "CSV header name or 0-based column index when it differs from the JSON key.",
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "integer", "minimum": 0 }
+          ]
+        },
+        "schema_column": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Destination field name when it differs from the JSON key."
+        },
+        "db_type": {
+          "type": "string",
+          "description": "SQL/CQL type for DDL generation (PostgreSQL, Cassandra)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "columnEntry": {
+      "description": "Either a leaf columnSpec or a nested object (MongoDB subdocuments).",
+      "oneOf": [
+        { "$ref": "#/$defs/columnSpec" },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/$defs/columnEntry" }
+        }
+      ]
+    },
+    "filter": {
+      "type": "object",
+      "description": "Row predicate applied to the full CSV before materialization.",
+      "required": ["column", "operator"],
+      "properties": {
+        "column": { "type": "string", "minLength": 1 },
+        "operator": {
+          "type": "string",
+          "enum": ["==", "!=", ">", "<", ">=", "<=", "in", "not_in", "each"]
+        },
+        "value": {},
+        "target_suffix": {
+          "type": "string",
+          "description": "With operator 'each', optional template; default is sanitized distinct value"
+        }
+      },
+      "additionalProperties": false
+    },
+    "entity": {
+      "type": "object",
+      "description": "One logical target (table, collection, label, or Redis entity).",
+      "required": ["columns"],
+      "properties": {
+        "columns": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/$defs/columnEntry" }
+        },
+        "filters": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/filter" }
+        },
+        "cassandra_partition": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "CSV/source column names forming the partition key (compound supported)"
+        },
+        "cassandra_cluster": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Clustering columns (optional)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "postgresBackend": {
+      "type": "object",
+      "required": ["entities"],
+      "properties": {
+        "connection": {
+          "type": "object",
+          "properties": {
+            "host": { "type": "string" },
+            "port": { "type": "integer" },
+            "database": { "type": "string" },
+            "user": { "type": "string" },
+            "password": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "schema": { "type": "string", "default": "public" },
+        "entities": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/entity" }
+        },
+        "relationships": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["from", "to", "foreign_key"],
+            "properties": {
+              "from": { "type": "string" },
+              "to": { "type": "string" },
+              "foreign_key": { "type": "string" },
+              "references_key": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "mongoBackend": {
+      "type": "object",
+      "required": ["entities"],
+      "properties": {
+        "connection": {
+          "type": "object",
+          "properties": {
+            "uri": { "type": "string" },
+            "database": { "type": "string" }
+          },
+          "required": ["uri", "database"],
+          "additionalProperties": false
+        },
+        "entities": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/entity" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "cassandraBackend": {
+      "type": "object",
+      "required": ["entities"],
+      "properties": {
+        "connection": {
+          "type": "object",
+          "properties": {
+            "hosts": { "type": "array", "items": { "type": "string" } },
+            "port": { "type": "integer" },
+            "keyspace": { "type": "string" },
+            "protocol_version": { "type": "integer" }
+          },
+          "required": ["hosts", "keyspace"],
+          "additionalProperties": false
+        },
+        "entities": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/entity" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "redisBackend": {
+      "type": "object",
+      "required": ["entities"],
+      "properties": {
+        "connection": {
+          "type": "object",
+          "properties": {
+            "host": { "type": "string" },
+            "port": { "type": "integer" },
+            "db": { "type": "integer" },
+            "password": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "entities": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/entity" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "neo4jBackend": {
+      "type": "object",
+      "required": ["entities"],
+      "properties": {
+        "connection": {
+          "type": "object",
+          "properties": {
+            "uri": { "type": "string" },
+            "user": { "type": "string" },
+            "password": { "type": "string" },
+            "database": { "type": "string" }
+          },
+          "required": ["uri", "user", "password"],
+          "additionalProperties": false
+        },
+        "entities": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/entity" }
+        },
+        "relationships": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["from", "to", "type"],
+            "properties": {
+              "from": { "type": "string" },
+              "to": { "type": "string" },
+              "type": { "type": "string" },
+              "columns": {
+                "type": "object",
+                "additionalProperties": { "$ref": "#/$defs/columnSpec" }
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
+```
+
+**Fonte:** Elaborado pelo autor (2026).
+
 ## 4.3 Algoritmo de execução da importação
 
 O núcleo da ferramenta está em ``runner.run_import``. A seguir descreve-se o fluxo de alto nível desde a linha de comando até a persistência em cada SGBD.
@@ -566,9 +840,9 @@ Dentro de cada ``run_*_import``, para cada entidade:
 
 ### 4.3.3 Diagrama do fluxo
 
-A Figura 4 resume o pipeline de execução descrito acima. O diagrama-fonte Mermaid encontra-se em ``docs-tcc/images/figure4-import-algorithm.mmd`` para futuras revisões.
+A Figura 5 resume o pipeline de execução descrito acima. O diagrama-fonte Mermaid encontra-se em ``docs-tcc/images/figure5-import-algorithm.mmd`` para futuras revisões.
 
-![Algoritmo de execução da importação Polyglot Import CSV.](images/figure4-import-algorithm.png){width=12cm}
+![Algoritmo de execução da importação Polyglot Import CSV.](images/figure5-import-algorithm.png){width=12cm}
 
 **Fonte:** Elaborado pelo autor (2026).
 

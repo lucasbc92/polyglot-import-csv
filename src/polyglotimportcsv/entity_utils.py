@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, Iterator, List, Sequence, Tuple
 
 COLUMN_SPEC_KEYS = frozenset(
-    {"is_key", "db_column", "db_type", "alias_db", "csv_column", "schema_column"}
+    {"is_key", "db_type", "csv_column", "schema_column"}
 )
 
 FLAT_BACKENDS = frozenset({"postgres", "redis", "cassandra", "neo4j"})
@@ -22,12 +22,7 @@ def is_column_branch(node: Any) -> bool:
 
 def target_field_name(field_key: str, spec: Dict[str, Any]) -> str:
     """JSON field key -> target attribute name in the destination store."""
-    return (
-        spec.get("schema_column")
-        or spec.get("db_column")
-        or spec.get("alias_db")
-        or field_key
-    )
+    return spec.get("schema_column") or field_key
 
 
 def output_column_name(source_col: str, spec: Dict[str, Any]) -> str:
@@ -70,20 +65,14 @@ def iter_leaf_columns(
     entity_cfg: Dict[str, Any], prefix: Tuple[str, ...] = ()
 ) -> Iterator[Tuple[Tuple[str, ...], str, Dict[str, Any]]]:
     """
-    Yields (nested_path_tuple, field_key, column_spec) for all leaves,
-    including legacy ``nested`` blocks.
+    Yields (nested_path_tuple, field_key, column_spec) for all leaves of the
+    recursive ``columns`` map.
     """
     yield from iter_column_tree(entity_cfg.get("columns") or {}, prefix)
-    nested = entity_cfg.get("nested") or {}
-    for nest_name, nest_cfg in nested.items():
-        nest_columns = nest_cfg.get("columns") if isinstance(nest_cfg, dict) else {}
-        yield from iter_column_tree(nest_columns or {}, prefix + (nest_name,))
 
 
 def entity_has_nested_branches(entity_cfg: Dict[str, Any]) -> bool:
-    """True when ``columns`` contains nested objects or legacy ``nested`` is set."""
-    if entity_cfg.get("nested"):
-        return True
+    """True when ``columns`` contains nested objects (MongoDB subdocuments)."""
     for node in (entity_cfg.get("columns") or {}).values():
         if is_column_branch(node):
             return True

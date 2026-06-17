@@ -39,17 +39,9 @@
           "minLength": 1,
           "description": "Destination field name when it differs from the JSON key."
         },
-        "db_column": {
-          "type": "string",
-          "description": "Deprecated alias for schema_column."
-        },
         "db_type": {
           "type": "string",
           "description": "SQL/CQL type for DDL generation (PostgreSQL, Cassandra)."
-        },
-        "alias_db": {
-          "type": "string",
-          "description": "Deprecated alias for schema_column."
         }
       },
       "additionalProperties": false
@@ -92,11 +84,6 @@
           "type": "object",
           "minProperties": 1,
           "additionalProperties": { "$ref": "#/$defs/columnEntry" }
-        },
-        "nested": {
-          "type": "object",
-          "description": "Deprecated: use nested keys inside columns instead.",
-          "additionalProperties": { "$ref": "#/$defs/entity" }
         },
         "filters": {
           "type": "array",
