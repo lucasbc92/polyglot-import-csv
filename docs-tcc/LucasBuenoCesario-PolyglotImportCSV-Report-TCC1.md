@@ -3,7 +3,7 @@ title: "Polyglot Import CSV: Uma solução para importação de documentos CSV p
 author: "Lucas Bueno Cesario"
 date: "2026/1"
 abstract: |
-  A persistência poliglota é essencial na arquitetura contemporânea de bancos de dados, integrando diversas tecnologias de armazenamento em aplicativos. A ferramenta "Polyglot Import CSV" destaca-se como solução para otimizar a importação de dados CSV em diversos bancos de dados, superando desafios da persistência poliglota. Por meio de configurações simples em arquivos JSON, a ferramenta oferece suporte para PostgreSQL, Redis, Cassandra, MongoDB e Neo4j, acelerando o processo e aumentando a flexibilidade para os desenvolvedores. A publicação do código aberto da ferramenta impulsiona avanços colaborativos na dinâmica arquitetura moderna de bancos de dados, consolidando-se como uma solução versátil e eficiente.
+  A persistência poliglota é essencial na arquitetura contemporânea de bancos de dados, integrando diversas tecnologias de armazenamento em uma mesma aplicação. A ferramenta "Polyglot Import CSV" destaca-se como solução para otimizar a importação de dados CSV em diversos bancos de dados simultaneamente, superando desafios da persistência poliglota. Optou-se pelo formato CSV por ser amplamente utilizado na importação de dados pelos diversos SGBDs e por ser um formato simples e familiar tanto a humanos quanto a sistemas. Por meio de configurações declarativas em arquivos JSON, a ferramenta oferece suporte ao principal representante de código aberto dos bancos de dados relacionais — o PostgreSQL — e aos principais representantes dos bancos de dados NoSQL: Redis (chave-valor), MongoDB (documento), Apache Cassandra (colunar) e Neo4j (grafo). Não foram identificadas ferramentas equivalentes que realizem, a partir de um único arquivo CSV e de regras declarativas, a importação simultânea para múltiplos paradigmas de dados, o que evidencia a originalidade da proposta. A publicação do código aberto da ferramenta impulsiona avanços colaborativos na dinâmica arquitetura moderna de bancos de dados. Como atividade futura, prevê-se a avaliação de desempenho das importações com diferentes volumes de dados CSV e configurações.
 tags:
   - Persistência poliglota
   - Ferramenta "Polyglot Import CSV"
@@ -72,9 +72,11 @@ Nas esferas industrial e acadêmica de bancos de dados, a concepção de que um 
 
 Algumas pesquisas têm sido feitas na área de persistência poliglota, como sugestões de modelos de dados unificados [@chillon2023propagating], comparação de desempenho de bancos de dados multi-modelos contra abordagens de persistência poliglota [@ye2023benchmark], revisões sistemáticas sobre modelagem poliglota de dados [@silva2024modelagem], tutoriais sobre o estado da arte e desafios abertos [@kiehn2022polyglot], e a adoção da persistência poliglota em Big Data [@khine2019review].
 
-Percebe-se a falta de uma ferramenta única de importação de dados que possa realizar a persistência poliglota para diversos SGBDs que tratem modelos de dados diferentes. A proposta deste trabalho é apresentar a ferramenta *Polyglot Import CSV*, que importa dados armazenados em CSV para diferentes sistemas, baseada em uma configuração em JSON que aponta quais colunas do CSV formam cada entidade e relacionamento de cada SGBD.
+Dada essa necessidade crescente da adoção de persistência poliglota pelas aplicações, percebe-se a falta de uma ferramenta única de importação simultânea de dados para diversos SGBDs que tratem modelos de dados diferentes. Até onde se investigou (Capítulo 3), não foram identificadas ferramentas equivalentes: os importadores nativos atendem a um único SGBD por vez, e as soluções de migração ou de modelagem poliglota não realizam a materialização simultânea de um mesmo CSV em múltiplos paradigmas de dados — o que ressalta a originalidade desta proposta.
 
-CSV (Comma-Separated Values) é um arquivo de valores separados por vírgulas, frequentemente visualizado no Excel ou em alguma outra ferramenta de planilha. Pode haver outros tipos de valores como delimitadores, mas o mais comum é a vírgula. Muitos sistemas e processos hoje convertem seus dados para o formato CSV para saídas de arquivo para outros sistemas, relatórios amigáveis para humanos e outras necessidades. É um formato de arquivo padrão com o qual humanos e sistemas já estão familiarizados ao usar e manipular.
+Assim sendo, a intenção deste trabalho é desenvolver a ferramenta *Polyglot Import CSV*, que importa dados armazenados em CSV para SGBDs relacionais e NoSQL. A configuração da ferramenta será baseada em dois arquivos JSON: um de importação, mapeando entidades e relacionamentos em cada SGBD, considerado seu modelo de dados; outro de configuração de conexão dos SGBDs envolvidos. A escolha pelo formato JSON deve-se à sua simplicidade e ampla adoção; sua finalidade é detalhar, de forma declarativa, o mapeamento das colunas do CSV para os modelos de dados de cada SGBD, permitindo a validação prévia da importação.
+
+CSV (Comma-Separated Values) é um arquivo de valores separados por vírgulas, frequentemente visualizado em Excel e outras planilhas eletrônicas. Pode haver outros tipos de valores como delimitadores, mas o mais comum é a vírgula. Muitos sistemas e processos hoje convertem seus dados para o formato CSV para saídas de arquivo para outros sistemas, relatórios amigáveis para humanos, disponibilização de dados públicos, e outras necessidades. É um formato de arquivo padrão com o qual humanos e sistemas já estão familiarizados ao usar e manipular.
 
 ## 1.2 Objetivos
 
@@ -84,27 +86,32 @@ Desenvolver a ferramenta *Polyglot Import CSV* que possibilitará a importação
 
 ### 1.2.2 Objetivos Específicos
 
-- Fazer com que o arquivo de configuração JSON seja bem personalizável, seguindo uma sintaxe específica, porém flexível, além de adicionar opções como filtros e escolha de chave primária;
-- Não permitir sintaxes de configuração incorretas; se a sintaxe estiver errada em algum lugar do arquivo de configuração, a importação não deve começar até que o arquivo de configuração esteja corrigido;
-- Testar a ferramenta com um conjunto de dados armazenados num arquivo CSV que representa dados de um site de e-commerce.
+- Projetar os arquivos de configuração JSON para que eles sigam sintaxes específicas, e flexíveis para lidar com vários modelos de dados, além de adicionar opções como filtros, escolha de chave primária e escolha do nome da coluna no banco de dados;
+- Não permitir configurações incorretas, ou seja, se houver erro em algum lugar dos arquivos de configuração, a importação não deve começar até que sejam corrigidos (validação prévia da configuração);
+- Avaliar o desempenho da ferramenta para diferentes volumes e modelos de dados destino;
+- Disponibilizar a ferramenta de forma acessível ao usuário: inicialmente por meio de uma interface de linha de comando (CLI), com possibilidade de evolução para uma interface gráfica em trabalhos futuros.
 
 ## 1.3 Metodologia
 
-Buscando obter conhecimento para realização do trabalho, primeiramente foi feito um estudo básico sobre o assunto, seguindo da implementação da solução, como descrito abaixo:
+O desenvolvimento deste trabalho segue uma metodologia de pesquisa aplicada, adotando as seguintes etapas:
 
-- Estudo sobre persistência poliglota e seu estado da arte;
-- Estudo sobre os paradigmas relacional e não-relacionais que serão abrangidos pela solução, tais como: chave-valor, documento, grafo e colunar;
-- Estudo de decisão de linguagem de implementação que demonstra melhor produtividade para codificar a solução;
-- Implementação da solução "Polyglot Import CSV";
-- Testes da solução "Polyglot Import CSV" implementada.
+1. Estudo sobre persistência poliglota e seu estado da arte;
+2. Estudo sobre os paradigmas não-relacionais que serão abrangidos pela solução: chave-valor, documento, grafo e colunar;
+3. Estudo de decisão de linguagem de implementação que demonstra melhor produtividade para codificar a solução;
+4. Projeto dos arquivos de configuração JSON;
+5. Projeto da instrução principal de importação que utiliza os arquivos de configuração;
+6. Implementação da solução "Polyglot Import CSV";
+7. Testes da solução "Polyglot Import CSV" implementada.
 
 Na primeira etapa, foi estudado o que é a persistência poliglota, e a sua relevância no cenário atual.
 
-Na segunda etapa, foram estudados os diversos modelos de dados: como cada modelo representa suas entidades; se há relacionamentos entre entidades no modelo; se é possível a existência de entidades aninhadas e multivaloradas; as limitações de cada modelo.
+Na segunda etapa, foram estudados os diversos modelos de dados não-relacionais: como cada modelo representa suas entidades; se há relacionamentos entre entidades no modelo; se é possível a existência de entidades aninhadas e multivaloradas; as limitações de cada modelo.
 
 Na terceira etapa, foram estudadas as formas de implementar a solução usando as linguagens Java e Python e, pela simplicidade e produtividade, a linguagem Python foi escolhida.
 
-As etapas de implementação e testes foram concluídas durante a elaboração deste TCC I, resultando no protótipo funcional descrito no Capítulo 4, validado com o conjunto de dados ``ecommerce_join.csv`` e o arquivo ``import_config.json`` do cenário e-commerce.
+Na quarta e quinta etapas, foram projetados os dois arquivos de configuração JSON — um para o mapeamento da importação (entidades, relacionamentos e colunas) e outro para a conexão dos SGBDs — bem como a instrução principal de importação que os utiliza.
+
+As últimas etapas, que estão em andamento, tratam da implementação da solução proposta, "Polyglot Import CSV", e dos testes da mesma com diferentes volumes de dados CSV e importações simples e complexas para diferentes modelos de dados destino.
 
 ## 1.4 Estrutura do Trabalho
 
@@ -196,11 +203,15 @@ O *Polyglot Import CSV* adota explicitamente a linha da persistência poliglota 
 
 # 3 TRABALHOS RELACIONADOS
 
+Este capítulo apresenta e discute ferramentas oferecidas na indústria por SGBDs e também propostas na literatura acadêmica relacionadas com a importação de dados por SGBDs heterogêneos. A preferência está em dados no formato CSV que devem ser importados por alguma tecnologia de banco de dados, que é o foco deste trabalho.
+
 ## 3.1 Importação de arquivo CSV para um único SGBD
+
+Esta seção investiga mecanismos de importação de dados presentes em SGBDs populares na indústria que são considerados neste trabalho.
 
 ### 3.1.1 PostgreSQL
 
-Primeiramente, você especifica a tabela com os nomes das colunas após a palavra-chave `COPY`. A ordem das colunas deve ser a mesma que aquelas no arquivo CSV.
+No SGBD PostgreSQL você utiliza o comando `COPY` para realizar importações de dados CSV. É necessário especificar a tabela com os nomes das colunas após a cláusula `COPY`. A ordem das colunas deve ser a mesma que aquelas no arquivo CSV, conforme ilustra o exemplo a seguir:
 
 ```sql
 COPY nome_da_tabela(col1, col2, col3)
@@ -209,11 +220,7 @@ DELIMITER ','
 CSV HEADER;
 ```
 
-Caso o arquivo CSV contenha todas as colunas da tabela, você não precisa especificá-las explicitamente.
-
-Segundo, você insere o caminho do arquivo CSV após a palavra-chave `FROM`. Como o formato do arquivo é CSV, você precisa especificar `DELIMITER`, bem como as cláusulas `CSV`.
-
-Terceiro, especifique a palavra-chave `HEADER` para indicar que o arquivo CSV contém um cabeçalho. Quando o comando `COPY` importa dados, ele ignora o cabeçalho do arquivo.
+Caso o arquivo CSV contenha todas as colunas da tabela, você não precisa especificá-las explicitamente:
 
 ```sql
 COPY nome_da_tabela
@@ -222,13 +229,15 @@ DELIMITER ','
 CSV HEADER;
 ```
 
-Observe que o arquivo deve ser lido diretamente pelo servidor PostgreSQL, não pela aplicação cliente. Portanto, ele deve ser acessível pela máquina do servidor PostgreSQL. Além disso, é necessário ter acesso de superusuário para executar com sucesso a instrução `COPY`.
+Você também deve inserir o caminho do arquivo CSV após a palavra-chave `FROM`. Como o formato do arquivo é CSV, você precisa especificar `DELIMITER`, bem como as cláusulas `CSV`. A cláusula `HEADER` deve ser especificada para indicar que o arquivo CSV contém um cabeçalho. Quando o comando `COPY` importa dados, ele ignora o cabeçalho do arquivo.
+
+O arquivo CSV deve ser lido diretamente pelo servidor PostgreSQL, não pela aplicação cliente. Portanto, ele deve ser acessível pela máquina do servidor PostgreSQL. Além disso, é necessário ter permissão de superusuário para executar com sucesso o comando `COPY`.
 
 ### 3.1.2 Redis
 
-A maneira preferida de importar dados em massa no Redis é gerar um arquivo de texto contendo o protocolo Redis, em formato bruto, para chamar os comandos necessários para inserir os dados requeridos.
+A maneira preferida de importar uma massa de dados para o Redis é gerar um arquivo de texto contendo o protocolo Redis, em formato bruto, para chamar os comandos necessários para inserir os dados requeridos.
 
-Por exemplo, se precisar gerar um grande conjunto de dados com bilhões de chaves no formato "chaveN -> ValorN", deve ser um arquivo contendo os seguintes comandos no formato de protocolo Redis:
+Por exemplo, se é necessário gerar um grande conjunto de dados com bilhões de chaves no formato "chaveN -> ValorN", deve ser criado um arquivo contendo os seguintes comandos:
 
 ```text
 SET Chave0 Valor0
@@ -237,17 +246,19 @@ SET Chave1 Valor1
 SET ChaveN ValorN
 ```
 
-Uma vez criado esse arquivo, a ação restante é alimentá-lo no Redis o mais rápido possível. No passado, a maneira de fazer isso era usar o netcat com o seguinte comando.
+Uma vez criado esse arquivo, a ação restante é alimentá-lo no Redis. No passado, a maneira de fazer isso era usar o netcat com o seguinte comando:
 
-Nas versões 2.6 ou posteriores do Redis, a utilidade `redis-cli` suporta um novo modo chamado modo pipe que foi projetado para realizar o carregamento em massa.
+```bash
+(cat dados.txt; sleep 10) | nc localhost 6379
+```
 
-Usando o modo pipe, o comando a ser executado parece o seguinte:
+Nas versões 2.6 ou posteriores do Redis, o utilitário `redis-cli` suporta um novo modo chamado modo pipe que foi projetado para realizar o carregamento em massa. O comando a ser executado neste caso é o seguinte:
 
 ```bash
 cat dados.txt | redis-cli --pipe
 ```
 
-Isso produzirá uma saída semelhante a esta:
+O utilitário `redis-cli` imprime um pequeno resumo. A saída típica é semelhante a esta:
 
 ```text
 All data transferred. Waiting for the last reply...
@@ -255,11 +266,15 @@ Last reply received from server.
 errors: 0, replies: 1000000
 ```
 
-A utilidade `redis-cli` também garantirá redirecionar apenas os erros recebidos da instância Redis para a saída padrão.
+A linha de contagem ao final é a informação mais importante do resumo: `errors` indica quantos comandos foram rejeitados pelo servidor, e `replies` indica o total de respostas recebidas. Se `errors: 0`, todos os comandos foram processados com sucesso. Um valor maior que zero em `errors` significa que ao menos um comando falhou — seja por sintaxe inválida no arquivo, por tipo de dado incompatível com a chave existente, ou por qualquer outra razão que o Redis tenha rejeitado.
+
+Vale notar que o `--pipe` não exibe cada resposta individualmente (como um `+OK` por `SET`), o que é intencional: imprimir bilhões de respostas destruiria o ganho de performance do modo pipe e inundaria o terminal. Em vez disso, o `redis-cli` lê e contabiliza todas as respostas silenciosamente conforme chegam, entregando apenas o agregado final.
+
+Por fim, uma verificação útil: o valor de `replies` deve ser igual ao número de comandos enviados. Uma divergência entre os dois pode indicar que o arquivo de entrada estava truncado ou malformado, mesmo que `errors` apareça como zero.
 
 ### 3.1.3 MongoDB
 
-Como a ferramenta `mongoimport` é fornecida oficialmente, o processo de importar dados em formato CSV é muito simples. É uma ferramenta poderosa e fácil de usar. Segue abaixo a sua sintaxe:
+No SGBD MongoDB, o processo de importação de dados em formato CSV é realizado através do utilitário `mongoimport`. Sua sintaxe básica exige que se informe o banco de dados de destino através do parâmetro `--db`, seguido do nome da coleção que receberá os dados, especificado em `--collection`. Caso esse último parâmetro seja omitido, o nome da coleção será automaticamente inferido a partir do nome do arquivo CSV fornecido.
 
 ```bash
 mongoimport --db nome_do_db --collection nome_da_colecao \
@@ -267,26 +282,19 @@ mongoimport --db nome_do_db --collection nome_da_colecao \
   --file caminho/do/arquivo.csv
 ```
 
-- `--db nome_do_db`: define em qual banco de dados importar os dados.
-- `--collection nome_da_colecao`: define o nome da nova coleção. Se esse parâmetro for omitido, o nome da coleção será o mesmo que o nome do arquivo CSV.
-- `--type csv`: o tipo de arquivo é CSV.
-- `--headerline`: o conteúdo da primeira linha do CSV será o nome de cada campo.
-- `--ignoreBlanks`: esse parâmetro pode ignorar valores em branco no arquivo.
-- `--file`: arquivo CSV a ser importado.
+O tipo do arquivo de entrada deve ser declarado explicitamente através do parâmetro `--type`, que neste caso recebe o valor `csv`. Para que o `mongoimport` reconheça os nomes dos campos a partir do próprio arquivo, utiliza-se o parâmetro `--headerline`, que instrui o utilitário a tratar o conteúdo da primeira linha do CSV como o cabeçalho dos campos. Opcionalmente, o parâmetro `--ignoreBlanks` pode ser utilizado para que valores em branco presentes no arquivo sejam ignorados durante a importação, evitando que campos vazios sejam persistidos na coleção. Por fim, o caminho do arquivo CSV a ser importado é fornecido através do parâmetro `--file`.
 
 ### 3.1.4 Cassandra
 
-Importar dados CSV para o Cassandra usando `sstableloader` envolve vários passos. O `sstableloader` é uma ferramenta de linha de comando fornecida com o Apache Cassandra para carregar grandes volumes de dados eficientemente.
+A importação de dados CSV para o Cassandra utiliza o comando `sstableloader` e envolve vários passos. Inicialmente, é necessário se certificar que o arquivo CSV está no formato adequado para o Cassandra. Isso geralmente envolve garantir que os tipos de dados e as colunas correspondem ao esquema da tabela no Cassandra.
 
-Certifique-se de que o arquivo CSV está no formato adequado para o Cassandra. Isso geralmente envolve garantir que os tipos de dados e as colunas correspondam ao esquema da tabela no Cassandra.
-
-O `sstableloader` requer que os dados estejam em um formato específico chamado SSTable. Para converter o CSV em SSTables, você pode usar a ferramenta `cqlsh` fornecida com o Cassandra. Execute algo como:
+O `sstableloader` requer que os dados estejam em um formato específico chamado SSTable. Para converter o CSV em SSTables, você pode usar o comando `cqlsh` fornecido pelo Cassandra. Um exemplo de uso é o seguinte:
 
 ```bash
 cqlsh -e "COPY keyspace_name.table_name TO 'output_directory';"
 ```
 
-Agora você pode usar o `sstableloader` para carregar os dados. O comando geralmente se parece com isso:
+Na sequência, é possível usar o `sstableloader` para carregar os dados. A sintaxe do comando é a seguinte:
 
 ```bash
 sstableloader -d <hostname> -u <username> -pw <password> \
@@ -297,7 +305,7 @@ sstableloader -d <hostname> -u <username> -pw <password> \
 - `<username>`: O nome de usuário, se a autenticação estiver habilitada.
 - `<password>`: A senha correspondente.
 
-Este comando moverá os dados do diretório de saída para o Cassandra usando o `sstableloader`.
+Este comando move os dados do diretório de saída para o Cassandra.
 
 ### 3.1.5 Neo4j
 
@@ -351,7 +359,7 @@ Ferramentas como **dbcrossbar** [@dbcrossbar2024] e **Hackolade** [@hackolade202
 
 ## 4.1 Visão geral
 
-A ferramenta **PolyglotImportCSV** (pacote Python ``polyglot-import-csv``) lê um arquivo CSV e um arquivo de configuração JSON validado por um **JSON Schema** embutido. A CLI executa, em sequência:
+A ferramenta **PolyglotImportCSV** (pacote Python ``polyglot-import-csv``) lê um arquivo CSV e **dois arquivos de configuração JSON** — um de importação (mapeamento) e um de conexão dos SGBDs — cada um validado por um **JSON Schema** embutido. A CLI executa, em sequência:
 
 1. Carregamento do CSV (como texto, para evitar erros de *parse* em campos com ``+`` em timestamps).
 2. Inferência de *kinds* de coluna (inteiro, *float*, data/hora, texto) para validar operadores de filtro.
@@ -363,6 +371,7 @@ Comando principal:
 ```bash
 python -m polyglotimportcsv caminho/dados.csv \
   --config caminho/import_config.json \
+  --sgbd-config caminho/sgbd_config.json \
   [--dry-run] \
   [--create-schema / --no-create-schema] \
   [--only postgres,redis]
@@ -370,22 +379,29 @@ python -m polyglotimportcsv caminho/dados.csv \
 
 ## 4.2 Formato de configuração (JSON Schema)
 
-O arquivo de configuração é um JSON validado estaticamente pelo **JSON Schema** embutido em ``src/polyglotimportcsv/schemas/polyglot_import_config.schema.json`` (rascunho 2020-12). A validação ocorre em ``config_parser.load_config`` antes de qualquer leitura do CSV ou conexão com SGBDs. O exemplo de referência do cenário e-commerce está em ``data/ecommerce/import_config.json``, alinhado ao CSV ``data/ecommerce/ecommerce_join.csv``.
+A configuração é dividida em **dois arquivos JSON**, cada um validado estaticamente por um **JSON Schema** próprio embutido em ``src/polyglotimportcsv/schemas/`` (rascunho 2020-12):
 
-O schema passou por uma **reforma de simplificação** (seção 4.2.6) cujo objetivo foi reduzir o vocabulário do comando ao mínimo necessário, eliminando campos redundantes ou depreciados. A representação completa, na forma universal de *JSON Schema*, e o diagrama de estrutura resultante são apresentados na seção 4.2.6.
+- ``import_config.json`` — o **mapeamento** de entidades, relacionamentos e colunas do CSV para cada SGBD (schema ``import_config.schema.json``);
+- ``sgbd_config.json`` — a **configuração de conexão** de cada SGBD, isto é, quais bancos estão disponíveis e como alcançá-los (schema ``sgbd_config.schema.json``).
+
+Essa separação atende a duas preocupações distintas: o *mapeamento* (modelo de dados) muda conforme o domínio dos dados, enquanto a *conexão* muda conforme o ambiente de execução (desenvolvimento, testes, produção). A validação ocorre em ``config_parser.load_config`` antes de qualquer leitura do CSV ou conexão com SGBDs; os exemplos de referência do cenário e-commerce estão em ``data/ecommerce/import_config.json`` e ``data/ecommerce/sgbd_config.json``, alinhados ao CSV ``data/ecommerce/ecommerce_join.csv``.
+
+Um SGBD só pode ser referenciado no arquivo de importação se estiver **declarado** no arquivo de conexão; caso contrário, a execução é abortada (ver seção 4.2.5). O schema de importação também passou por uma **reforma de simplificação** (seção 4.2.6) cujo objetivo foi reduzir o vocabulário do comando ao mínimo necessário, eliminando campos redundantes ou depreciados. A representação completa de ambos os schemas, na forma universal de *JSON Schema*, e o diagrama de estrutura resultante são apresentados na seção 4.2.6.
 
 ### 4.2.1 Estrutura raiz
+
+Ambos os arquivos compartilham a mesma raiz: um campo ``version`` obrigatório e um bloco opcional por backend. No **arquivo de importação**, cada bloco contém o mapeamento (``entities`` e, quando aplicável, ``relationships``):
 
 | Campo | Tipo | Obrigatório | Descrição |
 |-------|------|-------------|-----------|
 | ``version`` | inteiro ($\geq 1$) | sim | Versão do formato de configuração (atualmente ``1``). |
-| ``postgres`` | objeto | não | Bloco de importação relacional. |
-| ``mongodb`` | objeto | não | Bloco de importação documental. |
-| ``cassandra`` | objeto | não | Bloco de importação colunar. |
-| ``redis`` | objeto | não | Bloco de importação chave-valor. |
-| ``neo4j`` | objeto | não | Bloco de importação em grafo. |
+| ``postgres`` | objeto | não | Bloco de mapeamento relacional. |
+| ``mongodb`` | objeto | não | Bloco de mapeamento documental. |
+| ``cassandra`` | objeto | não | Bloco de mapeamento colunar. |
+| ``redis`` | objeto | não | Bloco de mapeamento chave-valor. |
+| ``neo4j`` | objeto | não | Bloco de mapeamento em grafo. |
 
-Propriedades adicionais na raiz são **rejeitadas** (``additionalProperties: false``), o que impede erros de digitação como ``postgress`` passarem despercebidos.
+No **arquivo de conexão**, cada bloco de backend contém um objeto ``connection`` (e, para o PostgreSQL, o ``schema`` de destino). Em ambos os arquivos, propriedades adicionais na raiz e nos blocos são **rejeitadas** (``additionalProperties: false``), o que impede erros de digitação como ``postgress`` passarem despercebidos.
 
 ### 4.2.2 Mapeamento de colunas (`columnSpec`)
 
@@ -469,9 +485,9 @@ Exemplo do e-commerce — apenas linhas de estoque alimentam o inventário:
 
 ### 4.2.4 Blocos por backend
 
-Cada backend opcional contém ``connection`` (credenciais) e ``entities``. PostgreSQL e Neo4j admitem ainda ``relationships``.
+No **arquivo de importação**, cada backend opcional contém ``entities``; PostgreSQL e Neo4j admitem ainda ``relationships``. As credenciais de acesso (``connection`` e, no PostgreSQL, ``schema``) ficam no **arquivo de conexão** (``sgbd_config.json``) e são mescladas a cada backend em tempo de execução. A seguir, os campos de conexão de cada SGBD aparecem entre parênteses por referência.
 
-**PostgreSQL** — ``connection`` (host, port, database, user, password), ``schema`` (padrão ``public``), entidades planas com ``db_type``, e ``relationships`` para chaves estrangeiras:
+**PostgreSQL** — conexão (host, port, database, user, password) e ``schema`` (padrão ``public``) no arquivo de conexão; entidades planas com ``db_type`` e ``relationships`` para chaves estrangeiras no arquivo de importação:
 
 ```json
 "relationships": {
@@ -484,9 +500,9 @@ Cada backend opcional contém ``connection`` (credenciais) e ``entities``. Postg
 }
 ```
 
-**MongoDB** — ``connection.uri``, ``connection.database``; entidades com ``columns`` recursivos para subdocumentos.
+**MongoDB** — conexão (``uri``, ``database``); entidades com ``columns`` recursivos para subdocumentos.
 
-**Cassandra** — ``connection.hosts``, ``keyspace``; entidades com ``cassandra_partition`` / ``cassandra_cluster`` e renomeação via ``schema_column``:
+**Cassandra** — conexão (``hosts``, ``keyspace``); entidades com ``cassandra_partition`` / ``cassandra_cluster`` e renomeação via ``schema_column``:
 
 ```json
 "timestamp": { "schema_column": "event_time" },
@@ -511,10 +527,11 @@ Cada backend opcional contém ``connection`` (credenciais) e ``entities``. Postg
 
 ### 4.2.5 Validação estática e cruzada
 
-A validação ocorre em **duas camadas**:
+A validação ocorre em **três camadas**:
 
-1. **JSON Schema** (`config_parser.validate_config`) — sintaxe, tipos e propriedades permitidas.
-2. **Validação cruzada CSV** (`validation.validate_import_config`) — colunas referenciadas existem no CSV; filtros coerentes; FKs PostgreSQL e arestas Neo4j referenciam entidades válidas; backends planos não usam ``columns`` aninhados; índices ``csv_column`` dentro do intervalo.
+1. **JSON Schema** — cada arquivo é validado contra o seu schema (`config_parser.validate_import_config_schema` e `config_parser.validate_sgbd_config`): sintaxe, tipos e propriedades permitidas.
+2. **Consistência entre arquivos** (`config_parser.merge_configs`) — todo backend referenciado no arquivo de importação deve estar **declarado** no arquivo de conexão; caso contrário, a execução é abortada antes de qualquer leitura do CSV.
+3. **Validação cruzada CSV** (`validation.validate_import_config`) — colunas referenciadas existem no CSV; filtros coerentes; FKs PostgreSQL e arestas Neo4j referenciam entidades válidas; backends planos não usam ``columns`` aninhados; índices ``csv_column`` dentro do intervalo.
 
 Qualquer falha levanta ``BusinessException`` e **impede** o início da importação, conforme o objetivo específico do TCC.
 
@@ -532,20 +549,22 @@ Com a reforma, o vocabulário de uma folha (``columnSpec``) reduz-se a quatro ca
 
 A reforma preserva a propriedade de *fechamento* do schema: em todos os níveis vale ``additionalProperties: false``, de modo que qualquer campo legado remanescente em configurações antigas é detectado na validação, em vez de ser silenciosamente ignorado.
 
-**Diagrama de estrutura.** A Figura 4 apresenta a árvore de estrutura do schema reformado — da raiz aos blocos por backend, à definição reutilizável ``entity`` e à recursão ``columns → columnEntry → columnSpec`` que sustenta os subdocumentos MongoDB. O diagrama-fonte Mermaid encontra-se em ``docs-tcc/images/figure4-config-schema.mmd`` (campos obrigatórios marcados com ``*``).
+**Separação em dois schemas.** Além da reforma de simplificação, a configuração foi **dividida em dois arquivos**, cada um com o seu próprio *JSON Schema*: ``import_config.schema.json`` (mapeamento) e ``sgbd_config.schema.json`` (conexão). A separação isola o que muda por **domínio de dados** (entidades, relacionamentos, colunas) do que muda por **ambiente de execução** (credenciais e endereços), permitindo, por exemplo, reaproveitar o mesmo mapeamento com diferentes ambientes apenas trocando o arquivo de conexão. O bloco ``connection`` (antes aninhado em cada backend do arquivo único) passou para o arquivo de conexão, e a função ``merge_configs`` recompõe, em tempo de execução, a estrutura por backend exigida pelos importadores — exigindo que todo SGBD do arquivo de importação esteja declarado no de conexão (seção 4.2.5).
 
-![Estrutura do JSON Schema de configuração do PolyglotImportCSV.](images/figure4-config-schema.png){width=15cm}
+**Diagrama de estrutura.** A Figura 4 apresenta a árvore de estrutura dos dois schemas reformados — o de importação, da raiz aos blocos por backend, à definição reutilizável ``entity`` e à recursão ``columns → columnEntry → columnSpec`` que sustenta os subdocumentos MongoDB; e o de conexão, com o bloco ``connection`` por backend. O diagrama-fonte Mermaid encontra-se em ``docs-tcc/images/figure4-config-schema.mmd`` (campos obrigatórios marcados com ``*``).
+
+![Estrutura dos JSON Schemas de configuração do PolyglotImportCSV (importação e conexão).](images/figure4-config-schema.png){width=15cm}
 
 **Fonte:** Elaborado pelo autor (2026).
 
-**Representação na forma universal.** A seguir reproduz-se o documento *JSON Schema* completo na sua forma serializada canônica (rascunho 2020-12), tal como embutido em ``src/polyglotimportcsv/schemas/polyglot_import_config.schema.json``. Essa é a representação **universal** e portável do contrato de configuração: pode ser consumida por qualquer validador compatível com a especificação, independentemente de linguagem de programação.
+**Representação na forma universal.** A seguir reproduzem-se os dois documentos *JSON Schema* completos na sua forma serializada canônica (rascunho 2020-12), tal como embutidos em ``src/polyglotimportcsv/schemas/``. Essa é a representação **universal** e portável do contrato de configuração: pode ser consumida por qualquer validador compatível com a especificação, independentemente de linguagem de programação. Primeiro, o schema de **importação** (``import_config.schema.json``):
 
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://polyglot-import-csv.local/schemas/polyglot_import_config.schema.json",
-  "title": "PolyglotImportCSV configuration",
-  "description": "Declarative mapping from a wide CSV file to one or more database backends.",
+  "$id": "https://polyglot-import-csv.local/schemas/import_config.schema.json",
+  "title": "PolyglotImportCSV import configuration",
+  "description": "Declarative mapping from a wide CSV file to entities and relationships of one or more database backends. Connection settings live in the separate SGBD configuration.",
   "type": "object",
   "required": ["version"],
   "properties": {
@@ -554,11 +573,11 @@ A reforma preserva a propriedade de *fechamento* do schema: em todos os níveis 
       "minimum": 1,
       "description": "Configuration format version."
     },
-    "postgres": { "$ref": "#/$defs/postgresBackend" },
-    "mongodb": { "$ref": "#/$defs/mongoBackend" },
-    "cassandra": { "$ref": "#/$defs/cassandraBackend" },
-    "redis": { "$ref": "#/$defs/redisBackend" },
-    "neo4j": { "$ref": "#/$defs/neo4jBackend" }
+    "postgres": { "$ref": "#/$defs/postgresMapping" },
+    "mongodb": { "$ref": "#/$defs/mongoMapping" },
+    "cassandra": { "$ref": "#/$defs/cassandraMapping" },
+    "redis": { "$ref": "#/$defs/redisMapping" },
+    "neo4j": { "$ref": "#/$defs/neo4jMapping" }
   },
   "additionalProperties": false,
   "$defs": {
@@ -645,22 +664,10 @@ A reforma preserva a propriedade de *fechamento* do schema: em todos os níveis 
       },
       "additionalProperties": false
     },
-    "postgresBackend": {
+    "postgresMapping": {
       "type": "object",
       "required": ["entities"],
       "properties": {
-        "connection": {
-          "type": "object",
-          "properties": {
-            "host": { "type": "string" },
-            "port": { "type": "integer" },
-            "database": { "type": "string" },
-            "user": { "type": "string" },
-            "password": { "type": "string" }
-          },
-          "additionalProperties": false
-        },
-        "schema": { "type": "string", "default": "public" },
         "entities": {
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/entity" }
@@ -682,19 +689,10 @@ A reforma preserva a propriedade de *fechamento* do schema: em todos os níveis 
       },
       "additionalProperties": false
     },
-    "mongoBackend": {
+    "mongoMapping": {
       "type": "object",
       "required": ["entities"],
       "properties": {
-        "connection": {
-          "type": "object",
-          "properties": {
-            "uri": { "type": "string" },
-            "database": { "type": "string" }
-          },
-          "required": ["uri", "database"],
-          "additionalProperties": false
-        },
         "entities": {
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/entity" }
@@ -702,21 +700,10 @@ A reforma preserva a propriedade de *fechamento* do schema: em todos os níveis 
       },
       "additionalProperties": false
     },
-    "cassandraBackend": {
+    "cassandraMapping": {
       "type": "object",
       "required": ["entities"],
       "properties": {
-        "connection": {
-          "type": "object",
-          "properties": {
-            "hosts": { "type": "array", "items": { "type": "string" } },
-            "port": { "type": "integer" },
-            "keyspace": { "type": "string" },
-            "protocol_version": { "type": "integer" }
-          },
-          "required": ["hosts", "keyspace"],
-          "additionalProperties": false
-        },
         "entities": {
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/entity" }
@@ -724,20 +711,10 @@ A reforma preserva a propriedade de *fechamento* do schema: em todos os níveis 
       },
       "additionalProperties": false
     },
-    "redisBackend": {
+    "redisMapping": {
       "type": "object",
       "required": ["entities"],
       "properties": {
-        "connection": {
-          "type": "object",
-          "properties": {
-            "host": { "type": "string" },
-            "port": { "type": "integer" },
-            "db": { "type": "integer" },
-            "password": { "type": "string" }
-          },
-          "additionalProperties": false
-        },
         "entities": {
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/entity" }
@@ -745,21 +722,10 @@ A reforma preserva a propriedade de *fechamento* do schema: em todos os níveis 
       },
       "additionalProperties": false
     },
-    "neo4jBackend": {
+    "neo4jMapping": {
       "type": "object",
       "required": ["entities"],
       "properties": {
-        "connection": {
-          "type": "object",
-          "properties": {
-            "uri": { "type": "string" },
-            "user": { "type": "string" },
-            "password": { "type": "string" },
-            "database": { "type": "string" }
-          },
-          "required": ["uri", "user", "password"],
-          "additionalProperties": false
-        },
         "entities": {
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/entity" }
@@ -788,6 +754,121 @@ A reforma preserva a propriedade de *fechamento* do schema: em todos os níveis 
 }
 ```
 
+E, em seguida, o schema de **conexão** (``sgbd_config.schema.json``):
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://polyglot-import-csv.local/schemas/sgbd_config.schema.json",
+  "title": "PolyglotImportCSV SGBD connection configuration",
+  "description": "Connection settings for each database backend. Lists which SGBDs are available; the import configuration may only target backends declared here.",
+  "type": "object",
+  "required": ["version"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Configuration format version."
+    },
+    "postgres": { "$ref": "#/$defs/postgresConnection" },
+    "mongodb": { "$ref": "#/$defs/mongoConnection" },
+    "cassandra": { "$ref": "#/$defs/cassandraConnection" },
+    "redis": { "$ref": "#/$defs/redisConnection" },
+    "neo4j": { "$ref": "#/$defs/neo4jConnection" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "postgresConnection": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "type": "object",
+          "properties": {
+            "host": { "type": "string" },
+            "port": { "type": "integer" },
+            "database": { "type": "string" },
+            "user": { "type": "string" },
+            "password": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "schema": {
+          "type": "string",
+          "default": "public",
+          "description": "Target schema for created tables."
+        }
+      },
+      "additionalProperties": false
+    },
+    "mongoConnection": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "type": "object",
+          "properties": {
+            "uri": { "type": "string" },
+            "database": { "type": "string" }
+          },
+          "required": ["uri", "database"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "cassandraConnection": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "type": "object",
+          "properties": {
+            "hosts": { "type": "array", "items": { "type": "string" } },
+            "port": { "type": "integer" },
+            "keyspace": { "type": "string" },
+            "protocol_version": { "type": "integer" }
+          },
+          "required": ["hosts", "keyspace"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "redisConnection": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "type": "object",
+          "properties": {
+            "host": { "type": "string" },
+            "port": { "type": "integer" },
+            "db": { "type": "integer" },
+            "password": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "neo4jConnection": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "type": "object",
+          "properties": {
+            "uri": { "type": "string" },
+            "user": { "type": "string" },
+            "password": { "type": "string" },
+            "database": { "type": "string" }
+          },
+          "required": ["uri", "user", "password"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
+```
+
 **Fonte:** Elaborado pelo autor (2026).
 
 ## 4.3 Algoritmo de execução da importação
@@ -796,8 +877,8 @@ O núcleo da ferramenta está em ``runner.run_import``. A seguir descreve-se o f
 
 ### 4.3.1 Fases do algoritmo
 
-1. **Entrada** — caminho do CSV, caminho do JSON de configuração e flags: ``--dry-run``, ``--create-schema`` / ``--no-create-schema``, ``--only`` (lista de backends).
-2. **Carregar configuração** — ``load_config``: parse JSON + ``jsonschema.validate`` contra o schema embutido.
+1. **Entrada** — caminho do CSV, caminhos dos dois JSON de configuração (importação e conexão) e flags: ``--dry-run``, ``--create-schema`` / ``--no-create-schema``, ``--only`` (lista de backends).
+2. **Carregar configuração** — ``load_config``: parse dos dois JSON + ``jsonschema.validate`` de cada um contra o seu schema embutido + verificação de consistência entre arquivos (backends declarados) e mesclagem das conexões.
 3. **Carregar CSV** — ``load_csv_with_inference``: leitura com ``dtype=str`` (evita erros de *parse* em timestamps com ``+``) e inferência de *kind* por coluna (``integer``, ``float``, ``datetime``, ``string``, ``empty``).
 4. **Validar config × CSV** — ``validate_import_config``: checagens semânticas descritas na seção 4.2.5.
 5. **Para cada backend** presente na configuração e não filtrado por ``--only``:
@@ -817,8 +898,8 @@ O núcleo da ferramenta está em ``runner.run_import``. A seguir descreve-se o f
 ### 4.3.2 Pseudocódigo
 
 ```
-função run_import(csv_path, config_path, dry_run, create_schema, only):
-    config ← load_config(config_path)
+função run_import(csv_path, config_path, sgbd_config_path, dry_run, create_schema, only):
+    config ← load_config(config_path, sgbd_config_path)
     df, kinds ← load_csv_with_inference(csv_path)
     validate_import_config(config, df, kinds)
 
@@ -864,11 +945,11 @@ Assim, um **único CSV largo** alimenta destinos heterogéneos: tabelas relacion
 
 Erros de configuração levantam ``BusinessException`` antes de qualquer conexão. O modo ``--dry-run`` lista contagens por entidade sem contatar os SGBDs. O *driver* Apache Cassandra é importado de forma tardia para permitir ``--dry-run`` em ambientes onde a extensão C do *driver* não está disponível (por exemplo, versões recentes do Python).
 
-Testes automatizados (``pytest``) cobrem validação de schema, mapeamento de colunas (``csv_column``, ``schema_column``, aninhamento), filtros e *smoke tests* de validação + *dry-run*. O arquivo ``docker-compose.yml`` na raiz sobe PostgreSQL, Redis, MongoDB, Cassandra e Neo4j para testes de integração manuais; o script ``run_example.sh`` orquestra a subida dos contêineres, um *dry-run* e a importação real com ``--create-schema``.
+Testes automatizados (``pytest``) cobrem validação de schema, separação e mesclagem dos dois arquivos de configuração, mapeamento de colunas (``csv_column``, ``schema_column``, aninhamento), filtros e *smoke tests* de validação + *dry-run*. O arquivo ``docker-compose.yml`` na raiz define os contêineres de PostgreSQL, Redis, MongoDB, Cassandra e Neo4j para testes de integração manuais; o script ``run_example.sh`` lê o ``sgbd_config.json`` e **sobe apenas os SGBDs ali declarados**, em seguida orquestra um *dry-run* e a importação real com ``--create-schema``.
 
 ### 4.4.1 Evidência de execução (cenário e-commerce)
 
-O arquivo ``data/ecommerce/ecommerce_join.csv`` contém 32 linhas de eventos (``stock``, ``purchase``, ``add_to_cart``, ``select_product``). Com ``import_config.json`` e a flag ``--dry-run``, a ferramenta reporta as contagens abaixo sem abrir conexões com os SGBDs — útil para revisar o mapeamento antes da carga:
+O arquivo ``data/ecommerce/ecommerce_join.csv`` contém 32 linhas de eventos (``stock``, ``purchase``, ``add_to_cart``, ``select_product``). Com ``import_config.json``, ``sgbd_config.json`` e a flag ``--dry-run``, a ferramenta reporta as contagens abaixo sem abrir conexões com os SGBDs — útil para revisar o mapeamento antes da carga:
 
 | Backend | Destino | Registros (após filtros / deduplicação) |
 |---------|---------|----------------------------------------|
@@ -888,7 +969,8 @@ Com ``docker compose up -d`` e ``run_example.sh`` (ou importação sem ``--dry-r
 
 # 5 ATIVIDADES FUTURAS
 
-- **Interface gráfica desktop** (semestre seguinte) que monte o comando CLI e visualize o JSON de configuração.
+- **Avaliação de desempenho** das importações com diferentes volumes de dados CSV e configurações, comparando importações simples e complexas para os diferentes modelos de dados destino.
+- **Interface gráfica desktop** (semestre seguinte) que monte o comando CLI e visualize os arquivos JSON de configuração.
 - **Suporte a TSV/Excel** e a *chunked* processing para CSV maiores que a RAM.
 - **Operadores de filtro adicionais** e políticas de coerção de tipos configuráveis.
 - **Testes de integração** contra ``docker compose`` em CI.
@@ -898,7 +980,7 @@ Com ``docker compose up -d`` e ``run_example.sh`` (ou importação sem ``--dry-r
 
 Este TCC I apresentou a fundamentação teórica da persistência poliglota, o estado da arte em importação e modelagem de dados heterogêneos, e a proposta da ferramenta *Polyglot Import CSV* como utilitário de *bootstrap* declarativo a partir de CSV.
 
-As principais contribuições desta etapa são: (i) um formato de configuração JSON validado estaticamente por JSON Schema, com mapeamento recursivo de colunas e filtros por valor; (ii) um protótipo em Python que materializa o mesmo CSV operacional em PostgreSQL, MongoDB, Cassandra, Redis e Neo4j; (iii) o modo ``--dry-run`` para revisão prévia de contagens; e (iv) o cenário e-commerce reprodutível com ``ecommerce_join.csv``, ``import_config.json`` e ``docker-compose.yml``.
+As principais contribuições desta etapa são: (i) um formato de configuração JSON validado estaticamente por JSON Schema, separado em mapeamento e conexão, com mapeamento recursivo de colunas e filtros por valor; (ii) um protótipo em Python que materializa o mesmo CSV operacional em PostgreSQL, MongoDB, Cassandra, Redis e Neo4j; (iii) o modo ``--dry-run`` para revisão prévia de contagens; e (iv) o cenário e-commerce reprodutível com ``ecommerce_join.csv``, ``import_config.json``, ``sgbd_config.json`` e ``docker-compose.yml``.
 
 As limitações reconhecidas incluem: testes automatizados predominantemente unitários (sem suíte de integração contínua contra Docker); processamento em memória do CSV inteiro; e dependência do *driver* Cassandra em ambientes Python recentes. Itens como interface gráfica, suporte a TSV/Excel, *chunked* processing e novos conectores permanecem no escopo do TCC II (Capítulo 5).
 

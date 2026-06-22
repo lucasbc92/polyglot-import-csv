@@ -21,6 +21,7 @@ echo "Gerando PDF (abnTeX2 + ABNT)..."
 pandoc "${MD}" \
   "--template=${TMPL}" \
   "--resource-path=${DOCS_ROOT}" \
+  --top-level-division=chapter \
   --syntax-highlighting=none \
   --pdf-engine=xelatex \
   --citeproc \
@@ -43,6 +44,7 @@ if [[ "${ODT_FLAG}" == true ]]; then
   pandoc "${MD}" \
     "--resource-path=${DOCS_ROOT}" \
     "--reference-doc=${REF}" \
+    --top-level-division=chapter \
     --syntax-highlighting=none \
     --citeproc \
     "--bibliography=${BIB}" \
