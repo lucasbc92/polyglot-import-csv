@@ -24,6 +24,7 @@ def run_import(
     csv_path: str | Path,
     config_path: str | Path,
     *,
+    sgbd_config_path: Optional[str | Path] = None,
     dry_run: bool = False,
     create_schema: bool = True,
     only: Optional[Iterable[str]] = None,
@@ -31,6 +32,11 @@ def run_import(
 ) -> List[str]:
     """
     Load CSV and config, validate, then run configured backends.
+
+    The configuration is split in two files: ``config_path`` points to the
+    import (mapping) JSON and ``sgbd_config_path`` to the SGBD connection JSON.
+    When ``sgbd_config_path`` is omitted, a ``sgbd_config.json`` file next to
+    the import configuration is used.
 
     ``importers`` defaults to production callables; tests may inject a stub
     registry to avoid real database I/O (Dependency Inversion).
@@ -42,7 +48,7 @@ def run_import(
     banner("Polyglot Import CSV", subtitle=f"mode: {mode}")
 
     step("Load config", str(config_path))
-    config = load_config(config_path)
+    config = load_config(config_path, sgbd_config_path)
     backends_in_cfg = [b for b in BACKENDS if b in config]
     note(f"{len(backends_in_cfg)} backend(s) configured: {', '.join(backends_in_cfg)}")
 

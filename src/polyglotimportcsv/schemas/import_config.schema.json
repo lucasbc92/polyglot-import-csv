@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://polyglot-import-csv.local/schemas/polyglot_import_config.schema.json",
-  "title": "PolyglotImportCSV configuration",
-  "description": "Declarative mapping from a wide CSV file to one or more database backends.",
+  "$id": "https://polyglot-import-csv.local/schemas/import_config.schema.json",
+  "title": "PolyglotImportCSV import configuration",
+  "description": "Declarative mapping from a wide CSV file to entities and relationships of one or more database backends. Connection settings live in the separate SGBD configuration.",
   "type": "object",
   "required": ["version"],
   "properties": {
@@ -11,11 +11,11 @@
       "minimum": 1,
       "description": "Configuration format version."
     },
-    "postgres": { "$ref": "#/$defs/postgresBackend" },
-    "mongodb": { "$ref": "#/$defs/mongoBackend" },
-    "cassandra": { "$ref": "#/$defs/cassandraBackend" },
-    "redis": { "$ref": "#/$defs/redisBackend" },
-    "neo4j": { "$ref": "#/$defs/neo4jBackend" }
+    "postgres": { "$ref": "#/$defs/postgresMapping" },
+    "mongodb": { "$ref": "#/$defs/mongoMapping" },
+    "cassandra": { "$ref": "#/$defs/cassandraMapping" },
+    "redis": { "$ref": "#/$defs/redisMapping" },
+    "neo4j": { "$ref": "#/$defs/neo4jMapping" }
   },
   "additionalProperties": false,
   "$defs": {
@@ -102,22 +102,10 @@
       },
       "additionalProperties": false
     },
-    "postgresBackend": {
+    "postgresMapping": {
       "type": "object",
       "required": ["entities"],
       "properties": {
-        "connection": {
-          "type": "object",
-          "properties": {
-            "host": { "type": "string" },
-            "port": { "type": "integer" },
-            "database": { "type": "string" },
-            "user": { "type": "string" },
-            "password": { "type": "string" }
-          },
-          "additionalProperties": false
-        },
-        "schema": { "type": "string", "default": "public" },
         "entities": {
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/entity" }
@@ -139,19 +127,10 @@
       },
       "additionalProperties": false
     },
-    "mongoBackend": {
+    "mongoMapping": {
       "type": "object",
       "required": ["entities"],
       "properties": {
-        "connection": {
-          "type": "object",
-          "properties": {
-            "uri": { "type": "string" },
-            "database": { "type": "string" }
-          },
-          "required": ["uri", "database"],
-          "additionalProperties": false
-        },
         "entities": {
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/entity" }
@@ -159,21 +138,10 @@
       },
       "additionalProperties": false
     },
-    "cassandraBackend": {
+    "cassandraMapping": {
       "type": "object",
       "required": ["entities"],
       "properties": {
-        "connection": {
-          "type": "object",
-          "properties": {
-            "hosts": { "type": "array", "items": { "type": "string" } },
-            "port": { "type": "integer" },
-            "keyspace": { "type": "string" },
-            "protocol_version": { "type": "integer" }
-          },
-          "required": ["hosts", "keyspace"],
-          "additionalProperties": false
-        },
         "entities": {
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/entity" }
@@ -181,20 +149,10 @@
       },
       "additionalProperties": false
     },
-    "redisBackend": {
+    "redisMapping": {
       "type": "object",
       "required": ["entities"],
       "properties": {
-        "connection": {
-          "type": "object",
-          "properties": {
-            "host": { "type": "string" },
-            "port": { "type": "integer" },
-            "db": { "type": "integer" },
-            "password": { "type": "string" }
-          },
-          "additionalProperties": false
-        },
         "entities": {
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/entity" }
@@ -202,21 +160,10 @@
       },
       "additionalProperties": false
     },
-    "neo4jBackend": {
+    "neo4jMapping": {
       "type": "object",
       "required": ["entities"],
       "properties": {
-        "connection": {
-          "type": "object",
-          "properties": {
-            "uri": { "type": "string" },
-            "user": { "type": "string" },
-            "password": { "type": "string" },
-            "database": { "type": "string" }
-          },
-          "required": ["uri", "user", "password"],
-          "additionalProperties": false
-        },
         "entities": {
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/entity" }
