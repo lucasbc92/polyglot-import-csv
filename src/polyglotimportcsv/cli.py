@@ -22,7 +22,14 @@ logger = logging.getLogger(__name__)
     "config_path",
     required=True,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="JSON import configuration (validated against bundled JSON Schema).",
+    help="JSON import (mapping) configuration, validated against the bundled JSON Schema.",
+)
+@click.option(
+    "--sgbd-config",
+    "sgbd_config_path",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="JSON SGBD connection configuration. Defaults to sgbd_config.json next to --config.",
 )
 @click.option(
     "--dry-run",
@@ -43,6 +50,7 @@ logger = logging.getLogger(__name__)
 def main(
     csv_path: Path,
     config_path: Path,
+    sgbd_config_path: Path,
     dry_run: bool,
     create_schema: bool,
     only: str,
@@ -59,6 +67,7 @@ def main(
         run_import(
             csv_path,
             config_path,
+            sgbd_config_path=sgbd_config_path,
             dry_run=dry_run,
             create_schema=create_schema,
             only=only_list,

@@ -5,7 +5,12 @@
 
 ## English
 
-Python CLI that imports one **wide CSV** (joined relational view) into **PostgreSQL, Redis, MongoDB, Apache Cassandra, and Neo4j** using a **JSON** file validated with **JSON Schema**.
+Python CLI that imports one **wide CSV** (joined relational view) into **PostgreSQL, Redis, MongoDB, Apache Cassandra, and Neo4j** using **two JSON files** validated with **JSON Schema**:
+
+- `import_config.json` — the entity/relationship/column mapping from the CSV to each backend.
+- `sgbd_config.json` — the connection settings for each backend (which SGBDs are available).
+
+The import configuration may only target backends declared in the SGBD configuration; otherwise the run aborts before touching the CSV or any database.
 
 ### Requirements
 
@@ -20,8 +25,13 @@ pip install -e ".[dev]"
 ### Usage
 
 ```bash
-python -m polyglotimportcsv data/ecommerce/ecommerce_join.csv --config data/ecommerce/import_config.json --dry-run
+python -m polyglotimportcsv data/ecommerce/ecommerce_join.csv \
+  --config data/ecommerce/import_config.json \
+  --sgbd-config data/ecommerce/sgbd_config.json \
+  --dry-run
 ```
+
+`--sgbd-config` is optional; when omitted it defaults to `sgbd_config.json` next to `--config`.
 
 **Running example** (single script; use [Git Bash](https://git-scm.com/) on Windows or any Unix shell):
 
@@ -50,8 +60,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (English + PT) for layering, SO
 |------|---------|
 | `src/polyglotimportcsv/` | CLI, validation, filters, runner |
 | `src/polyglotimportcsv/importers/` | One module per backend + `base.py` protocol |
-| `src/polyglotimportcsv/schemas/` | Bundled JSON Schema |
-| `data/ecommerce/` | Sample CSV + `import_config.json` |
+| `src/polyglotimportcsv/schemas/` | Bundled JSON Schemas (`import_config`, `sgbd_config`) |
+| `data/ecommerce/` | Sample CSV + `import_config.json` + `sgbd_config.json` |
 | `logs/` | Session logs from `run_example.sh` and direct CLI runs (gitignored) |
 | `tests/` | `pytest` (stubs for I/O per TDD skill) |
 | `docs-tcc/` | TCC I report (Markdown, BibTeX); `docs-tcc/scripts/` for Pandoc PDF/ODT |
@@ -77,7 +87,12 @@ MIT — see [LICENSE](LICENSE).
 
 ## Português (BR)
 
-Ferramenta em Python para importar um **único CSV** (visão larga / *join* de várias tabelas) para **vários SGBDs** ao mesmo tempo — PostgreSQL, Redis, MongoDB, Apache Cassandra e Neo4j — com base em um arquivo **JSON** validado por *JSON Schema*.
+Ferramenta em Python para importar um **único CSV** (visão larga / *join* de várias tabelas) para **vários SGBDs** ao mesmo tempo — PostgreSQL, Redis, MongoDB, Apache Cassandra e Neo4j — com base em **dois arquivos JSON** validados por *JSON Schema*:
+
+- `import_config.json` — o mapeamento de entidades, relacionamentos e colunas do CSV para cada SGBD.
+- `sgbd_config.json` — as configurações de conexão de cada SGBD (quais bancos estão disponíveis).
+
+A configuração de importação só pode referenciar SGBDs declarados na configuração de conexão; caso contrário, a execução é abortada antes de ler o CSV ou conectar a qualquer banco.
 
 ### Requisitos
 
@@ -92,8 +107,13 @@ pip install -e ".[dev]"
 ### Uso
 
 ```bash
-python -m polyglotimportcsv data/ecommerce/ecommerce_join.csv --config data/ecommerce/import_config.json --dry-run
+python -m polyglotimportcsv data/ecommerce/ecommerce_join.csv \
+  --config data/ecommerce/import_config.json \
+  --sgbd-config data/ecommerce/sgbd_config.json \
+  --dry-run
 ```
+
+O `--sgbd-config` é opcional; quando omitido, usa-se `sgbd_config.json` ao lado do `--config`.
 
 **Exemplo de execução** (um único script; no Windows use [Git Bash](https://git-scm.com/) ou WSL):
 
@@ -121,8 +141,8 @@ Consulte [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (inglês + PT) para camada
 |--------|------------|
 | `src/polyglotimportcsv/` | CLI, validação, filtros, *runner* |
 | `src/polyglotimportcsv/importers/` | Um módulo por backend + `base.py` (contrato) |
-| `src/polyglotimportcsv/schemas/` | JSON Schema embutido |
-| `data/ecommerce/` | CSV de exemplo + `import_config.json` |
+| `src/polyglotimportcsv/schemas/` | JSON Schemas embutidos (`import_config`, `sgbd_config`) |
+| `data/ecommerce/` | CSV de exemplo + `import_config.json` + `sgbd_config.json` |
 | `tests/` | `pytest` (stubs, sem I/O real) |
 | `docs-tcc/` | Relatório TCC I (Markdown + BibTeX); `docs-tcc/scripts/` para PDF/ODT via Pandoc |
 
