@@ -71,10 +71,12 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (English + PT) for layering, SO
 - `./run_example.sh` — orchestrates Docker, import, clean, and inspect (see `--help`).
 - `scripts/inspect_persisted_data.py` — low-level `clean` / `inspect` helpers (usually invoked via `run_example.sh`).
 
-**Tab completion (Git Bash / bash):** add to `~/.bashrc`, then open a new terminal:
+**Tab completion (Git Bash / bash):** add to `~/.bashrc` (use the absolute path of *your* clone), then open a new terminal:
 
 ```bash
-source "/c/Users/DELL/Documents/polyglot-import-csv/scripts/run_example.completion.bash"
+# Replace with the path where you cloned the repository, e.g.:
+#   ~/Documentos/UFSC/TCC1/polyglot-import-csv
+source "/path/to/polyglot-import-csv/scripts/run_example.completion.bash"
 ```
 
 After that, `./run_example.sh --` + TAB suggests flags (`--fresh-start`, `--clean`, `--inspect`, …); `--csv` / `--config` / `--log-file` suggest paths under `data/ecommerce/` and `logs/`.
@@ -151,10 +153,12 @@ Consulte [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (inglês + PT) para camada
 - `./run_example.sh` — orquestra Docker, importação, limpeza e inspeção (`--help`).
 - `scripts/inspect_persisted_data.py` — comandos `clean` / `inspect` (chamados pelo `run_example.sh`).
 
-**Autocompletar com TAB (Git Bash / bash):** inclua no `~/.bashrc` e abra um terminal novo:
+**Autocompletar com TAB (Git Bash / bash):** inclua no `~/.bashrc` (use o caminho absoluto do *seu* clone) e abra um terminal novo:
 
 ```bash
-source "/c/Users/DELL/Documents/polyglot-import-csv/scripts/run_example.completion.bash"
+# Troque pelo caminho onde você clonou o repositório, por exemplo:
+#   ~/Documentos/UFSC/TCC1/polyglot-import-csv
+source "/caminho/para/polyglot-import-csv/scripts/run_example.completion.bash"
 ```
 
 Depois, `./run_example.sh --` + TAB sugere flags (`--fresh-start`, `--clean`, `--inspect`, …); `--csv` / `--config` / `--log-file` sugerem caminhos em `data/ecommerce/` e `logs/`.

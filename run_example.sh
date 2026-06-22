@@ -370,11 +370,22 @@ docker_compose_up_and_wait() {
   wait_for_services_ready
 }
 
-ensure_docker_stack() {
+require_docker() {
   if ! command -v docker >/dev/null 2>&1; then
     log_err "Docker not found. Install Docker and ensure 'docker compose' works."
+    log_dim "Tip: use '--dry-run' to validate CSV/config without Docker."
     exit 1
   fi
+  if ! docker info >/dev/null 2>&1; then
+    log_err "Docker is installed but the daemon is not responding."
+    log_err "Start Docker Desktop (or the Docker service) and run the command again."
+    log_dim "Tip: use '--dry-run' to validate CSV/config without Docker."
+    exit 1
+  fi
+}
+
+ensure_docker_stack() {
+  require_docker
 
   local down_list
   down_list="$(list_down_services || true)"
@@ -397,10 +408,7 @@ ensure_docker_stack() {
 }
 
 fresh_start_stack() {
-  if ! command -v docker >/dev/null 2>&1; then
-    log_err "Docker not found. Install Docker and ensure 'docker compose' works."
-    exit 1
-  fi
+  require_docker
 
   log_wait "Fresh start: remove containers, volumes, and images; re-download; bootstrap stack"
 
