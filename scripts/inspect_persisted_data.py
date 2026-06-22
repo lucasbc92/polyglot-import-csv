@@ -24,6 +24,7 @@ from polyglotimportcsv.console import (
 )
 
 DEFAULT_CONFIG = Path("data/ecommerce/import_config.json")
+DEFAULT_SGBD_CONFIG = Path("data/ecommerce/sgbd_config.json")
 BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
 
 _BACKEND_LABEL = {
@@ -35,11 +36,11 @@ _BACKEND_LABEL = {
 }
 
 
-def _load_config(path: Path) -> Dict[str, Any]:
-    import json
+def _load_config(path: Path, sgbd_path: Optional[Path] = None) -> Dict[str, Any]:
+    """Load and merge the import + SGBD configs into one backend structure."""
+    from polyglotimportcsv.config_parser import load_config
 
-    with path.open(encoding="utf-8") as f:
-        return json.load(f)
+    return load_config(path, sgbd_path)
 
 
 def _parse_only(raw: str) -> List[str]:
@@ -398,7 +399,13 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
         "--config",
         type=Path,
         default=DEFAULT_CONFIG,
-        help=f"Import JSON config (default: {DEFAULT_CONFIG})",
+        help=f"Import (mapping) JSON config (default: {DEFAULT_CONFIG})",
+    )
+    parser.add_argument(
+        "--sgbd-config",
+        type=Path,
+        default=None,
+        help="SGBD connection JSON config (default: sgbd_config.json next to --config)",
     )
     parser.add_argument(
         "--only",
@@ -425,12 +432,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not config_path.is_file():
         error(f"Config not found: {config_path}")
         return 1
+    sgbd_path = args.sgbd_config.resolve() if args.sgbd_config else None
 
     log_path = init_session_log(prefix=f"inspect_{args.command}")
     if log_path is not None:
         note(f"log file: {log_path}")
 
-    cfg = _load_config(config_path)
+    from polyglotimportcsv.business_exception import BusinessException
+
+    try:
+        cfg = _load_config(config_path, sgbd_path)
+    except BusinessException as e:
+        error(str(e))
+        return 1
     selected = _parse_only(args.only)
 
     title = "Inspect persisted data" if args.command == "inspect" else "Clean databases"

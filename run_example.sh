@@ -13,7 +13,8 @@
 #
 # Options:
 #   --csv PATH              CSV file (default: data/ecommerce/ecommerce_join.csv)
-#   --config PATH           JSON config (default: data/ecommerce/import_config.json)
+#   --config PATH           Import (mapping) JSON config (default: data/ecommerce/import_config.json)
+#   --sgbd-config PATH      SGBD connection JSON config (default: data/ecommerce/sgbd_config.json)
 #   --dry-run               Validate only (no Docker, no import)
 #   --import                Real import (skip dry-run unless also passed)
 #   --clean                 Empty all configured backends
@@ -44,6 +45,7 @@ fi
 
 CSV="data/ecommerce/ecommerce_join.csv"
 CONFIG="data/ecommerce/import_config.json"
+SGBD_CONFIG="data/ecommerce/sgbd_config.json"
 DO_DOCKER=true
 DO_DRY_RUN=false
 DO_IMPORT=false
@@ -72,6 +74,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --config)
       CONFIG="$2"
+      shift 2
+      ;;
+    --sgbd-config)
+      SGBD_CONFIG="$2"
       shift 2
       ;;
     --dry-run)
@@ -155,6 +161,10 @@ if [[ ! -f "${CONFIG}" ]]; then
   log_err "Config not found: ${CONFIG}"
   exit 1
 fi
+if [[ ! -f "${SGBD_CONFIG}" ]]; then
+  log_err "SGBD config not found: ${SGBD_CONFIG}"
+  exit 1
+fi
 
 if [[ "${DO_LOG}" == true ]]; then
   if [[ -n "${LOG_FILE}" ]]; then
@@ -173,16 +183,59 @@ else
   exit 1
 fi
 
+# Fail early with a clear message if the package is not installed (src layout).
+if ! "${PY}" -c "import polyglotimportcsv" >/dev/null 2>&1; then
+  log_err "Python package 'polyglotimportcsv' is not installed in ${PY}."
+  log_err "Install it once from the repo root: pip install -e \".[dev]\""
+  exit 1
+fi
+
 DB_SCRIPT="scripts/inspect_persisted_data.py"
 
-# port:timeout_seconds:label
-DATABASE_PORTS=(
-  "5432:120:PostgreSQL"
-  "6379:120:Redis"
-  "27017:120:MongoDB"
-  "9042:180:Cassandra"
-  "7687:120:Neo4j"
+# Only the SGBDs declared in the SGBD config are started / waited on / inspected.
+mapfile -t SELECTED_SERVICES < <(
+  "${PY}" - "${SGBD_CONFIG}" <<'PYEOF'
+import json, sys
+order = ["postgres", "redis", "mongodb", "cassandra", "neo4j"]
+with open(sys.argv[1], encoding="utf-8") as f:
+    cfg = json.load(f)
+for backend in order:
+    if backend in cfg:
+        print(backend)
+PYEOF
 )
+# Strip stray carriage returns / whitespace (Git Bash / Windows line endings).
+_clean_services=()
+for _svc in "${SELECTED_SERVICES[@]+"${SELECTED_SERVICES[@]}"}"; do
+  _svc="${_svc//$'\r'/}"
+  _svc="${_svc//[[:space:]]/}"
+  [[ -n "${_svc}" ]] && _clean_services+=("${_svc}")
+done
+SELECTED_SERVICES=("${_clean_services[@]+"${_clean_services[@]}"}")
+
+if [[ ${#SELECTED_SERVICES[@]} -eq 0 ]]; then
+  log_err "No SGBD declared in ${SGBD_CONFIG}."
+  exit 1
+fi
+
+# Per-service connection metadata (port:timeout_seconds:label).
+declare -A SERVICE_PORT_META=(
+  [postgres]="5432:120:PostgreSQL"
+  [redis]="6379:120:Redis"
+  [mongodb]="27017:120:MongoDB"
+  [cassandra]="9042:180:Cassandra"
+  [neo4j]="7687:120:Neo4j"
+)
+
+# port:timeout_seconds:label — restricted to the selected SGBDs.
+DATABASE_PORTS=()
+for _svc in "${SELECTED_SERVICES[@]}"; do
+  if [[ -z "${SERVICE_PORT_META[${_svc}]:-}" ]]; then
+    log_err "Unknown SGBD '${_svc}' in ${SGBD_CONFIG} (expected: postgres, redis, mongodb, cassandra, neo4j)."
+    exit 1
+  fi
+  DATABASE_PORTS+=("${SERVICE_PORT_META[${_svc}]}")
+done
 
 is_tcp_open() {
   local host="${1:-127.0.0.1}"
@@ -230,7 +283,8 @@ docker_compose() {
   run_logged env DOCKER_CLI_HINTS=false docker compose "$@"
 }
 
-COMPOSE_SERVICES=(postgres redis mongodb cassandra neo4j)
+# Restricted to the SGBDs declared in the SGBD config (see SELECTED_SERVICES).
+COMPOSE_SERVICES=("${SELECTED_SERVICES[@]}")
 
 declare -A SERVICE_PORTS=(
   [postgres]=5432
@@ -312,22 +366,33 @@ wait_for_services_ready() {
 }
 
 docker_compose_up_and_wait() {
-  log_step "Docker" "docker compose up -d --wait"
-  if docker_compose up -d --wait --quiet-pull; then
-    log_ok "All database containers are healthy"
+  log_step "Docker" "docker compose up -d --wait ${COMPOSE_SERVICES[*]}"
+  if docker_compose up -d --wait --quiet-pull "${COMPOSE_SERVICES[@]}"; then
+    log_ok "All selected database containers are healthy"
     return 0
   fi
 
   log_dim "compose --wait unavailable or timed out; falling back to readiness polling"
-  run_logged docker_compose up -d --quiet-pull
+  run_logged docker_compose up -d --quiet-pull "${COMPOSE_SERVICES[@]}"
   wait_for_services_ready
 }
 
-ensure_docker_stack() {
+require_docker() {
   if ! command -v docker >/dev/null 2>&1; then
     log_err "Docker not found. Install Docker and ensure 'docker compose' works."
+    log_dim "Tip: use '--dry-run' to validate CSV/config without Docker."
     exit 1
   fi
+  if ! docker info >/dev/null 2>&1; then
+    log_err "Docker is installed but the daemon is not responding."
+    log_err "Start Docker Desktop (or the Docker service) and run the command again."
+    log_dim "Tip: use '--dry-run' to validate CSV/config without Docker."
+    exit 1
+  fi
+}
+
+ensure_docker_stack() {
+  require_docker
 
   local down_list
   down_list="$(list_down_services || true)"
@@ -350,10 +415,7 @@ ensure_docker_stack() {
 }
 
 fresh_start_stack() {
-  if ! command -v docker >/dev/null 2>&1; then
-    log_err "Docker not found. Install Docker and ensure 'docker compose' works."
-    exit 1
-  fi
+  require_docker
 
   log_wait "Fresh start: remove containers, volumes, and images; re-download; bootstrap stack"
 
@@ -369,7 +431,7 @@ fresh_start_stack() {
 
 run_polyglot() {
   local dry_run="$1"
-  local -a args=(-m polyglotimportcsv "${CSV}" --config "${CONFIG}")
+  local -a args=(-m polyglotimportcsv "${CSV}" --config "${CONFIG}" --sgbd-config "${SGBD_CONFIG}")
   if [[ -n "${ONLY}" ]]; then
     args+=(--only "${ONLY}")
   fi
@@ -395,6 +457,8 @@ fi
 log_banner "Polyglot Import CSV · run example"
 log_kv "CSV" "${CSV}"
 log_kv "Config" "${CONFIG}"
+log_kv "SGBD config" "${SGBD_CONFIG}"
+log_kv "Services" "${SELECTED_SERVICES[*]}"
 if [[ -n "${ONLY}" ]]; then
   log_kv "Only" "${ONLY}"
 fi
@@ -421,7 +485,7 @@ fi
 
 if [[ "${DO_CLEAN}" == true ]]; then
   log_section "Clean databases"
-  run_logged "${PY}" "${DB_SCRIPT}" clean --config "${CONFIG}"
+  run_logged "${PY}" "${DB_SCRIPT}" clean --config "${CONFIG}" --sgbd-config "${SGBD_CONFIG}"
 fi
 
 if [[ "${DO_DRY_RUN}" == true ]]; then
@@ -436,7 +500,7 @@ fi
 
 if [[ "${DO_INSPECT}" == true ]]; then
   log_section "Inspect persisted data"
-  run_logged "${PY}" "${DB_SCRIPT}" inspect --config "${CONFIG}"
+  run_logged "${PY}" "${DB_SCRIPT}" inspect --config "${CONFIG}" --sgbd-config "${SGBD_CONFIG}"
 fi
 
 log_done "All requested steps completed"

@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://polyglot-import-csv.local/schemas/sgbd_config.schema.json",
+  "title": "PolyglotImportCSV SGBD connection configuration",
+  "description": "Connection settings for each database backend. Lists which SGBDs are available; the import configuration may only target backends declared here.",
+  "type": "object",
+  "required": ["version"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Configuration format version."
+    },
+    "postgres": { "$ref": "#/$defs/postgresConnection" },
+    "mongodb": { "$ref": "#/$defs/mongoConnection" },
+    "cassandra": { "$ref": "#/$defs/cassandraConnection" },
+    "redis": { "$ref": "#/$defs/redisConnection" },
+    "neo4j": { "$ref": "#/$defs/neo4jConnection" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "postgresConnection": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "type": "object",
+          "properties": {
+            "host": { "type": "string" },
+            "port": { "type": "integer" },
+            "database": { "type": "string" },
+            "user": { "type": "string" },
+            "password": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "schema": {
+          "type": "string",
+          "default": "public",
+          "description": "Target schema for created tables."
+        }
+      },
+      "additionalProperties": false
+    },
+    "mongoConnection": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "type": "object",
+          "properties": {
+            "uri": { "type": "string" },
+            "database": { "type": "string" }
+          },
+          "required": ["uri", "database"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "cassandraConnection": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "type": "object",
+          "properties": {
+            "hosts": { "type": "array", "items": { "type": "string" } },
+            "port": { "type": "integer" },
+            "keyspace": { "type": "string" },
+            "protocol_version": { "type": "integer" }
+          },
+          "required": ["hosts", "keyspace"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "redisConnection": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "type": "object",
+          "properties": {
+            "host": { "type": "string" },
+            "port": { "type": "integer" },
+            "db": { "type": "integer" },
+            "password": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "neo4jConnection": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "type": "object",
+          "properties": {
+            "uri": { "type": "string" },
+            "user": { "type": "string" },
+            "password": { "type": "string" },
+            "database": { "type": "string" }
+          },
+          "required": ["uri", "user", "password"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

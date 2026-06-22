@@ -1,0 +1,42 @@
+{
+  "version": 1,
+
+  "postgres": {
+    "connection": {
+      "host": "127.0.0.1",
+      "port": 5432,
+      "database": "ecommerce",
+      "user": "postgres",
+      "password": "postgres"
+    },
+    "schema": "public"
+  },
+
+  "mongodb": {
+    "connection": {
+      "uri": "mongodb://127.0.0.1:27017",
+      "database": "ecommerce"
+    }
+  },
+
+  "cassandra": {
+    "connection": {
+      "hosts": ["127.0.0.1"],
+      "port": 9042,
+      "keyspace": "ecommerce"
+    }
+  },
+
+  "redis": {
+    "connection": { "host": "127.0.0.1", "port": 6379, "db": 0 }
+  },
+
+  "neo4j": {
+    "connection": {
+      "uri": "bolt://127.0.0.1:7687",
+      "user": "neo4j",
+      "password": "password",
+      "database": "neo4j"
+    }
+  }
+}

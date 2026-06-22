@@ -5,7 +5,12 @@
 
 ## English
 
-Python CLI that imports one **wide CSV** (joined relational view) into **PostgreSQL, Redis, MongoDB, Apache Cassandra, and Neo4j** using a **JSON** file validated with **JSON Schema**.
+Python CLI that imports one **wide CSV** (joined relational view) into **PostgreSQL, Redis, MongoDB, Apache Cassandra, and Neo4j** using **two JSON files** validated with **JSON Schema**:
+
+- `import_config.json` — the entity/relationship/column mapping from the CSV to each backend.
+- `sgbd_config.json` — the connection settings for each backend (which SGBDs are available).
+
+The import configuration may only target backends declared in the SGBD configuration; otherwise the run aborts before touching the CSV or any database.
 
 ### Requirements
 
@@ -20,8 +25,13 @@ pip install -e ".[dev]"
 ### Usage
 
 ```bash
-python -m polyglotimportcsv data/ecommerce/ecommerce_join.csv --config data/ecommerce/import_config.json --dry-run
+python -m polyglotimportcsv data/ecommerce/ecommerce_join.csv \
+  --config data/ecommerce/import_config.json \
+  --sgbd-config data/ecommerce/sgbd_config.json \
+  --dry-run
 ```
+
+`--sgbd-config` is optional; when omitted it defaults to `sgbd_config.json` next to `--config`.
 
 **Running example** (single script; use [Git Bash](https://git-scm.com/) on Windows or any Unix shell):
 
@@ -50,8 +60,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (English + PT) for layering, SO
 |------|---------|
 | `src/polyglotimportcsv/` | CLI, validation, filters, runner |
 | `src/polyglotimportcsv/importers/` | One module per backend + `base.py` protocol |
-| `src/polyglotimportcsv/schemas/` | Bundled JSON Schema |
-| `data/ecommerce/` | Sample CSV + `import_config.json` |
+| `src/polyglotimportcsv/schemas/` | Bundled JSON Schemas (`import_config`, `sgbd_config`) |
+| `data/ecommerce/` | Sample CSV + `import_config.json` + `sgbd_config.json` |
 | `logs/` | Session logs from `run_example.sh` and direct CLI runs (gitignored) |
 | `tests/` | `pytest` (stubs for I/O per TDD skill) |
 | `docs-tcc/` | TCC I report (Markdown, BibTeX); `docs-tcc/scripts/` for Pandoc PDF/ODT |
@@ -61,10 +71,12 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (English + PT) for layering, SO
 - `./run_example.sh` — orchestrates Docker, import, clean, and inspect (see `--help`).
 - `scripts/inspect_persisted_data.py` — low-level `clean` / `inspect` helpers (usually invoked via `run_example.sh`).
 
-**Tab completion (Git Bash / bash):** add to `~/.bashrc`, then open a new terminal:
+**Tab completion (Git Bash / bash):** add to `~/.bashrc` (use the absolute path of *your* clone), then open a new terminal:
 
 ```bash
-source "/c/Users/DELL/Documents/polyglot-import-csv/scripts/run_example.completion.bash"
+# Replace with the path where you cloned the repository, e.g.:
+#   ~/Documentos/UFSC/TCC1/polyglot-import-csv
+source "/path/to/polyglot-import-csv/scripts/run_example.completion.bash"
 ```
 
 After that, `./run_example.sh --` + TAB suggests flags (`--fresh-start`, `--clean`, `--inspect`, …); `--csv` / `--config` / `--log-file` suggest paths under `data/ecommerce/` and `logs/`.
@@ -77,7 +89,12 @@ MIT — see [LICENSE](LICENSE).
 
 ## Português (BR)
 
-Ferramenta em Python para importar um **único CSV** (visão larga / *join* de várias tabelas) para **vários SGBDs** ao mesmo tempo — PostgreSQL, Redis, MongoDB, Apache Cassandra e Neo4j — com base em um arquivo **JSON** validado por *JSON Schema*.
+Ferramenta em Python para importar um **único CSV** (visão larga / *join* de várias tabelas) para **vários SGBDs** ao mesmo tempo — PostgreSQL, Redis, MongoDB, Apache Cassandra e Neo4j — com base em **dois arquivos JSON** validados por *JSON Schema*:
+
+- `import_config.json` — o mapeamento de entidades, relacionamentos e colunas do CSV para cada SGBD.
+- `sgbd_config.json` — as configurações de conexão de cada SGBD (quais bancos estão disponíveis).
+
+A configuração de importação só pode referenciar SGBDs declarados na configuração de conexão; caso contrário, a execução é abortada antes de ler o CSV ou conectar a qualquer banco.
 
 ### Requisitos
 
@@ -92,8 +109,13 @@ pip install -e ".[dev]"
 ### Uso
 
 ```bash
-python -m polyglotimportcsv data/ecommerce/ecommerce_join.csv --config data/ecommerce/import_config.json --dry-run
+python -m polyglotimportcsv data/ecommerce/ecommerce_join.csv \
+  --config data/ecommerce/import_config.json \
+  --sgbd-config data/ecommerce/sgbd_config.json \
+  --dry-run
 ```
+
+O `--sgbd-config` é opcional; quando omitido, usa-se `sgbd_config.json` ao lado do `--config`.
 
 **Exemplo de execução** (um único script; no Windows use [Git Bash](https://git-scm.com/) ou WSL):
 
@@ -121,8 +143,8 @@ Consulte [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (inglês + PT) para camada
 |--------|------------|
 | `src/polyglotimportcsv/` | CLI, validação, filtros, *runner* |
 | `src/polyglotimportcsv/importers/` | Um módulo por backend + `base.py` (contrato) |
-| `src/polyglotimportcsv/schemas/` | JSON Schema embutido |
-| `data/ecommerce/` | CSV de exemplo + `import_config.json` |
+| `src/polyglotimportcsv/schemas/` | JSON Schemas embutidos (`import_config`, `sgbd_config`) |
+| `data/ecommerce/` | CSV de exemplo + `import_config.json` + `sgbd_config.json` |
 | `tests/` | `pytest` (stubs, sem I/O real) |
 | `docs-tcc/` | Relatório TCC I (Markdown + BibTeX); `docs-tcc/scripts/` para PDF/ODT via Pandoc |
 
@@ -131,10 +153,12 @@ Consulte [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (inglês + PT) para camada
 - `./run_example.sh` — orquestra Docker, importação, limpeza e inspeção (`--help`).
 - `scripts/inspect_persisted_data.py` — comandos `clean` / `inspect` (chamados pelo `run_example.sh`).
 
-**Autocompletar com TAB (Git Bash / bash):** inclua no `~/.bashrc` e abra um terminal novo:
+**Autocompletar com TAB (Git Bash / bash):** inclua no `~/.bashrc` (use o caminho absoluto do *seu* clone) e abra um terminal novo:
 
 ```bash
-source "/c/Users/DELL/Documents/polyglot-import-csv/scripts/run_example.completion.bash"
+# Troque pelo caminho onde você clonou o repositório, por exemplo:
+#   ~/Documentos/UFSC/TCC1/polyglot-import-csv
+source "/caminho/para/polyglot-import-csv/scripts/run_example.completion.bash"
 ```
 
 Depois, `./run_example.sh --` + TAB sugere flags (`--fresh-start`, `--clean`, `--inspect`, …); `--csv` / `--config` / `--log-file` sugerem caminhos em `data/ecommerce/` e `logs/`.
