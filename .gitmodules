@@ -1,0 +1,6 @@
+[submodule "docs-tcc/template-latex-tcc-ufsc-provavelmenteocaio"]
+	path = docs-tcc/template-latex-tcc-ufsc-provavelmenteocaio
+	url = git@github.com:Provavelmente-o-Caio/Modelo-TCC-computacao-UFSC.git
+[submodule "docs-tcc/template-latex-academico-ufsc-luizscolari"]
+	path = docs-tcc/template-latex-academico-ufsc-luizscolari
+	url = git@github.com:LuizScolari/Template-Latex-UFSC.git
