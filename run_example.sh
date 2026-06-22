@@ -197,6 +197,15 @@ for backend in order:
         print(backend)
 PYEOF
 )
+# Strip stray carriage returns / whitespace (Git Bash / Windows line endings).
+_clean_services=()
+for _svc in "${SELECTED_SERVICES[@]+"${SELECTED_SERVICES[@]}"}"; do
+  _svc="${_svc//$'\r'/}"
+  _svc="${_svc//[[:space:]]/}"
+  [[ -n "${_svc}" ]] && _clean_services+=("${_svc}")
+done
+SELECTED_SERVICES=("${_clean_services[@]+"${_clean_services[@]}"}")
+
 if [[ ${#SELECTED_SERVICES[@]} -eq 0 ]]; then
   log_err "No SGBD declared in ${SGBD_CONFIG}."
   exit 1
@@ -214,6 +223,10 @@ declare -A SERVICE_PORT_META=(
 # port:timeout_seconds:label — restricted to the selected SGBDs.
 DATABASE_PORTS=()
 for _svc in "${SELECTED_SERVICES[@]}"; do
+  if [[ -z "${SERVICE_PORT_META[${_svc}]:-}" ]]; then
+    log_err "Unknown SGBD '${_svc}' in ${SGBD_CONFIG} (expected: postgres, redis, mongodb, cassandra, neo4j)."
+    exit 1
+  fi
   DATABASE_PORTS+=("${SERVICE_PORT_META[${_svc}]}")
 done
 
