@@ -1,30 +1,21 @@
-%% Figure 4 — Polyglot Import CSV configuration JSON Schema (structure tree)
+%% Figure 4 — Polyglot Import CSV configuration JSON Schemas (import + SGBD)
 flowchart LR
-    Root["Configuração (root)<br/>version*, additionalProperties: false"]
+    %% ===== Import (mapping) schema =====
+    IRoot["import_config (root)<br/>version*, additionalProperties: false"]
 
-    Root --> PG["postgres"]
-    Root --> MG["mongodb"]
-    Root --> CA["cassandra"]
-    Root --> RD["redis"]
-    Root --> NE["neo4j"]
+    IRoot --> IPG["postgres"]
+    IRoot --> IMG["mongodb"]
+    IRoot --> ICA["cassandra"]
+    IRoot --> IRD["redis"]
+    IRoot --> INE["neo4j"]
 
-    PG --> PGconn["connection<br/>host, port, database,<br/>user, password"]
-    PG --> PGschema["schema (def. public)"]
-    PG --> PGent["entities*"]
-    PG --> PGrel["relationships<br/>from*, to*, foreign_key*,<br/>references_key"]
-
-    MG --> MGconn["connection<br/>uri*, database*"]
-    MG --> MGent["entities*"]
-
-    CA --> CAconn["connection<br/>hosts*, port, keyspace*,<br/>protocol_version"]
-    CA --> CAent["entities*"]
-
-    RD --> RDconn["connection<br/>host, port, db, password"]
-    RD --> RDent["entities*"]
-
-    NE --> NEconn["connection<br/>uri*, user*, password*,<br/>database"]
-    NE --> NEent["entities*"]
-    NE --> NErel["relationships<br/>from*, to*, type*,<br/>columns -> columnSpec"]
+    IPG --> PGent["entities*"]
+    IPG --> PGrel["relationships<br/>from*, to*, foreign_key*,<br/>references_key"]
+    IMG --> MGent["entities*"]
+    ICA --> CAent["entities*"]
+    IRD --> RDent["entities*"]
+    INE --> NEent["entities*"]
+    INE --> NErel["relationships<br/>from*, to*, type*,<br/>columns -> columnSpec"]
 
     PGent --> Entity
     MGent --> Entity
@@ -47,7 +38,17 @@ flowchart LR
 
     Efilt --> Filter["filter<br/>column*, operator*,<br/>value, target_suffix"]
 
+    %% ===== SGBD (connection) schema =====
+    SRoot["sgbd_config (root)<br/>version*, additionalProperties: false"]
+    SRoot --> SPG["postgres<br/>connection{host, port, database,<br/>user, password}, schema"]
+    SRoot --> SMG["mongodb<br/>connection{uri*, database*}"]
+    SRoot --> SCA["cassandra<br/>connection{hosts*, port,<br/>keyspace*, protocol_version}"]
+    SRoot --> SRD["redis<br/>connection{host, port, db, password}"]
+    SRoot --> SNE["neo4j<br/>connection{uri*, user*,<br/>password*, database}"]
+
     classDef req fill:#e8f0fe,stroke:#3b6ea5;
     classDef leaf fill:#eef7ee,stroke:#4a8f4a;
-    class Root,Entity req;
+    classDef conn fill:#fdf3e7,stroke:#c08a3e;
+    class IRoot,SRoot,Entity req;
     class Spec,Filter leaf;
+    class SPG,SMG,SCA,SRD,SNE conn;
