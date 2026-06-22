@@ -183,6 +183,13 @@ else
   exit 1
 fi
 
+# Fail early with a clear message if the package is not installed (src layout).
+if ! "${PY}" -c "import polyglotimportcsv" >/dev/null 2>&1; then
+  log_err "Python package 'polyglotimportcsv' is not installed in ${PY}."
+  log_err "Install it once from the repo root: pip install -e \".[dev]\""
+  exit 1
+fi
+
 DB_SCRIPT="scripts/inspect_persisted_data.py"
 
 # Only the SGBDs declared in the SGBD config are started / waited on / inspected.
