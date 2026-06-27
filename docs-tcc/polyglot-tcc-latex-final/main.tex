@@ -1,0 +1,494 @@
+\documentclass[
+  12pt,
+  oneside,
+  a4paper,
+  chapter=TITLE,
+  section=TITLE,
+  english,
+  brazil,
+]{abntex2}
+
+% ---
+% Pacotes básicos
+% ---
+\usepackage[
+  top=3cm,
+  bottom=2cm,
+  left=3cm,
+  right=2cm,
+  headheight=16pt
+]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{helvet}
+\usepackage{inconsolata}
+\usepackage{indentfirst}
+\usepackage{color}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{microtype}
+\usepackage{amsmath,amsfonts,amssymb,amsthm}
+\usepackage{subcaption}
+\usepackage{caption}
+\usepackage{listings}
+\usepackage[table]{xcolor}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{makecell}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{afterpage}
+\usepackage[framemethod=tikz]{mdframed}
+
+% ---
+% Fonte padrão sans-serif
+% ---
+\renewcommand{\familydefault}{\sfdefault}
+
+% ---
+% Página em branco
+% ---
+\newcommand\blankpage{%
+  \null
+  \thispagestyle{empty}%
+  \addtocounter{page}{-1}%
+\newpage}
+
+% ---
+% Tamanhos de fonte
+% ---
+\makeatletter
+\renewcommand\small{\@setfontsize\small{11pt}{1}}
+\makeatother
+\makeatletter
+\renewcommand\footnotesize{\@setfontsize\footnotesize{11pt}{1}}
+\makeatother
+
+\captionsetup{font=small}
+
+% ---
+% Estilos de código-fonte
+% ---
+\lstdefinestyle{pythonstyle}{
+  language=Python,
+  basicstyle=\ttfamily\tiny,
+  keywordstyle=\color{blue},
+  stringstyle=\color{green!50!black},
+  commentstyle=\color{gray},
+  showstringspaces=false,
+  breaklines=true,
+  tabsize=4,
+  numbers=left,
+  numberstyle=\tiny\color{gray!70},
+  stepnumber=1,
+  numbersep=4pt,
+  xleftmargin=12pt
+}
+
+\lstdefinestyle{jsonstyle}{
+  basicstyle=\ttfamily\scriptsize,
+  showstringspaces=false,
+  breaklines=true,
+  breakatwhitespace=false,
+  tabsize=2,
+  frame=single,
+  rulecolor=\color{gray!40},
+  numbers=none,
+}
+
+\lstdefinestyle{bashstyle}{
+  basicstyle=\ttfamily\footnotesize,
+  showstringspaces=false,
+  breaklines=true,
+  tabsize=4,
+  numbers=none,
+}
+
+\lstdefinestyle{sqlstyle}{
+  language=SQL,
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{blue},
+  stringstyle=\color{green!50!black},
+  commentstyle=\color{gray},
+  showstringspaces=false,
+  breaklines=true,
+  tabsize=4,
+  numbers=none,
+}
+
+\lstdefinestyle{textstyle}{
+  basicstyle=\ttfamily\footnotesize,
+  showstringspaces=false,
+  breaklines=true,
+  numbers=none,
+}
+
+% ---
+% Títulos de seções ABNT
+% ---
+\renewcommand{\ABNTEXchapterfontsize}{\bfseries\normalsize}
+\renewcommand{\ABNTEXsectionfontsize}{\normalsize}
+\renewcommand{\ABNTEXsubsectionfontsize}{\bfseries\normalsize}
+\renewcommand{\ABNTEXsubsubsectionfontsize}{\normalsize}
+
+% ---
+% Pacotes de citações
+% ---
+\usepackage[brazilian,hyperpageref]{backref}
+\usepackage[alf]{abntex2cite}
+
+\renewcommand{\backrefpagesname}{Citado na(s) página(s):~}
+\renewcommand{\backref}{}
+\renewcommand*{\backrefalt}[4]{%
+  \ifcase #1 %
+  Não citado no texto.%
+  \or
+  Citado na página #2.%
+  \else
+  Citado #1 vezes nas páginas #2.%
+  \fi}
+
+% ---
+% Metadados do TCC
+% ---
+\titulo{Polyglot Import CSV: Uma solução para importação de documentos CSV para múltiplos bancos de dados}
+\autor{Lucas Bueno Cesario}
+\local{Florianópolis}
+\data{2026}
+\orientador{Prof. Ronaldo dos Santos Mello, Dr.}
+\instituicao{%
+  Universidade Federal de Santa Catarina\par
+  Campus Florianópolis\par
+  Curso de Graduação em Ciência da Computação\par
+}
+\tipotrabalho{Trabalho de Conclusão de Curso}
+\preambulo{Trabalho de Conclusão de Curso submetido ao Curso de Graduação em Ciência da Computação do Centro Tecnológico da Universidade Federal de Santa Catarina para obtenção do título de Bacharel em Ciência da Computação.}
+
+% ---
+% Capa personalizada UFSC
+% ---
+\renewcommand{\imprimircapa}{%
+  \begin{capa}%
+    \center
+    \fontsize{12}{1.5}
+    \includegraphics[width=1.84cm]{brasao_UFSC_vertical_sigla.pdf}
+    
+    {\ABNTEXchapterfont\MakeUppercase{\imprimirinstituicao}}
+    \vfill
+    {\ABNTEXchapterfont\imprimirautor}
+    \vfill
+    \begin{center}
+      {\ABNTEXchapterfont\bfseries\MakeUppercase{\imprimirtitulo}}
+    \end{center}
+    \vfill
+    {\ABNTEXchapterfont\imprimirlocal}\\
+    {\ABNTEXchapterfont\imprimirdata}
+  \end{capa}
+}
+
+% ---
+% Folha de rosto personalizada UFSC
+% ---
+\makeatletter
+\renewcommand{\folhaderostocontent}{
+  \begin{center}
+    \fontsize{12}{1.5}
+    {\ABNTEXchapterfont{\imprimirautor}}
+    \vfill\vfill
+    \begin{center}
+      {\ABNTEXchapterfont\bfseries\MakeUppercase{\imprimirtitulo}}
+    \end{center}
+    \vfill
+    \abntex@ifnotempty{\imprimirpreambulo}{%
+      \hspace{.45\textwidth}
+      \begin{minipage}{.5\textwidth}
+        \ABNTEXchapterfont
+        \SingleSpacing
+        \imprimirpreambulo
+        \newline
+        {\ABNTEXchapterfont\imprimirorientadorRotulo~\imprimirorientador\par}
+      \end{minipage}%
+    }%
+    \vfill
+    {\ABNTEXchapterfont\imprimirlocal}\\
+    {\ABNTEXchapterfont\imprimirdata}
+    \afterpage{\blankpage}
+  \end{center}
+}
+\makeatother
+
+% ---
+% Configurações do PDF
+% ---
+\definecolor{blue}{RGB}{41,5,195}
+\makeatletter
+\hypersetup{
+  pdftitle={\@title},
+  pdfauthor={\@author},
+  pdfsubject={\imprimirpreambulo},
+  pdfcreator={LaTeX with abnTeX2},
+  pdfkeywords={persistencia poliglota}{csv}{nosql}{polyglot import csv},
+  colorlinks=true,
+  linkcolor=blue,
+  citecolor=blue,
+  filecolor=magenta,
+  urlcolor=blue,
+  bookmarksdepth=4
+}
+\makeatother
+
+% ---
+% Espaçamentos
+% ---
+\setlength{\parindent}{1.3cm}
+\setlength{\parskip}{0.2cm}
+
+% ---
+% Tolerância de quebra de linha/página (elimina overfull residuais)
+% emergencystretch: folga de última instância para parágrafos justificados
+% raggedbottom: evita overfull \vbox ao não forçar altura exata de página
+% ---
+\setlength{\emergencystretch}{3em}
+\raggedbottom
+
+% ---
+% Espaçamento entre linhas de tabelas (mais respiro vertical)
+% ---
+\renewcommand{\arraystretch}{1.5}
+
+% ---
+% Forçar títulos de listas em português (babel pode não redefinir
+% \listadesiglasname após \selectlanguage{english} no abstract)
+% ---
+\addto\captionsbrazil{%
+  \renewcommand{\listadesiglasname}{Lista de abreviaturas e siglas}%
+  \renewcommand{\apendicename}{\texorpdfstring{\uppercase{Apêndice}}{APÊNDICE}}%
+  \renewcommand{\apendicesname}{\texorpdfstring{\uppercase{Apêndices}}{APÊNDICES}}%
+}
+
+\makeindex
+
+% ================================================================
+% INÍCIO DO DOCUMENTO
+% ================================================================
+\begin{document}
+
+\selectlanguage{brazil}
+\frenchspacing
+
+% ----------------------------------------------------------
+% ELEMENTOS PRÉ-TEXTUAIS
+% ----------------------------------------------------------
+
+\imprimircapa
+
+\imprimirfolhaderosto*
+
+% ---
+% Ficha catalográfica
+% ---
+\begin{fichacatalografica}
+  Ficha catalográfica para trabalhos acadêmicos.
+  
+  \includegraphics[width=0.8\linewidth]{ficha-catalografica.png}
+  \afterpage{\blankpage}
+\end{fichacatalografica}
+
+% ---
+% Folha de aprovação
+% ---
+\begin{folhadeaprovacao}
+  \fontsize{12}{1.5}
+  \begin{center}
+    {\ABNTEXchapterfont\imprimirautor}
+
+    \vfill
+
+    \begin{center}
+      {\ABNTEXchapterfont\bfseries\MakeUppercase{\imprimirtitulo}}
+    \end{center}
+
+    \vfill
+
+    Este Trabalho de Conclusão de Curso foi julgado adequado para obtenção
+    do Título de ``Bacharel em Ciência da Computação'' e aprovado em sua
+    forma final pelo Curso de Graduação em Ciências da Computação.
+
+    \vspace{1.5\onelineskip}
+
+    Florianópolis, \underline{\hspace{2cm}} de \underline{\hspace{3cm}} de 2026.
+
+    \vfill
+
+    \rule{6cm}{1pt}
+
+    Profa. Lúcia Helena Martins Pacheco, Dra.\\
+    Coordenadora do Curso
+
+    \vfill
+
+    \textbf{Banca Examinadora:}
+
+    \vfill
+
+    \rule{6cm}{1pt}
+
+    Prof. Ronaldo dos Santos Mello, Dr.\\
+    Orientador\\
+    Universidade Federal de Santa Catarina
+
+    \vspace{1.5\onelineskip}
+
+    \rule{6cm}{1pt}
+
+    Profa. Carina Friedrich Dorneles, Dra.\\
+    Avaliadora\\
+    Universidade Federal de Santa Catarina
+
+    \vspace{1.5\onelineskip}
+
+    \rule{6cm}{1pt}
+
+    Prof. Jônata Tyska Carvalho, Dr.\\
+    Avaliador\\
+    Universidade Federal de Santa Catarina
+
+  \end{center}
+\end{folhadeaprovacao}
+
+\afterpage{\blankpage}
+
+% ---
+% Resumo em Português
+% ---
+
+\begin{resumo}
+  A persistência poliglota é essencial na arquitetura contemporânea de bancos de dados,
+  integrando diversas tecnologias de armazenamento em uma mesma aplicação. A ferramenta
+  \textit{Polyglot Import CSV} destaca-se como solução para otimizar a importação de dados
+  CSV em diversos bancos de dados simultaneamente, superando desafios da persistência
+  poliglota. Optou-se pelo formato CSV por ser amplamente utilizado na importação de dados
+  pelos diversos SGBDs e por ser um formato simples e familiar tanto a humanos quanto a
+  sistemas. Por meio de configurações declarativas em arquivos JSON, a ferramenta oferece
+  suporte ao principal representante de código aberto dos bancos de dados relacionais ---
+  o PostgreSQL --- e aos principais representantes dos bancos de dados NoSQL: Redis
+  (chave-valor), MongoDB (documento), Apache Cassandra (colunar) e Neo4j (grafo). Não
+  foram identificadas ferramentas equivalentes que realizem, a partir de um único arquivo
+  CSV e de regras declarativas, a importação simultânea para múltiplos paradigmas de dados,
+  o que evidencia a originalidade da proposta. A publicação do código aberto da ferramenta
+  impulsiona avanços colaborativos na dinâmica arquitetura moderna de bancos de dados.
+
+  \vspace{\onelineskip}
+
+  \noindent
+  \textbf{Palavras-chave}: Persistência poliglota. Ferramenta \textit{Polyglot Import CSV}.
+  Importação de dados CSV. JSON. SQL. NoSQL. Software Livre.
+\end{resumo}
+
+% ---
+% Abstract em Inglês
+% ---
+\selectlanguage{english}
+\begin{resumo}
+
+  \rmfamily\itshape
+  Polyglot persistence is essential in contemporary database architecture, integrating
+  various storage technologies within the same application. The \textit{Polyglot Import CSV}
+  tool stands out as a solution for optimizing CSV data import into multiple databases
+  simultaneously, overcoming polyglot persistence challenges. The CSV format was chosen
+  because it is widely used for data import by various DBMSs and because it is a simple
+  and familiar format for both humans and systems. Through declarative configurations in
+  JSON files, the tool supports the leading open-source representative of relational
+  databases --- PostgreSQL --- and the main representatives of NoSQL databases: Redis
+  (key-value), MongoDB (document), Apache Cassandra (columnar), and Neo4j (graph). No
+  equivalent tools were identified that perform, from a single CSV file and declarative
+  rules, the simultaneous import to multiple data paradigms, which highlights the
+  originality of the proposal. The open-source publication of the tool drives collaborative
+  advances in the dynamic modern database architecture.
+
+  \vspace{\onelineskip}
+
+  \noindent
+  {\rmfamily\upshape\textbf{Keywords}}: \textit{Polyglot persistence.
+  Polyglot Import CSV tool. CSV data import. JSON. SQL. NoSQL. Free Software.}
+\end{resumo}
+
+\selectlanguage{brazil}
+
+% ---
+% Lista de Figuras
+% ---
+\pdfbookmark[0]{\listfigurename}{lof}
+\listoffigures*
+\cleardoublepage
+
+% ---
+% Lista de Tabelas
+% ---
+\pdfbookmark[0]{\listtablename}{lot}
+\listoftables*
+\cleardoublepage
+
+% ---
+% Lista de Siglas e Abreviaturas
+% ---
+\begin{siglas}
+  \item[ABNT] Associação Brasileira de Normas Técnicas
+  \item[API] \textit{Application Programming Interface} (Interface de Programação de Aplicações)
+  \item[BSON] \textit{Binary JSON}
+  \item[CLI] \textit{Command Line Interface} (Interface de Linha de Comando)
+  \item[CSV] \textit{Comma-Separated Values} (Valores Separados por Vírgula)
+  \item[DDL] \textit{Data Definition Language} (Linguagem de Definição de Dados)
+  \item[JSON] \textit{JavaScript Object Notation}
+  \item[NoSQL] \textit{Not Only SQL}
+  \item[SGBD] Sistema de Gerenciamento de Banco de Dados
+  \item[SGPD] Sistema de Gerenciamento Poliglota de Dados
+  \item[SQL] \textit{Structured Query Language} (Linguagem de Consulta Estruturada)
+  \item[TCC] Trabalho de Conclusão de Curso
+  \item[UFSC] Universidade Federal de Santa Catarina
+  \item[XML] \textit{Extensible Markup Language}
+\end{siglas}
+
+% ---
+% Sumário
+% ---
+\pdfbookmark[0]{\contentsname}{toc}
+\tableofcontents*
+\cleardoublepage
+
+% ----------------------------------------------------------
+% ELEMENTOS TEXTUAIS
+% ----------------------------------------------------------
+\textual
+
+\include{chapters/ch1introducao}
+\include{chapters/ch2fundamentacao}
+\include{chapters/ch3relacionados}
+\include{chapters/ch4proposta}
+\include{chapters/ch5futuros}
+\include{chapters/consideracoes}
+
+% ----------------------------------------------------------
+% ELEMENTOS PÓS-TEXTUAIS
+% ----------------------------------------------------------
+\postextual
+
+% ---
+% Referências bibliográficas
+% ---
+\renewcommand{\bibname}{Referências}
+\bibliography{references}
+
+% ---
+% Apêndices
+% ---
+\begin{apendicesenv}
+\partapendices
+\include{chapters/apendiceschemas}
+\end{apendicesenv}
+
+\phantompart
+\printindex
+
+\end{document}
