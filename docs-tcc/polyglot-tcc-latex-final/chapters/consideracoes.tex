@@ -1,0 +1,25 @@
+\chapter{Considerações Finais}
+
+Este TCC I apresentou a fundamentação teórica da persistência poliglota, o estado da arte
+em importação e modelagem de dados heterogêneos, e a proposta da ferramenta
+\textit{Polyglot Import CSV} como utilitário de \textit{bootstrap} declarativo a partir
+de CSV.
+
+As principais contribuições desta etapa são: (i) um formato de configuração JSON validado
+estaticamente por JSON Schema, separado em mapeamento e conexão, com mapeamento recursivo
+de colunas e filtros por valor; (ii) um protótipo em Python que materializa o mesmo CSV
+operacional em PostgreSQL, MongoDB, Cassandra, Redis e Neo4j; (iii) o modo
+\texttt{-{}-dry-run} para revisão prévia de contagens; e (iv) o cenário e-commerce
+reprodutível com \texttt{ecommerce\_join.csv}, \texttt{import\_config.json},
+\texttt{sgbd\_config.json} e \texttt{docker-compose.yml}.
+
+As limitações reconhecidas incluem: testes automatizados predominantemente unitários (sem
+suíte de integração contínua contra Docker); processamento em memória do CSV inteiro; e
+dependência do \textit{driver} Cassandra em ambientes Python recentes. Itens como
+interface gráfica, suporte a TSV/Excel, \textit{chunked processing} e novos conectores
+permanecem no escopo do TCC II (Capítulo 5).
+
+O trabalho de conclusão de curso em dezembro de 2026 poderá aprofundar a avaliação
+experimental (desempenho, consistência entre \textit{stores}) e a interface de uso,
+consolidando a ferramenta como artefato de pesquisa e de código aberto alinhado à
+literatura sobre SGPD e modelagem poliglota de dados.

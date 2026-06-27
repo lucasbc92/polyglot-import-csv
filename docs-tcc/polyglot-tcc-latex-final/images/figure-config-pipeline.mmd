@@ -1,0 +1,29 @@
+flowchart TD
+    A["📄 import_config.json\nmapeamento de entidades\ne relacionamentos"] -->|"jsonschema.validate()\nimport_config.schema.json"| B{schema\nválido?}
+    C["📄 sgbd_config.json\ncredenciais e\nendereços"] -->|"jsonschema.validate()\nsgbd_config.schema.json"| D{schema\nválido?}
+
+    B -->|não| E(["❌ BusinessException\nerro de sintaxe ou tipo"])
+    D -->|não| E
+
+    B -->|sim| F["import_map\n(entidades, colunas,\nfiltros, relacionamentos)"]
+    D -->|sim| G["sgbd_map\n(connection, schema/uri...)"]
+
+    F --> H["merge_configs()\ntodo backend em import_map\nestá declarado em sgbd_map?"]
+    G --> H
+
+    H -->|não| I(["❌ BusinessException\nbackend não declarado\nem sgbd_config.json"])
+    H -->|sim| J["runtime_config\n(importação + conexão\nunificados por backend)"]
+
+    K["📋 dados.csv"] -->|"load_csv_with_inference()\n dtype=str + kinds"| L["DataFrame +\ncolumn_kinds"]
+
+    J --> M["validate_import_config()\ncolunas existem no CSV?\nfiltros coerentes?\nFKs e arestas válidos?\ncolunas planas nos backends planos?"]
+    L --> M
+
+    M -->|falha| N(["❌ BusinessException\nerro semântico\nantes de qualquer conexão"])
+    M -->|ok| O["run_backends()\npara cada backend configurado"]
+
+    style E fill:#fee2e2,stroke:#dc2626,color:#1e293b
+    style I fill:#fee2e2,stroke:#dc2626,color:#1e293b
+    style N fill:#fee2e2,stroke:#dc2626,color:#1e293b
+    style O fill:#dcfce7,stroke:#16a34a,color:#1e293b
+    style J fill:#dbeafe,stroke:#2563eb,color:#1e293b

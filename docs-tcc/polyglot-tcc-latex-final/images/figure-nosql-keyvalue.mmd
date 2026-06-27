@@ -1,0 +1,14 @@
+flowchart LR
+    subgraph KV["Modelo Chave-Valor — exemplo: carrinho de compras (Redis)"]
+        direction LR
+        K1["cart:user:1042"] -->|aponta para| V1["{ items: [A37, B12],<br/>total: 289.90,<br/>ttl: 3600s }"]
+        K2["cart:user:2071"] -->|aponta para| V2["{ items: [C55],<br/>total: 49.90,<br/>ttl: 3600s }"]
+        K3["session:9f3a"] -->|aponta para| V3["{ user: 1042,<br/>logged_in: true }"]
+    end
+
+    style K1 fill:#dbeafe,stroke:#2563eb,color:#1e293b
+    style K2 fill:#dbeafe,stroke:#2563eb,color:#1e293b
+    style K3 fill:#dbeafe,stroke:#2563eb,color:#1e293b
+    style V1 fill:#f1f5f9,stroke:#64748b,color:#1e293b
+    style V2 fill:#f1f5f9,stroke:#64748b,color:#1e293b
+    style V3 fill:#f1f5f9,stroke:#64748b,color:#1e293b

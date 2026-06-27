@@ -1,0 +1,258 @@
+\chapter{Trabalhos Relacionados}
+
+Este capítulo apresenta e discute ferramentas oferecidas na indústria por SGBDs e também
+propostas na literatura acadêmica relacionadas com a importação de dados por SGBDs
+heterogêneos. A preferência está em dados no formato CSV que devem ser importados por
+alguma tecnologia de banco de dados, que é o foco deste trabalho.
+
+\section{Importação de Arquivo CSV para um Único SGBD}
+
+Esta seção investiga mecanismos de importação de dados presentes em SGBDs populares na
+indústria que são considerados neste trabalho.
+
+\subsection{PostgreSQL}
+
+No SGBD PostgreSQL você utiliza o comando \texttt{COPY} para realizar importações de dados
+CSV. É necessário especificar a tabela com os nomes das colunas após a cláusula
+\texttt{COPY}. A ordem das colunas deve ser a mesma que aquelas no arquivo CSV, conforme
+ilustra o exemplo a seguir:
+
+\begin{lstlisting}[style=sqlstyle]
+COPY nome_da_tabela(col1, col2, col3)
+FROM 'C:/caminho_do_arquivo/dados_de_amostra.csv'
+DELIMITER ','
+CSV HEADER;
+\end{lstlisting}
+
+Caso o arquivo CSV contenha todas as colunas da tabela, você não precisa especificá-las
+explicitamente:
+
+\begin{lstlisting}[style=sqlstyle]
+COPY nome_da_tabela
+FROM 'C:/caminho_do_arquivo/dados_de_amostra.csv'
+DELIMITER ','
+CSV HEADER;
+\end{lstlisting}
+
+Você também deve inserir o caminho do arquivo CSV após a palavra-chave \texttt{FROM}. Como
+o formato do arquivo é CSV, você precisa especificar \texttt{DELIMITER}, bem como a
+cláusula \texttt{CSV}. A cláusula \texttt{HEADER} deve ser especificada para indicar que o
+arquivo CSV contém um cabeçalho. Quando o comando \texttt{COPY} importa dados, ele ignora
+o cabeçalho do arquivo.
+
+O arquivo CSV deve ser lido diretamente pelo servidor PostgreSQL, não pela aplicação
+cliente. Portanto, ele deve ser acessível pela máquina do servidor PostgreSQL. Além disso,
+é necessário ter permissão de superusuário para executar com sucesso o comando
+\texttt{COPY}.
+
+\subsection{Redis}
+
+A maneira preferida de importar uma massa de dados para o Redis é gerar um arquivo de
+texto contendo o protocolo Redis, em formato bruto, para chamar os comandos necessários
+para inserir os dados requeridos.
+
+Por exemplo, se é necessário gerar um grande conjunto de dados com bilhões de chaves no
+formato ``chaveN $\rightarrow$ ValorN'', deve ser criado um arquivo contendo os seguintes
+comandos:
+
+\begin{lstlisting}[style=textstyle]
+SET Chave0 Valor0
+SET Chave1 Valor1
+...
+SET ChaveN ValorN
+\end{lstlisting}
+
+Uma vez criado esse arquivo, a ação restante é alimentá-lo no Redis. No passado, a maneira
+de fazer isso era usar o netcat com o seguinte comando:
+
+\begin{lstlisting}[style=bashstyle]
+(cat dados.txt; sleep 10) | nc localhost 6379
+\end{lstlisting}
+
+Nas versões 2.6 ou posteriores do Redis, o utilitário \texttt{redis-cli} suporta um novo
+modo chamado modo \textit{pipe} que foi projetado para realizar o carregamento em massa. O
+comando a ser executado neste caso é o seguinte:
+
+\begin{lstlisting}[style=bashstyle]
+cat dados.txt | redis-cli --pipe
+\end{lstlisting}
+
+O utilitário \texttt{redis-cli} imprime um pequeno resumo. A saída típica é semelhante a
+esta:
+
+\begin{lstlisting}[style=textstyle]
+All data transferred. Waiting for the last reply...
+Last reply received from server.
+errors: 0, replies: 1000000
+\end{lstlisting}
+
+A linha de contagem ao final é a informação mais importante do resumo: \texttt{errors}
+indica quantos comandos foram rejeitados pelo servidor, e \texttt{replies} indica o total
+de respostas recebidas. Se \texttt{errors: 0}, todos os comandos foram processados com
+sucesso. Um valor maior que zero em \texttt{errors} significa que ao menos um comando
+falhou --- seja por sintaxe inválida no arquivo, por tipo de dado incompatível com a chave
+existente, ou por qualquer outra razão que o Redis tenha rejeitado.
+
+Vale notar que o \texttt{-{}-pipe} não exibe cada resposta individualmente (como um
+\texttt{+OK} por \texttt{SET}), o que é intencional: imprimir bilhões de respostas
+destruiria o ganho de \textit{performance} do modo \textit{pipe} e inundaria o terminal.
+Em vez disso, o \texttt{redis-cli} lê e contabiliza todas as respostas silenciosamente
+conforme chegam, entregando apenas o agregado final.
+
+Por fim, uma verificação útil: o valor de \texttt{replies} deve ser igual ao número de
+comandos enviados. Uma divergência entre os dois pode indicar que o arquivo de entrada
+estava truncado ou malformado, mesmo que \texttt{errors} apareça como zero.
+
+\subsection{MongoDB}
+
+No SGBD MongoDB, o processo de importação de dados em formato CSV é realizado através do
+utilitário \texttt{mongoimport}. Sua sintaxe básica exige que se informe o banco de dados
+de destino através do parâmetro \texttt{-{}-db}, seguido do nome da coleção que receberá
+os dados, especificado em \texttt{-{}-collection}. Caso esse último parâmetro seja omitido,
+o nome da coleção será automaticamente inferido a partir do nome do arquivo CSV fornecido.
+
+\begin{lstlisting}[style=bashstyle]
+mongoimport --db nome_do_db --collection nome_da_colecao \
+  --type csv --headerline --ignoreBlanks \
+  --file caminho/do/arquivo.csv
+\end{lstlisting}
+
+O tipo do arquivo de entrada deve ser declarado explicitamente através do parâmetro
+\texttt{-{}-type}, que neste caso recebe o valor \texttt{csv}. Para que o
+\texttt{mongoimport} reconheça os nomes dos campos a partir do próprio arquivo, utiliza-se
+o parâmetro \texttt{-{}-headerline}, que instrui o utilitário a tratar o conteúdo da
+primeira linha do CSV como o cabeçalho dos campos. Opcionalmente, o parâmetro
+\texttt{-{}-ignoreBlanks} pode ser utilizado para que valores em branco presentes no
+arquivo sejam ignorados durante a importação, evitando que campos vazios sejam persistidos
+na coleção. Por fim, o caminho do arquivo CSV a ser importado é fornecido através do
+parâmetro \texttt{-{}-file}.
+
+\subsection{Cassandra}
+
+A importação de dados CSV para o Cassandra utiliza o comando \texttt{sstableloader} e
+envolve vários passos. Inicialmente, é necessário se certificar que o arquivo CSV está no
+formato adequado para o Cassandra. Isso geralmente envolve garantir que os tipos de dados
+e as colunas correspondem ao esquema da tabela no Cassandra.
+
+O \texttt{sstableloader} requer que os dados estejam em um formato específico chamado
+SSTable. Para converter o CSV em SSTables, você pode usar o comando \texttt{cqlsh}
+fornecido pelo Cassandra. Um exemplo de uso é o seguinte:
+
+\begin{lstlisting}[style=bashstyle]
+cqlsh -e "COPY keyspace_name.table_name TO 'output_directory';"
+\end{lstlisting}
+
+Na sequência, é possível usar o \texttt{sstableloader} para carregar os dados. A sintaxe
+do comando é a seguinte:
+
+\begin{lstlisting}[style=bashstyle]
+sstableloader -d <hostname> -u <username> -pw <password> \
+  output_directory/keyspace_name/table_name
+\end{lstlisting}
+
+\begin{itemize}
+  \item \texttt{<hostname>}: O endereço do nó Cassandra.
+  \item \texttt{<username>}: O nome de usuário, se a autenticação estiver habilitada.
+  \item \texttt{<password>}: A senha correspondente.
+\end{itemize}
+
+Este comando move os dados do diretório de saída para o Cassandra.
+
+\subsection{Neo4j}
+
+Usar \texttt{neo4j-admin} para importar grandes conjuntos de dados no Neo4j envolve alguns
+passos. Esta ferramenta de linha de comando é projetada para importações em massa
+eficientes.
+
+Certifique-se de que seus arquivos CSV estejam estruturados corretamente e sigam o formato
+necessário para nós e relacionamentos. Crie um banco de dados não povoado:
+
+\begin{lstlisting}[style=bashstyle]
+neo4j-admin create-db --database=nome_do_seu_banco_de_dados \
+  --from=diretorio_com_arquivos_csv
+\end{lstlisting}
+
+Substitua \texttt{nome\_do\_seu\_banco\_de\_dados} pelo nome desejado para o novo banco de
+dados. A opção \texttt{-{}-from} especifica o diretório onde estão localizados seus
+arquivos CSV. Execute o comando de importação com \texttt{neo4j-admin}. O comando exato
+depende do seu modelo de dados, mas pode se parecer com isto:
+
+\begin{lstlisting}[style=bashstyle]
+neo4j-admin import --database=nome_do_seu_banco_de_dados \
+  --mode=csv \
+  --nodes:Rotulo1 nos.csv \
+  --nodes:Rotulo2 nos2.csv \
+  --relationships:TIPO_RELACIONAMENTO relacionamentos.csv
+\end{lstlisting}
+
+Substitua \textit{Rotulo1}, \textit{Rotulo2}, \textit{nos.csv}, \textit{nos2.csv},
+\textit{TIPO\_RELACIONAMENTO} e \textit{relacionamentos.csv} pelos seus rótulos específicos
+e nomes de arquivo.
+
+\section{Importação de Arquivo CSV para SGBD Multimodelo}
+
+Ferramentas comerciais e de código aberto tratam de \textbf{migração} ou
+\textbf{modelagem} entre tecnologias heterogêneas, embora raramente com o foco deste TCC
+(um único CSV largo + regras declarativas + cinco paradigmas).
+
+\begin{itemize}
+  \item \textbf{ArangoDB} é um SGBD multimodelo nativo (documento/chave-valor/grafo) com
+        \texttt{arangoimport} para CSV; a importação é para \textbf{um} motor multimodelo,
+        não para cinco \textit{backends} independentes.
+
+  \item \textbf{\texttt{mongoimport} / \texttt{COPY} / \texttt{redis-cli -\/-pipe} /
+        \texttt{cqlsh} / \texttt{neo4j-admin}} (seção 3.1) cobrem importação \textbf{para
+        um único} produto por vez.
+
+  \item \textbf{dbcrossbar} \cite{dbcrossbar2024} copia dados tabulares entre PostgreSQL,
+        BigQuery, armazenamento em nuvem e CSV, incluindo conversão de esquemas; a ênfase é
+        \textit{pipeline} de migração, não mapeamento semântico de entidades aninhadas com
+        filtros por valor.
+
+  \item \textbf{Hackolade} \cite{hackolade2024polyglot} oferece \textit{polyglot data
+        modeling} com engenharia de esquema para dezenas de alvos; trata-se de
+        \textbf{modelagem visual} e geração de artefatos, e não de um utilitário CLI único
+        para importar um CSV operacional com validação prévia de filtros.
+\end{itemize}
+
+\section{Considerações sobre os Trabalhos Relacionados}
+
+A literatura sobre \textbf{metamodelos unificados} para SQL e NoSQL (por exemplo, U-Schema
+\cite{berlanga2021unified}) e sobre \textbf{evolução de esquema} em ambientes heterogêneos
+\cite{chillon2023propagating} informa decisões de validação e de representação de entidades
+no JSON de configuração, mas não substitui uma ferramenta de \textit{bulk import} orientada
+a CSV.
+
+\textit{Surveys} recentes convergem em desafios abertos da gestão poliglota de dados:
+migração automatizada entre \textit{stores} quando o \textit{workload} muda, planejamento
+de consultas entre sistemas, gestão de esquemas multi-modelo e preservação das propriedades
+não funcionais de cada SGBD \cite{kiehn2022polyglot,glake2022towards}.
+\citeonline{royhubara2022selecting} tratam da \textbf{seleção de SGBDs} por fragmento de
+aplicação; \citeonline{silva2024modelagem} mapeiam o estado da arte em \textbf{modelagem
+poliglota}. Nenhum desses trabalhos implementa, contudo, um utilitário declarativo que
+receba um CSV operacional único e o materialize simultaneamente em cinco paradigmas
+distintos com validação estática prévia.
+
+Sistemas \textit{polystore} como o BigDAWG \cite{duggan2017bigdawg} e \textit{middlewares}
+de portabilidade em nuvem \cite{wang2020cmc} tratam de \textbf{consultas federadas} e
+movimentação de dados em ecossistemas complexos. \citeonline{tan2017query} classificam
+essas soluções (federado, multistore, polystore, poliglota) e avaliam transparência,
+autonomia e heterogeneidade --- eixos nos quais importadores nativos (seção 3.1) e
+ferramentas de migração (seção 3.2) também divergem, mas sem convergir para um
+\textit{pipeline} único de ingestão.
+
+Ferramentas como \textbf{dbcrossbar} \cite{dbcrossbar2024} e \textbf{Hackolade}
+\cite{hackolade2024polyglot} aproximam-se do domínio de integração de dados, porém com
+foco em \textit{pipelines} de migração ou modelagem visual, respectivamente --- não em
+regras declarativas sobre entidades aninhadas, filtros por valor (\texttt{each}) e
+validação por JSON Schema antes de qualquer conexão com SGBDs.
+
+\textbf{Lacuna identificada:} a combinação de (i) um CSV largo como fonte operacional,
+(ii) configuração JSON validada estaticamente, (iii) materialização distinta por paradigma
+(relacional, chave-valor, documento, colunar, grafo) e (iv) modo \textit{dry-run} para
+revisão prévia. O \textit{Polyglot Import CSV} ocupa essa lacuna como ferramenta de
+\textbf{bootstrap de persistência poliglota} --- carga inicial e reprodutível de dados ---
+enquanto \textit{middlewares} e \textit{polystores} assumem dados já residentes ou
+consultas em tempo de execução. Trabalhos futuros podem integrar a ferramenta a mecanismos
+de migração adaptativa descritos por \citeonline{kiehn2022polyglot} e
+\citeonline{glake2022towards}.

@@ -1,0 +1,307 @@
+\chapter{JSON Schemas de Configuração na Forma Serializada}
+\label{ap:schemas}
+
+Este apêndice reproduz os dois documentos \textit{JSON Schema} (rascunho 2020-12) tal
+como embutidos em \texttt{src/polyglotimportcsv/schemas/}. A estrutura de alto nível
+de ambos é descrita na seção~\ref{sec:config-format}; os fragmentos por SGBD são
+apresentados nas respectivas subseções do capítulo~4.
+
+\section{Schema de Importação (\texttt{import\_config.schema.json})}
+
+\begin{lstlisting}[style=jsonstyle]
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://polyglot-import-csv.local/schemas/import_config.schema.json",
+  "title": "PolyglotImportCSV import configuration",
+  "description": "Declarative mapping from a wide CSV file to entities and relationships of one or more database backends. Connection settings live in the separate SGBD configuration.",
+  "type": "object",
+  "required": ["version"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Configuration format version."
+    },
+    "postgres":  { "$ref": "#/$defs/postgresMapping" },
+    "mongodb":   { "$ref": "#/$defs/mongoMapping" },
+    "cassandra": { "$ref": "#/$defs/cassandraMapping" },
+    "redis":     { "$ref": "#/$defs/redisMapping" },
+    "neo4j":     { "$ref": "#/$defs/neo4jMapping" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "columnSpec": {
+      "type": "object",
+      "description": "Leaf mapping from a CSV column to a destination field.",
+      "properties": {
+        "is_key": {
+          "type": "boolean",
+          "description": "Primary or merge key for the entity."
+        },
+        "csv_column": {
+          "description": "CSV header name or 0-based column index.",
+          "oneOf": [
+            { "type": "string",  "minLength": 1 },
+            { "type": "integer", "minimum": 0 }
+          ]
+        },
+        "schema_column": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Destination field name when it differs from the JSON key."
+        },
+        "db_type": {
+          "type": "string",
+          "description": "SQL/CQL type for DDL generation (PostgreSQL, Cassandra)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "columnEntry": {
+      "description": "Either a leaf columnSpec or a nested object (MongoDB subdocuments).",
+      "oneOf": [
+        { "$ref": "#/$defs/columnSpec" },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/$defs/columnEntry" }
+        }
+      ]
+    },
+    "filter": {
+      "type": "object",
+      "required": ["column", "operator"],
+      "properties": {
+        "column":        { "type": "string", "minLength": 1 },
+        "operator": {
+          "type": "string",
+          "enum": ["==","!=",">","<",">=","<=","in","not_in","each"]
+        },
+        "value": {},
+        "target_suffix": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "entity": {
+      "type": "object",
+      "required": ["columns"],
+      "properties": {
+        "columns": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/$defs/columnEntry" }
+        },
+        "filters": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/filter" }
+        },
+        "cassandra_partition": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "cassandra_cluster": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "postgresMapping": {
+      "type": "object",
+      "required": ["entities"],
+      "properties": {
+        "entities": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/entity" }
+        },
+        "relationships": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["from","to","foreign_key"],
+            "properties": {
+              "from":           { "type": "string" },
+              "to":             { "type": "string" },
+              "foreign_key":    { "type": "string" },
+              "references_key": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "mongoMapping": {
+      "type": "object",
+      "required": ["entities"],
+      "properties": {
+        "entities": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/entity" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "cassandraMapping": {
+      "type": "object",
+      "required": ["entities"],
+      "properties": {
+        "entities": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/entity" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "redisMapping": {
+      "type": "object",
+      "required": ["entities"],
+      "properties": {
+        "entities": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/entity" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "neo4jMapping": {
+      "type": "object",
+      "required": ["entities"],
+      "properties": {
+        "entities": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/entity" }
+        },
+        "relationships": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["from","to","type"],
+            "properties": {
+              "from": { "type": "string" },
+              "to":   { "type": "string" },
+              "type": { "type": "string" },
+              "columns": {
+                "type": "object",
+                "additionalProperties": { "$ref": "#/$defs/columnSpec" }
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
+\end{lstlisting}
+
+\section{Schema de Conexão (\texttt{sgbd\_config.schema.json})}
+
+\begin{lstlisting}[style=jsonstyle]
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://polyglot-import-csv.local/schemas/sgbd_config.schema.json",
+  "title": "PolyglotImportCSV SGBD connection configuration",
+  "description": "Connection settings for each database backend.",
+  "type": "object",
+  "required": ["version"],
+  "properties": {
+    "version": { "type": "integer", "minimum": 1 },
+    "postgres":  { "$ref": "#/$defs/postgresConnection" },
+    "mongodb":   { "$ref": "#/$defs/mongoConnection" },
+    "cassandra": { "$ref": "#/$defs/cassandraConnection" },
+    "redis":     { "$ref": "#/$defs/redisConnection" },
+    "neo4j":     { "$ref": "#/$defs/neo4jConnection" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "postgresConnection": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "type": "object",
+          "properties": {
+            "host":     { "type": "string" },
+            "port":     { "type": "integer" },
+            "database": { "type": "string" },
+            "user":     { "type": "string" },
+            "password": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "schema": {
+          "type": "string",
+          "default": "public"
+        }
+      },
+      "additionalProperties": false
+    },
+    "mongoConnection": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "type": "object",
+          "properties": {
+            "uri":      { "type": "string" },
+            "database": { "type": "string" }
+          },
+          "required": ["uri","database"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "cassandraConnection": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "type": "object",
+          "properties": {
+            "hosts":            { "type": "array", "items": { "type": "string" } },
+            "port":             { "type": "integer" },
+            "keyspace":         { "type": "string" },
+            "protocol_version": { "type": "integer" }
+          },
+          "required": ["hosts","keyspace"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "redisConnection": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "type": "object",
+          "properties": {
+            "host":     { "type": "string" },
+            "port":     { "type": "integer" },
+            "db":       { "type": "integer" },
+            "password": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "neo4jConnection": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "type": "object",
+          "properties": {
+            "uri":      { "type": "string" },
+            "user":     { "type": "string" },
+            "password": { "type": "string" },
+            "database": { "type": "string" }
+          },
+          "required": ["uri","user","password"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
+\end{lstlisting}
