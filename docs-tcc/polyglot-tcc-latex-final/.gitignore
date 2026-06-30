@@ -1,0 +1,61 @@
+# ---------------------------------------------------------------------------
+# Ignora artefatos de build. Mantém apenas as FONTES:
+#   main.tex, main_tex4ht.tex, chapters/*.tex, images/*.{png,mmd},
+#   references.bib, build-docx.sh, brasao*.pdf, ficha-catalografica.png
+#   e os PDFs/DOCX versionados de entrega (v3.x-*).
+# ---------------------------------------------------------------------------
+
+# --- Artefatos LaTeX (pdflatex / latexmk / bibtex) ---
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.lol
+*.dvi
+*.idx
+*.ilg
+*.ind
+*.bbl
+*.blg
+*.bcf
+*.run.xml
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.synctex(busy)
+*.xref
+*.brf
+*.tmp
+*.maf
+*.mtc*
+*.ptc*
+*.tdo
+
+# --- Artefatos tex4ht / make4ht / htlatex ---
+*.4ct
+*.4tc
+*.idv
+*.lg
+*.ng
+*.css
+*.html
+*.xhtml
+*.svg
+
+# --- Bounding boxes do dvipdfmx ---
+*.xbb
+
+# --- PDFs/DOCX/ODT GERADOS (a entrega é o arquivo versionado v3.x-*) ---
+main.pdf
+main_tex4ht.pdf
+main.odt
+main_tex4ht.odt
+main.docx
+main_tex4ht.docx
+combined.*
+
+# --- Logs de build deste diretório ---
+*.err
+odt_build.log
