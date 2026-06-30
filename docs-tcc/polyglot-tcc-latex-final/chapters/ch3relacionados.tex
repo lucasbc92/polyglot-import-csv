@@ -13,7 +13,7 @@ indústria que são considerados neste trabalho.
 \subsection{PostgreSQL}
 
 No SGBD PostgreSQL você utiliza o comando \texttt{COPY} para realizar importações de dados
-CSV. É necessário especificar a tabela com os nomes das colunas após a cláusula
+CSV \cite{postgresql_copy}. É necessário especificar a tabela com os nomes das colunas após a cláusula
 \texttt{COPY}. A ordem das colunas deve ser a mesma que aquelas no arquivo CSV, conforme
 ilustra o exemplo a seguir:
 
@@ -49,7 +49,7 @@ cliente. Portanto, ele deve ser acessível pela máquina do servidor PostgreSQL.
 
 A maneira preferida de importar uma massa de dados para o Redis é gerar um arquivo de
 texto contendo o protocolo Redis, em formato bruto, para chamar os comandos necessários
-para inserir os dados requeridos.
+para inserir os dados requeridos \cite{redis_bulkloading}.
 
 Por exemplo, se é necessário gerar um grande conjunto de dados com bilhões de chaves no
 formato ``chaveN $\rightarrow$ ValorN'', deve ser criado um arquivo contendo os seguintes
@@ -106,7 +106,7 @@ estava truncado ou malformado, mesmo que \texttt{errors} apareça como zero.
 \subsection{MongoDB}
 
 No SGBD MongoDB, o processo de importação de dados em formato CSV é realizado através do
-utilitário \texttt{mongoimport}. Sua sintaxe básica exige que se informe o banco de dados
+utilitário \texttt{mongoimport} \cite{mongodb_mongoimport}. Sua sintaxe básica exige que se informe o banco de dados
 de destino através do parâmetro \texttt{-{}-db}, seguido do nome da coleção que receberá
 os dados, especificado em \texttt{-{}-collection}. Caso esse último parâmetro seja omitido,
 o nome da coleção será automaticamente inferido a partir do nome do arquivo CSV fornecido.
@@ -130,7 +130,7 @@ parâmetro \texttt{-{}-file}.
 \subsection{Cassandra}
 
 A importação de dados CSV para o Cassandra utiliza o comando \texttt{sstableloader} e
-envolve vários passos. Inicialmente, é necessário se certificar que o arquivo CSV está no
+envolve vários passos \cite{cassandra_sstableloader}. Inicialmente, é necessário se certificar que o arquivo CSV está no
 formato adequado para o Cassandra. Isso geralmente envolve garantir que os tipos de dados
 e as colunas correspondem ao esquema da tabela no Cassandra.
 
@@ -161,7 +161,7 @@ Este comando move os dados do diretório de saída para o Cassandra.
 \subsection{Neo4j}
 
 Usar \texttt{neo4j-admin} para importar grandes conjuntos de dados no Neo4j envolve alguns
-passos. Esta ferramenta de linha de comando é projetada para importações em massa
+passos \cite{neo4j_import}. Esta ferramenta de linha de comando é projetada para importações em massa
 eficientes.
 
 Certifique-se de que seus arquivos CSV estejam estruturados corretamente e sigam o formato
@@ -219,7 +219,7 @@ Ferramentas comerciais e de código aberto tratam de \textbf{migração} ou
 
 A literatura sobre \textbf{metamodelos unificados} para SQL e NoSQL (por exemplo, U-Schema
 \cite{berlanga2021unified}) e sobre \textbf{evolução de esquema} em ambientes heterogêneos
-\cite{chillon2023propagating} informa decisões de validação e de representação de entidades
+\cite{chillon2023propagating,chillon2024schema} informa decisões de validação e de representação de entidades
 no JSON de configuração, mas não substitui uma ferramenta de \textit{bulk import} orientada
 a CSV.
 
@@ -232,6 +232,15 @@ aplicação; \citeonline{silva2024modelagem} mapeiam o estado da arte em \textbf
 poliglota}. Nenhum desses trabalhos implementa, contudo, um utilitário declarativo que
 receba um CSV operacional único e o materialize simultaneamente em cinco paradigmas
 distintos com validação estática prévia.
+
+Abordagens recentes reforçam essa tendência. \citeonline{pereira2025transparent} propõem um
+\textit{framework} de persistência poliglota \textbf{transparente}, com uma {API} unificada e
+extensível a diferentes tipos de banco, enquanto \citeonline{sachdeva2024plugging} exploram a
+combinação de bancos \textbf{multimodelo} e persistência poliglota para acomodar a variedade dos
+dados. Ambos os trabalhos atuam, porém, na \textbf{camada de acesso da aplicação} --- oferecendo
+uma interface única para ler e gravar em múltiplos SGBDs em tempo de execução ---, e não na
+\textbf{carga inicial declarativa} a partir de um CSV operacional, que é o foco da
+\textit{Polyglot Import CSV}.
 
 Sistemas \textit{polystore} como o BigDAWG \cite{duggan2017bigdawg} e \textit{middlewares}
 de portabilidade em nuvem \cite{wang2020cmc} tratam de \textbf{consultas federadas} e

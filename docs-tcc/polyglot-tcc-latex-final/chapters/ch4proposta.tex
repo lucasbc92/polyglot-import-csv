@@ -54,15 +54,75 @@ detalhadas na seção~\ref{sec:validacao}. A representação completa de ambos o
 forma serializada JSON Schema 2020-12 encontra-se no
 Apêndice~\ref{ap:schemas}.
 
+\subsection{Visão Geral da Estrutura}
+\label{sec:visao-schema}
+
+Antes de detalhar cada \textit{backend} individualmente, esta subseção apresenta a
+estrutura dos dois schemas como um todo, fornecendo um mapa mental que orienta a
+leitura das subseções seguintes. A Figura~\ref{fig:config-schema} sintetiza
+graficamente os dois JSON Schemas: o de importação (\texttt{import\_config}) no topo
+e o de conexão (\texttt{sgbd\_config}) na base, ambos à esquerda. O diagrama torna
+desnecessária a leitura do schema serializado integral --- mantido no
+Apêndice~\ref{ap:schemas} --- para a compreensão geral da configuração.
+
+\begin{figure}[H]
+  \centering
+  \caption{Estrutura dos dois JSON Schemas de configuração (importação e conexão).}
+  \label{fig:config-schema}
+  \includegraphics[width=\textwidth]{images/figure7-config-schema}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{figure}
+
+\textbf{Raízes simétricas.} Ambos os schemas partilham a mesma raiz: um campo
+\texttt{version} obrigatório e um bloco opcional por \textit{backend}
+(\texttt{postgres}, \texttt{mongodb}, \texttt{cassandra}, \texttt{redis},
+\texttt{neo4j}), com \texttt{additionalProperties: false} rejeitando chaves
+desconhecidas. A diferença está no conteúdo de cada bloco: no arquivo de
+importação ele descreve \textit{o que} mapear; no de conexão, \textit{onde} gravar.
+
+\textbf{O arquivo de importação e a definição reutilizável \texttt{entity}.}
+Seguindo as setas a partir de \texttt{import\_config}, cada bloco de \textit{backend}
+expande-se em um mapa \texttt{entities} (e, para PostgreSQL e Neo4j, também em
+\texttt{relationships}). O ponto central do diagrama --- e da economia de
+vocabulário do schema --- é que \textbf{todas as entidades, de todos os
+\textit{backends}, convergem para uma única definição reutilizável}, rotulada
+\texttt{entity}. Em vez de cinco formatos distintos, há apenas um: toda entidade
+possui um mapa \texttt{columns} (o mapeamento de colunas) e, opcionalmente,
+\texttt{filters} (predicados sobre as linhas do CSV) e os campos específicos do
+Cassandra (\texttt{cassandra\_partition} e \texttt{cassandra\_cluster}).
+
+\textbf{O mapeamento recursivo de colunas.} À direita do diagrama, \texttt{columns}
+remete a \texttt{columnEntry}, definido como uma escolha (\texttt{oneOf}) entre duas
+formas: (i) uma \textbf{folha} --- o \texttt{columnSpec}, que liga uma coluna do CSV
+a um atributo do destino por meio dos campos \texttt{csv\_column},
+\texttt{schema\_column}, \texttt{is\_key} e \texttt{db\_type}; ou (ii) um
+\textbf{objeto aninhado}, que contém novos \texttt{columnEntry}. Essa recursão é o
+que permite, com um único mecanismo, tanto o mapeamento plano (PostgreSQL,
+Cassandra, Redis) quanto os subdocumentos do MongoDB. As arestas tipadas do Neo4j
+e as chaves estrangeiras do PostgreSQL aparecem em \texttt{relationships},
+reutilizando o mesmo \texttt{columnSpec} para eventuais propriedades.
+
+\textbf{O arquivo de conexão.} Na base do diagrama, cada bloco de \textit{backend}
+de \texttt{sgbd\_config} carrega apenas um descritor \texttt{connection} com os
+parâmetros de acesso pertinentes àquela tecnologia (por exemplo, \texttt{uri} para
+MongoDB e Neo4j; \texttt{hosts} e \texttt{keyspace} para Cassandra). É uma estrutura
+deliberadamente rasa: indica \textit{onde} alcançar cada SGBD, sem nenhuma
+informação de mapeamento.
+
+As subseções seguintes percorrem essa estrutura na ordem em que o diagrama é lido:
+primeiro a raiz e os elementos comuns a todos os \textit{backends}
+(\texttt{columnSpec}, \texttt{entity} e filtros) e, em seguida, as particularidades
+de cada SGBD, ilustradas com fragmentos concretos de configuração.
+
 \subsection{Raiz, Elementos Comuns e Reforma de Simplificação}
 \label{sec:raiz}
 
-Ambos os arquivos compartilham a mesma raiz: um campo \texttt{version} obrigatório
-(inteiro $\geq 1$) e um bloco opcional por \textit{backend}
-(\texttt{postgres}, \texttt{mongodb}, \texttt{cassandra}, \texttt{redis},
-\texttt{neo4j}). Propriedades adicionais na raiz são \textbf{rejeitadas}
-(\texttt{additionalProperties: false}), impedindo erros de digitação como
-\texttt{postgress} passarem despercebidos.
+Como antecipado na visão geral, ambos os arquivos compartilham a mesma raiz: um
+campo \texttt{version} obrigatório (inteiro $\geq 1$) e um bloco opcional por
+\textit{backend}. A cláusula \texttt{additionalProperties: false} na raiz
+\textbf{rejeita} qualquer propriedade não prevista, impedindo que erros de digitação
+como \texttt{postgress} passem despercebidos.
 
 \textbf{columnSpec.} Cada \textbf{folha} do mapa \texttt{columns} descreve como um valor
 do CSV alimenta um atributo no destino. Quatro campos opcionais compõem esse mapeamento,
@@ -372,7 +432,7 @@ falhas: um \texttt{sgbd\_config.json} inválido é detectado independentemente d
   \centering
   \caption{Fluxo de carregamento e validação dos dois arquivos de configuração.}
   \label{fig:config-pipeline}
-  \includegraphics[width=14cm]{images/figure-config-pipeline}
+  \includegraphics[width=14cm]{images/figure8-config-pipeline}
   \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{figure}
@@ -455,13 +515,13 @@ Dentro de cada \texttt{run\_*\_import}, para cada entidade:
 
 A Figura~\ref{fig:import-algorithm} resume o \textit{pipeline} de execução descrito acima.
 O diagrama-fonte Mermaid encontra-se em
-\texttt{docs-tcc/images/figure4-import-algorithm.mmd} para futuras revisões.
+\texttt{docs-tcc/images/figure9-import-algorithm.mmd} para futuras revisões.
 
 \begin{figure}[H]
   \centering
   \caption{Algoritmo de execução da importação Polyglot Import CSV.}
   \label{fig:import-algorithm}
-  \includegraphics[width=12cm]{images/figure4-import-algorithm}
+  \includegraphics[width=12cm]{images/figure9-import-algorithm}
   \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{figure}
