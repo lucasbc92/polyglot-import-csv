@@ -1,26 +1,35 @@
 \chapter{A Proposta da Ferramenta PolyglotImportCSV}
 
 \section{Visão Geral}
+\label{sec:visao-geral}
 
-A ferramenta \textbf{PolyglotImportCSV} (pacote Python \texttt{polyglot-import-csv}) lê
-um arquivo CSV e \textbf{dois arquivos de configuração JSON} --- um de importação
-(mapeamento) e um de conexão dos SGBDs --- cada um validado por um \textbf{JSON Schema}
-embutido. A CLI executa, em sequência:
+A ferramenta \textbf{PolyglotImportCSV} (pacote Python \texttt{polyglot-import-csv})
+importa os dados de um único arquivo CSV para vários SGBDs em uma única execução.
+Conforme ilustra a Figura~\ref{fig:overview}, a ferramenta recebe \textbf{três
+entradas}: o arquivo de \textbf{dados} (CSV) e \textbf{dois arquivos de configuração}
+em formato JSON --- o arquivo de \textbf{importação}, que mapeia as colunas do CSV
+para as entidades e relacionamentos desejados em cada SGBD, e o arquivo de
+\textbf{conexão}, que declara quais SGBDs estão disponíveis e como alcançá-los. O
+processamento é disparado por um comando de linha de comando (CLI), que primeiro
+\textbf{valida} as três entradas --- cada arquivo de configuração é conferido contra
+um \textbf{JSON Schema} embutido e, em seguida, contra o próprio CSV --- e só então
+executa a importação. A \textbf{saída} são os dados do CSV persistidos em cada SGBD
+presente na configuração, dentre os suportados: PostgreSQL, MongoDB, Cassandra, Redis
+e Neo4j.
 
-\begin{enumerate}
-  \item Carregamento do CSV (como texto, para evitar erros de \textit{parse} em campos com
-        \texttt{+} em \textit{timestamps}).
-  \item Inferência de \textit{kinds} de coluna (inteiro, \textit{float}, data/hora, texto)
-        para validar operadores de filtro.
-  \item Validação cruzada: colunas referenciadas existem no CSV; relacionamentos PostgreSQL
-        e Neo4j referenciam entidades conhecidas; chaves de partição Cassandra estão
-        declaradas quando necessário.
-  \item Para cada \textit{backend} configurado: aplicação de filtros (incluindo o operador
-        \texttt{each} para particionar por valor distinto), materialização de entidades e
-        importação (ou apenas resumo em \texttt{-{}-dry-run}).
-\end{enumerate}
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=11cm]{images/figure7-overview}
+  \caption{Visão geral da ferramenta: entradas, processamento e saídas.}
+  \label{fig:overview}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{figure}
 
-Comando principal:
+O formato dos dois arquivos de configuração é detalhado na
+seção~\ref{sec:config-format}; as validações realizadas antes da importação, na
+seção~\ref{sec:validacao}; e o algoritmo de importação em si, na
+seção~\ref{sec:algoritmo}. O comando principal da CLI é o seguinte:
 
 \begin{lstlisting}[style=bashstyle]
 python -m polyglotimportcsv caminho/dados.csv \
@@ -30,6 +39,27 @@ python -m polyglotimportcsv caminho/dados.csv \
   [--create-schema / --no-create-schema] \
   [--only postgres,redis]
 \end{lstlisting}
+
+Cada parte do comando tem o seguinte papel:
+
+\begin{itemize}
+  \item \texttt{caminho/dados.csv} --- o arquivo CSV com os dados a importar
+        (argumento obrigatório);
+  \item \texttt{-{}-config} --- o caminho do arquivo JSON de importação
+        (o mapeamento);
+  \item \texttt{-{}-sgbd-config} --- o caminho do arquivo JSON de conexão dos SGBDs;
+        se omitido, a ferramenta procura um arquivo \texttt{sgbd\_config.json} no
+        mesmo diretório do arquivo de importação;
+  \item \texttt{-{}-dry-run} (opcional) --- executa somente as validações e reporta
+        quantos registros \textbf{seriam} importados em cada destino, sem conectar a
+        nenhum SGBD; útil para revisar o mapeamento antes da carga real;
+  \item \texttt{-{}-create-schema} / \texttt{-{}-no-create-schema} (opcional) ---
+        controla se a ferramenta cria as estruturas de armazenamento necessárias
+        (tabelas no PostgreSQL, \textit{keyspace} e tabelas no Cassandra) antes de
+        gravar os dados; a criação é ativada por padrão;
+  \item \texttt{-{}-only} (opcional) --- restringe a execução a um subconjunto dos
+        SGBDs configurados (por exemplo, \texttt{-{}-only postgres,redis}).
+\end{itemize}
 
 
 \section{Formato de Configuração (JSON Schema)}
@@ -54,22 +84,31 @@ detalhadas na seção~\ref{sec:validacao}. A representação completa de ambos o
 forma serializada JSON Schema 2020-12 encontra-se no
 Apêndice~\ref{ap:schemas}.
 
-\subsection{Visão Geral da Estrutura}
+\subsection{Visão Geral da Estrutura dos Arquivos de Configuração}
 \label{sec:visao-schema}
 
-Antes de detalhar cada \textit{backend} individualmente, esta subseção apresenta a
+Antes de detalhar cada \textit{backend} --- termo usado daqui em diante para designar
+cada SGBD de destino suportado (\texttt{postgres}, \texttt{mongodb},
+\texttt{cassandra}, \texttt{redis}, \texttt{neo4j}) --- esta subseção apresenta a
 estrutura dos dois schemas como um todo, fornecendo um mapa mental que orienta a
-leitura das subseções seguintes. A Figura~\ref{fig:config-schema} sintetiza
-graficamente os dois JSON Schemas: o de importação (\texttt{import\_config}) no topo
-e o de conexão (\texttt{sgbd\_config}) na base, ambos à esquerda. O diagrama torna
-desnecessária a leitura do schema serializado integral --- mantido no
-Apêndice~\ref{ap:schemas} --- para a compreensão geral da configuração.
+leitura das subseções seguintes. A Figura~\ref{fig:import-schema} sintetiza
+graficamente o schema do arquivo de importação (\texttt{import\_config}) e a
+Figura~\ref{fig:sgbd-schema}, o schema do arquivo de conexão (\texttt{sgbd\_config}).
 
 \begin{figure}[H]
   \centering
-  \caption{Estrutura dos dois JSON Schemas de configuração (importação e conexão).}
-  \label{fig:config-schema}
-  \includegraphics[width=\textwidth]{images/figure7-config-schema}
+  \includegraphics[width=\textwidth]{images/figure8-import-schema}
+  \caption{Estrutura do JSON Schema de importação (\texttt{import\_config}).}
+  \label{fig:import-schema}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{images/figure9-sgbd-schema}
+  \caption{Estrutura do JSON Schema de conexão (\texttt{sgbd\_config}).}
+  \label{fig:sgbd-schema}
   \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{figure}
@@ -84,7 +123,7 @@ importação ele descreve \textit{o que} mapear; no de conexão, \textit{onde} g
 \textbf{O arquivo de importação e a definição reutilizável \texttt{entity}.}
 Seguindo as setas a partir de \texttt{import\_config}, cada bloco de \textit{backend}
 expande-se em um mapa \texttt{entities} (e, para PostgreSQL e Neo4j, também em
-\texttt{relationships}). O ponto central do diagrama --- e da economia de
+\texttt{relationships}). O ponto central da Figura~\ref{fig:import-schema} --- e da economia de
 vocabulário do schema --- é que \textbf{todas as entidades, de todos os
 \textit{backends}, convergem para uma única definição reutilizável}, rotulada
 \texttt{entity}. Em vez de cinco formatos distintos, há apenas um: toda entidade
@@ -92,7 +131,7 @@ possui um mapa \texttt{columns} (o mapeamento de colunas) e, opcionalmente,
 \texttt{filters} (predicados sobre as linhas do CSV) e os campos específicos do
 Cassandra (\texttt{cassandra\_partition} e \texttt{cassandra\_cluster}).
 
-\textbf{O mapeamento recursivo de colunas.} À direita do diagrama, \texttt{columns}
+\textbf{O mapeamento recursivo de colunas.} À direita da Figura~\ref{fig:import-schema}, \texttt{columns}
 remete a \texttt{columnEntry}, definido como uma escolha (\texttt{oneOf}) entre duas
 formas: (i) uma \textbf{folha} --- o \texttt{columnSpec}, que liga uma coluna do CSV
 a um atributo do destino por meio dos campos \texttt{csv\_column},
@@ -103,19 +142,19 @@ Cassandra, Redis) quanto os subdocumentos do MongoDB. As arestas tipadas do Neo4
 e as chaves estrangeiras do PostgreSQL aparecem em \texttt{relationships},
 reutilizando o mesmo \texttt{columnSpec} para eventuais propriedades.
 
-\textbf{O arquivo de conexão.} Na base do diagrama, cada bloco de \textit{backend}
-de \texttt{sgbd\_config} carrega apenas um descritor \texttt{connection} com os
-parâmetros de acesso pertinentes àquela tecnologia (por exemplo, \texttt{uri} para
-MongoDB e Neo4j; \texttt{hosts} e \texttt{keyspace} para Cassandra). É uma estrutura
-deliberadamente rasa: indica \textit{onde} alcançar cada SGBD, sem nenhuma
-informação de mapeamento.
+\textbf{O arquivo de conexão.} Na Figura~\ref{fig:sgbd-schema}, cada bloco de
+\textit{backend} de \texttt{sgbd\_config} carrega apenas um descritor
+\texttt{connection} com os parâmetros de acesso pertinentes àquela tecnologia (por
+exemplo, \texttt{uri} para MongoDB e Neo4j; \texttt{hosts} e \texttt{keyspace} para
+Cassandra). É uma estrutura deliberadamente rasa: indica \textit{onde} alcançar cada
+SGBD, sem nenhuma informação de mapeamento.
 
-As subseções seguintes percorrem essa estrutura na ordem em que o diagrama é lido:
-primeiro a raiz e os elementos comuns a todos os \textit{backends}
+As subseções seguintes percorrem essa estrutura na ordem em que as duas figuras são
+lidas: primeiro a raiz e os elementos comuns a todos os \textit{backends}
 (\texttt{columnSpec}, \texttt{entity} e filtros) e, em seguida, as particularidades
 de cada SGBD, ilustradas com fragmentos concretos de configuração.
 
-\subsection{Raiz, Elementos Comuns e Reforma de Simplificação}
+\subsection{Raiz e Elementos Comuns}
 \label{sec:raiz}
 
 Como antecipado na visão geral, ambos os arquivos compartilham a mesma raiz: um
@@ -146,10 +185,12 @@ conforme a Tabela~\ref{tab:columnspec}.
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{table}
 
-A forma mínima (\texttt{"campo": \{\}}) é usada quando o nome no CSV, no schema e na
-chave JSON coincidem. \texttt{csv\_column} e \texttt{schema\_column} existem porque
-\textbf{nem sempre esses três nomes coincidem}: o campo \texttt{csv\_column} indica a
-origem no CSV; \texttt{schema\_column}, o destino no SGBD.
+A forma mínima (\texttt{"campo": \{\}}) é usada quando três nomes coincidem: a
+\textbf{chave usada no mapeamento} (a chave JSON do próprio objeto \texttt{columns}),
+a \textbf{coluna de origem no CSV} e o \textbf{atributo de destino no SGBD}. Quando
+esses três nomes divergem, \texttt{csv\_column} e \texttt{schema\_column} permitem
+declará-los separadamente: \texttt{csv\_column} indica a origem no CSV;
+\texttt{schema\_column}, o destino no SGBD.
 
 \textbf{entity.} Uma entidade representa um alvo lógico: tabela (PostgreSQL/Cassandra),
 coleção (MongoDB), rótulo de nó (Neo4j) ou entidade Redis. Campos obrigatórios:
@@ -162,36 +203,17 @@ coleção (MongoDB), rótulo de nó (Neo4j) ou entidade Redis. Campos obrigatór
 \texttt{in}, \texttt{not\_in}, \texttt{each}). O operador \texttt{each} particiona a
 entidade por valores distintos da coluna, gerando múltiplos alvos com sufixo opcional.
 
-\textbf{Reforma de simplificação.} Versões anteriores acumulavam campos redundantes,
-mantidos por retrocompatibilidade. Esses campos foram removidos conforme a
-Tabela~\ref{tab:reforma}, reduzindo o vocabulário ao mínimo necessário.
-
-\begin{table}[H]
-  \centering
-  \caption{Campos removidos na reforma de simplificação do schema.}
-  \label{tab:reforma}
-  \begin{tabular}{>{\ttfamily}l >{\raggedright\arraybackslash}p{4cm} >{\raggedright\arraybackslash}p{5cm}}
-    \toprule
-    \normalfont\textbf{Campo removido} & \normalfont\textbf{Substituto} & \textbf{Justificativa} \\
-    \midrule
-    db\_column  & \texttt{schema\_column} & Sinônimo de renomeação no destino; redundante. \\
-    alias\_db   & \texttt{schema\_column} & Segundo sinônimo da mesma operação de renomeação. \\
-    nested      & chaves aninhadas em \texttt{columns} & O aninhamento de subdocumentos MongoDB já é expresso recursivamente pelo mapa \texttt{columns}. \\
-    \bottomrule
-  \end{tabular}
-  \\[4pt]
-  {\footnotesize Fonte: Elaborado pelo autor (2026).}
-\end{table}
-
 \subsection{PostgreSQL}
 
 \textbf{Arquivo de importação.} O bloco \texttt{postgres} contém \texttt{entities}
 (entidades planas --- aninhamento de \texttt{columns} é rejeitado) e, opcionalmente,
 \texttt{relationships} para declarar chaves estrangeiras. O campo \texttt{db\_type} em
 cada \texttt{columnSpec} alimenta a geração de DDL (\texttt{CREATE TABLE}) quando
-\texttt{-{}-create-schema} está ativo.
+\texttt{-{}-create-schema} está ativo. Um exemplo é mostrado no
+Listing~\ref{lst:pg-import}, referente à importação de dados no domínio de
+e-commerce.
 
-\begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação PostgreSQL (e-commerce).}]
+\begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação PostgreSQL (e-commerce).},label={lst:pg-import}]
 "postgres": {
   "entities": {
     "products": {
@@ -201,7 +223,8 @@ cada \texttt{columnSpec} alimenta a geração de DDL (\texttt{CREATE TABLE}) qua
         "price":      { "db_type": "NUMERIC(10,2)" }
       },
       "filters": [{ "column": "action", "operator": "==", "value": "stock" }]
-    }
+    },
+    ...
   },
   "relationships": {
     "product_category": {
@@ -214,11 +237,19 @@ cada \texttt{columnSpec} alimenta a geração de DDL (\texttt{CREATE TABLE}) qua
 }
 \end{lstlisting}
 
+A reticência após a entidade \texttt{products} indica que o arquivo real declara
+outras entidades (\texttt{categories}, \texttt{inventory}, \texttt{orders}) antes do
+bloco \texttt{relationships}, omitidas aqui por brevidade. O campo \texttt{filters}
+restringe a entidade \texttt{products} às linhas do CSV cujo valor da coluna
+\texttt{action} seja \texttt{stock}; a sintaxe geral de filtros foi apresentada
+anteriormente, em \textbf{Filtros}.
+
 \textbf{Arquivo de conexão.} O bloco \texttt{postgres} contém \texttt{connection}
 (host, port, database, user, password) e o campo \texttt{schema} (padrão
-\texttt{public}), que define o schema PostgreSQL de destino das tabelas.
+\texttt{public}), que define o schema PostgreSQL de destino das tabelas. Um exemplo
+de configuração de conexão é mostrado no Listing~\ref{lst:pg-conn}.
 
-\begin{lstlisting}[style=jsonstyle,caption={Fragmento de conexão PostgreSQL.}]
+\begin{lstlisting}[style=jsonstyle,caption={Fragmento de conexão PostgreSQL.},label={lst:pg-conn}]
 "postgres": {
   "connection": {
     "host": "localhost", "port": 5432,
@@ -235,9 +266,12 @@ cada \texttt{columnSpec} alimenta a geração de DDL (\texttt{CREATE TABLE}) qua
 \texttt{entities}. O diferencial do MongoDB é o suporte a
 \textbf{aninhamento de \texttt{columns}}: chaves JSON aninhadas produzem subdocumentos
 BSON, sem necessidade de nenhum campo adicional --- o próprio mapa recursivo expressa a
-hierarquia.
+hierarquia. O Listing~\ref{lst:mongo-import} exemplifica esse aninhamento: as chaves
+\texttt{category} e \texttt{stock} não são colunas do CSV, e sim objetos que agrupam
+outras colunas, produzindo dois subdocumentos dentro de cada documento
+\texttt{product\_catalog}.
 
-\begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação MongoDB com subdocumentos.}]
+\begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação MongoDB com subdocumentos.},label={lst:mongo-import}]
 "mongodb": {
   "entities": {
     "product_catalog": {
@@ -260,9 +294,10 @@ hierarquia.
 
 \textbf{Arquivo de conexão.} O bloco \texttt{mongodb} contém \texttt{connection}
 com \texttt{uri} (string de conexão MongoDB, incluindo usuário e senha quando
-necessário) e \texttt{database} (nome do banco de destino).
+necessário) e \texttt{database} (nome do banco de destino), como no
+Listing~\ref{lst:mongo-conn}.
 
-\begin{lstlisting}[style=jsonstyle,caption={Fragmento de conexão MongoDB.}]
+\begin{lstlisting}[style=jsonstyle,caption={Fragmento de conexão MongoDB.},label={lst:mongo-conn}]
 "mongodb": {
   "connection": {
     "uri": "mongodb://localhost:27017",
@@ -276,11 +311,14 @@ necessário) e \texttt{database} (nome do banco de destino).
 \textbf{Arquivo de importação.} O bloco \texttt{cassandra} contém \texttt{entities}
 planas. Dois campos específicos controlam a chave primária composta do Cassandra:
 \texttt{cassandra\_\allowbreak partition} (lista de colunas CSV que formam a chave de partição)
-e \texttt{cassandra\_\allowbreak cluster} (colunas de agrupamento). A ausência de
-\texttt{cassandra\_\allowbreak partition} é detectada na validação cruzada quando não há nenhuma
-coluna marcada com \texttt{is\_key}.
+e \texttt{cassandra\_\allowbreak cluster} (colunas de agrupamento). O campo
+\texttt{cassandra\_\allowbreak partition} é obrigatório para gerar o schema Cassandra:
+sua ausência só é detectada quando \texttt{-{}-create-schema} está ativo, pois o CQL
+exige ao menos uma coluna de partição na cláusula \texttt{PRIMARY KEY}; esse campo é
+independente de \texttt{is\_key}, que no Cassandra não tem papel na definição da chave
+primária. O Listing~\ref{lst:cassandra-import} ilustra uma chave composta.
 
-\begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação Cassandra com chave composta.}]
+\begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação Cassandra com chave composta.},label={lst:cassandra-import}]
 "cassandra": {
   "entities": {
     "user_activity_log": {
@@ -303,9 +341,10 @@ e \texttt{schema\_column} atuam independentemente.
 
 \textbf{Arquivo de conexão.} O bloco \texttt{cassandra} contém \texttt{connection}
 com \texttt{hosts} (lista de endereços de nós), \texttt{port} (padrão 9042),
-\texttt{keyspace} e \texttt{protocol\_version} opcional.
+\texttt{keyspace} e \texttt{protocol\_version} opcional, conforme o
+Listing~\ref{lst:cassandra-conn}.
 
-\begin{lstlisting}[style=jsonstyle,caption={Fragmento de conexão Cassandra.}]
+\begin{lstlisting}[style=jsonstyle,caption={Fragmento de conexão Cassandra.},label={lst:cassandra-conn}]
 "cassandra": {
   "connection": {
     "hosts": ["localhost"],
@@ -319,10 +358,11 @@ com \texttt{hosts} (lista de endereços de nós), \texttt{port} (padrão 9042),
 
 \textbf{Arquivo de importação.} O bloco \texttt{redis} contém \texttt{entities}.
 A restrição fundamental é que \textbf{cada entidade deve ter exatamente uma coluna
-marcada com \texttt{is\_key}}: esse valor se torna a chave Redis (prefixada pelo nome
-da entidade), e todos os demais campos da linha compõem o valor JSON armazenado.
+marcada com \texttt{is\_key}}: esse valor se torna a chave Redis --- usada exatamente
+como aparece no CSV, sem prefixo de entidade --- e todos os demais campos da linha
+compõem o valor JSON armazenado. O Listing~\ref{lst:redis-import} mostra um exemplo.
 
-\begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação Redis.}]
+\begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação Redis.},label={lst:redis-import}]
 "redis": {
   "entities": {
     "shopping_cart": {
@@ -340,9 +380,9 @@ da entidade), e todos os demais campos da linha compõem o valor JSON armazenado
 
 \textbf{Arquivo de conexão.} O bloco \texttt{redis} contém \texttt{connection}
 com \texttt{host}, \texttt{port} (padrão 6379), \texttt{db} (índice do banco,
-padrão 0) e \texttt{password} opcional.
+padrão 0) e \texttt{password} opcional, como no Listing~\ref{lst:redis-conn}.
 
-\begin{lstlisting}[style=jsonstyle,caption={Fragmento de conexão Redis.}]
+\begin{lstlisting}[style=jsonstyle,caption={Fragmento de conexão Redis.},label={lst:redis-conn}]
 "redis": {
   "connection": {
     "host": "localhost",
@@ -360,9 +400,10 @@ padrão 0) e \texttt{password} opcional.
 predicado de identificação no \texttt{MERGE} Cypher. As arestas em
 \texttt{relationships} declaram \texttt{from} (rótulo de origem), \texttt{to}
 (rótulo de destino), \texttt{type} (tipo da aresta em maiúsculas) e um mapa
-\texttt{columns} opcional com propriedades da aresta.
+\texttt{columns} opcional com propriedades da aresta. O Listing~\ref{lst:neo4j-import}
+mostra um nó de cada rótulo e uma aresta entre eles.
 
-\begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação Neo4j (nós e aresta).}]
+\begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação Neo4j (nós e aresta).},label={lst:neo4j-import}]
 "neo4j": {
   "entities": {
     "User":    { "columns": { "user_id":    { "is_key": true } } },
@@ -385,9 +426,10 @@ predicado de identificação no \texttt{MERGE} Cypher. As arestas em
 
 \textbf{Arquivo de conexão.} O bloco \texttt{neo4j} contém \texttt{connection}
 com \texttt{uri} (bolt://\ldots), \texttt{user}, \texttt{password} e
-\texttt{database} opcional (padrão \texttt{neo4j}).
+\texttt{database} opcional (padrão \texttt{neo4j}), conforme o
+Listing~\ref{lst:neo4j-conn}.
 
-\begin{lstlisting}[style=jsonstyle,caption={Fragmento de conexão Neo4j.}]
+\begin{lstlisting}[style=jsonstyle,caption={Fragmento de conexão Neo4j.},label={lst:neo4j-conn}]
 "neo4j": {
   "connection": {
     "uri":      "bolt://localhost:7687",
@@ -430,14 +472,15 @@ falhas: um \texttt{sgbd\_config.json} inválido é detectado independentemente d
 
 \begin{figure}[H]
   \centering
+  \includegraphics[width=14cm]{images/figure10-config-pipeline}
   \caption{Fluxo de carregamento e validação dos dois arquivos de configuração.}
   \label{fig:config-pipeline}
-  \includegraphics[width=14cm]{images/figure8-config-pipeline}
   \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{figure}
 
 \section{Algoritmo de Execução da Importação}
+\label{sec:algoritmo}
 
 O núcleo da ferramenta está em \texttt{runner.run\_import}. A seguir descreve-se o fluxo
 de alto nível desde a linha de comando até a persistência em cada SGBD.
@@ -456,10 +499,12 @@ de alto nível desde a linha de comando até a persistência em cada SGBD.
         mesclagem das conexões.
   \item \textbf{Carregar CSV} --- \texttt{load\_csv\_with\_inference}: leitura com
         \texttt{dtype=str} (evita erros de \textit{parse} em \textit{timestamps} com
-        \texttt{+}) e inferência de \textit{kind} por coluna (\texttt{integer},
-        \texttt{float}, \texttt{datetime}, \texttt{string}, \texttt{empty}).
+        \texttt{+}) e inferência de \textit{kind} (tipo de dado) por coluna
+        (\texttt{integer}, \texttt{float}, \texttt{datetime}, \texttt{string},
+        \texttt{empty}).
   \item \textbf{Validar config $\times$ CSV} ---
-        \texttt{validate\_import\_config}: checagens semânticas descritas na seção 4.2.5.
+        \texttt{validate\_import\_config}: checagens semânticas descritas na
+        seção~\ref{sec:validacao}.
   \item \textbf{Para cada \textit{backend}} presente na configuração e não filtrado por
         \texttt{-{}-only}:
         \begin{itemize}
@@ -514,14 +559,12 @@ Dentro de cada \texttt{run\_*\_import}, para cada entidade:
 \subsection{Diagrama do Fluxo}
 
 A Figura~\ref{fig:import-algorithm} resume o \textit{pipeline} de execução descrito acima.
-O diagrama-fonte Mermaid encontra-se em
-\texttt{docs-tcc/images/figure9-import-algorithm.mmd} para futuras revisões.
 
 \begin{figure}[H]
   \centering
+  \includegraphics[width=12cm]{images/figure11-import-algorithm}
   \caption{Algoritmo de execução da importação Polyglot Import CSV.}
   \label{fig:import-algorithm}
-  \includegraphics[width=12cm]{images/figure9-import-algorithm}
   \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{figure}

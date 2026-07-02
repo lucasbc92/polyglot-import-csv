@@ -1,0 +1,20 @@
+flowchart LR
+    ROOT["sgbd_config (raiz)\nversion*, additionalProperties: false"]
+    ROOT --> PG[postgres]
+    ROOT --> MG[mongodb]
+    ROOT --> CS[cassandra]
+    ROOT --> RD[redis]
+    ROOT --> NJ[neo4j]
+
+    PG --> PGC["connection(host, port, database,\nuser, password), schema"]
+    MG --> MGC["connection(uri*, database*)"]
+    CS --> CSC["connection(hosts*, port,\nkeyspace*, protocol_version)"]
+    RD --> RDC["connection(host, port, db, password)"]
+    NJ --> NJC["connection(uri*, user*,\npassword*, database)"]
+
+    style ROOT fill:#dbeafe,stroke:#2563eb,color:#1e293b
+    style PGC fill:#fef3c7,stroke:#d97706,color:#1e293b
+    style MGC fill:#fef3c7,stroke:#d97706,color:#1e293b
+    style CSC fill:#fef3c7,stroke:#d97706,color:#1e293b
+    style RDC fill:#fef3c7,stroke:#d97706,color:#1e293b
+    style NJC fill:#fef3c7,stroke:#d97706,color:#1e293b
