@@ -1,0 +1,18 @@
+flowchart LR
+    subgraph GRAPH["Modelo de Grafo — exemplo: recomendação (Neo4j)"]
+        direction LR
+        U1(("User<br/>id: 1042"))
+        U2(("User<br/>id: 2071"))
+        P1(("Product<br/>id: P-37"))
+        P2(("Product<br/>id: P-58"))
+
+        U1 -->|"PURCHASED<br/>{qtd: 1}"| P1
+        U1 -->|"VIEWED"| P2
+        U2 -->|"PURCHASED<br/>{qtd: 2}"| P1
+        P1 -->|"SIMILAR_TO"| P2
+    end
+
+    style U1 fill:#ede9fe,stroke:#7c3aed,color:#1e293b
+    style U2 fill:#ede9fe,stroke:#7c3aed,color:#1e293b
+    style P1 fill:#fae8ff,stroke:#c026d3,color:#1e293b
+    style P2 fill:#fae8ff,stroke:#c026d3,color:#1e293b

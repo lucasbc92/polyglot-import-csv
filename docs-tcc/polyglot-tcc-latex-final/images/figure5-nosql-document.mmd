@@ -1,0 +1,11 @@
+flowchart LR
+    subgraph DOC["Modelo de Documento — exemplo: catálogo de produtos (MongoDB)"]
+        direction LR
+        COLL["Coleção:<br/>product_catalog"]
+        COLL --- D1["{<br/>&nbsp;_id: 'P-37',<br/>&nbsp;nome: 'Cafeteira',<br/>&nbsp;category: {<br/>&nbsp;&nbsp;id: 'C-4',<br/>&nbsp;&nbsp;nome: 'Cozinha'<br/>&nbsp;},<br/>&nbsp;stock: { qtd: 12 }<br/>}"]
+        COLL --- D2["{<br/>&nbsp;_id: 'P-58',<br/>&nbsp;nome: 'Livro NoSQL',<br/>&nbsp;category: {<br/>&nbsp;&nbsp;id: 'C-9',<br/>&nbsp;&nbsp;nome: 'Livros'<br/>&nbsp;},<br/>&nbsp;isbn: '978-85...'<br/>}"]
+    end
+
+    style COLL fill:#ffedd5,stroke:#ea580c,color:#1e293b
+    style D1 fill:#f1f5f9,stroke:#64748b,color:#1e293b
+    style D2 fill:#f1f5f9,stroke:#64748b,color:#1e293b

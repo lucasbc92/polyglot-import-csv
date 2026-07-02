@@ -1,0 +1,14 @@
+flowchart TB
+    subgraph COL["Modelo Colunar — exemplo: log de atividade (Cassandra)"]
+        direction TB
+        RK1["Chave de linha<br/>user_id = 1042"]
+        RK2["Chave de linha<br/>user_id = 2071"]
+
+        RK1 --- F1["família: eventos<br/>—————————<br/>2026-01-10T09:00 → view<br/>2026-01-10T09:05 → add_cart<br/>2026-01-10T09:12 → purchase"]
+        RK2 --- F2["família: eventos<br/>—————————<br/>2026-01-10T10:01 → view<br/>2026-01-10T10:03 → view"]
+    end
+
+    style RK1 fill:#dcfce7,stroke:#16a34a,color:#1e293b
+    style RK2 fill:#dcfce7,stroke:#16a34a,color:#1e293b
+    style F1 fill:#f1f5f9,stroke:#64748b,color:#1e293b
+    style F2 fill:#f1f5f9,stroke:#64748b,color:#1e293b

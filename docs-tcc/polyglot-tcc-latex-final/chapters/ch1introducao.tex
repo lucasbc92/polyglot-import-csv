@@ -1,0 +1,111 @@
+\chapter{Introdução}
+
+\section{Visão Geral}
+
+Nas esferas industrial e acadêmica de bancos de dados, a concepção de que um único modelo
+de dados não atende a todas as necessidades tem conquistado aceitação, apontando para a
+perspectiva de persistência poliglota no futuro. Embora os sistemas de banco de dados
+relacionais devam manter sua predominância, espera-se uma convivência com diversas formas
+de sistemas, como os NoSQL \cite{sadalage2013nosql}.
+
+Algumas pesquisas têm sido feitas na área de persistência poliglota, como sugestões de
+modelos de dados unificados \cite{chillon2023propagating}, comparação de desempenho de
+bancos de dados multi-modelos contra abordagens de persistência poliglota
+\cite{ye2023benchmark}, revisões sistemáticas sobre modelagem poliglota de dados
+\cite{silva2024modelagem}, tutoriais sobre o estado da arte e desafios abertos
+\cite{kiehn2022polyglot}, e a adoção da persistência poliglota em Big Data
+\cite{khine2019review}.
+
+Dada essa necessidade crescente da adoção de persistência poliglota pelas aplicações,
+percebe-se a falta de uma ferramenta única de importação simultânea de dados para diversos
+SGBDs que tratem modelos de dados diferentes. Até onde se investigou (Capítulo 3), não
+foram identificadas ferramentas equivalentes: os importadores nativos atendem a um único
+SGBD por vez, e as soluções de migração ou de modelagem poliglota não realizam a
+materialização simultânea de um mesmo CSV em múltiplos paradigmas de dados --- o que
+ressalta a originalidade desta proposta.
+
+Assim sendo, a intenção deste trabalho é desenvolver a ferramenta \textit{Polyglot Import
+CSV}, que importa dados armazenados em CSV para SGBDs relacionais e NoSQL. A configuração
+da ferramenta será baseada em dois arquivos JSON: um de importação, mapeando entidades e
+relacionamentos em cada SGBD, considerado seu modelo de dados; outro de configuração de
+conexão dos SGBDs envolvidos. A escolha pelo formato JSON deve-se à sua simplicidade e
+ampla adoção; sua finalidade é detalhar, de forma declarativa, o mapeamento das colunas do
+CSV para os modelos de dados de cada SGBD, permitindo a validação prévia da importação.
+
+CSV (\textit{Comma-Separated Values}) é um arquivo de valores separados por vírgulas,
+frequentemente visualizado em Excel e outras planilhas eletrônicas. Pode haver outros tipos
+de valores como delimitadores, mas o mais comum é a vírgula. Muitos sistemas e processos
+hoje convertem seus dados para o formato CSV para saídas de arquivo para outros sistemas,
+relatórios amigáveis para humanos, disponibilização de dados públicos, e outras
+necessidades. É um formato de arquivo padrão com o qual humanos e sistemas já estão
+familiarizados ao usar e manipular.
+
+\section{Objetivos}
+
+\subsection{Objetivo Geral}
+
+Desenvolver a ferramenta \textit{Polyglot Import CSV} que possibilitará a importação de
+dados em arquivos CSV para múltiplos SGBDs: PostgreSQL, Redis, MongoDB, Cassandra ou
+Neo4j.
+
+\subsection{Objetivos Específicos}
+
+\begin{itemize}
+  \item Projetar os arquivos de configuração JSON para que eles sigam sintaxes específicas,
+        e flexíveis para lidar com vários modelos de dados, além de adicionar opções como
+        filtros, escolha de chave primária e escolha do nome da coluna no banco de dados;
+  \item Não permitir configurações incorretas, ou seja, se houver erro em algum lugar dos
+        arquivos de configuração, a importação não deve começar até que sejam corrigidos
+        (validação prévia da configuração);
+  \item Avaliar o desempenho da ferramenta para diferentes volumes e modelos de dados
+        destino;
+  \item Disponibilizar a ferramenta de forma acessível ao usuário: inicialmente por meio de
+        uma interface de linha de comando (CLI), com possibilidade de evolução para uma
+        interface gráfica em trabalhos futuros.
+\end{itemize}
+
+\section{Metodologia}
+
+O desenvolvimento deste trabalho segue uma metodologia de pesquisa aplicada, adotando as
+seguintes etapas:
+
+\begin{enumerate}
+  \item Estudo sobre persistência poliglota e seu estado da arte;
+  \item Estudo sobre os paradigmas não-relacionais que serão abrangidos pela solução:
+        chave-valor, documento, grafo e colunar;
+  \item Estudo de decisão de linguagem de implementação que demonstra melhor produtividade
+        para codificar a solução;
+  \item Projeto dos arquivos de configuração JSON;
+  \item Projeto da instrução principal de importação que utiliza os arquivos de
+        configuração;
+  \item Implementação da solução ``Polyglot Import CSV'';
+  \item Testes da solução ``Polyglot Import CSV'' implementada.
+\end{enumerate}
+
+Na primeira etapa, foi estudado o que é a persistência poliglota, e a sua relevância no
+cenário atual.
+
+Na segunda etapa, foram estudados os diversos modelos de dados não-relacio-
+nais: como cada
+modelo representa suas entidades; se há relacionamentos entre entidades no modelo; se é
+possível a existência de entidades aninhadas e multivaloradas; as limitações de cada
+modelo.
+
+Na terceira etapa, foram estudadas as formas de implementar a solução usando as linguagens
+Java e Python e, pela simplicidade e produtividade, a linguagem Python foi escolhida.
+
+Na quarta e quinta etapas, foram projetados os dois arquivos de configuração JSON --- um
+para o mapeamento da importação (entidades, relacionamentos e colunas) e outro para a
+conexão dos SGBDs --- bem como a instrução principal de importação que os utiliza.
+
+As últimas etapas, que estão em andamento, tratam da implementação da solução proposta,
+``Polyglot Import CSV'', e dos testes da mesma com diferentes volumes de dados CSV e
+importações simples e complexas para diferentes modelos de dados destino.
+
+\section{Estrutura do Trabalho}
+
+Este trabalho está estruturado em cinco capítulos principais. O primeiro aborda os
+objetivos, a metodologia e o contexto que levaram à elaboração deste TCC. O capítulo 2
+revisa fundamentos teóricos. O capítulo 3 apresenta trabalhos relacionados. O capítulo 4
+descreve a proposta da ferramenta \textit{Polyglot Import CSV} e o capítulo 5 as
+atividades futuras (TCC II).
