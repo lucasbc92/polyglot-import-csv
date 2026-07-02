@@ -1,0 +1,22 @@
+flowchart LR
+    A["📄 import_config.json\n(mapeamento: entidades,\nrelacionamentos e colunas)"] --> P
+    B["📄 sgbd_config.json\n(conexão: SGBDs disponíveis\ne como alcançá-los)"] --> P
+    C["📋 dados.csv\n(dados a importar)"] --> P
+
+    P["Polyglot Import CSV\n(comando CLI:\nvalida e importa)"]
+
+    P --> D[("PostgreSQL\n(relacional)")]
+    P --> E[("MongoDB\n(documento)")]
+    P --> F[("Cassandra\n(colunar)")]
+    P --> G[("Redis\n(chave-valor)")]
+    P --> H[("Neo4j\n(grafo)")]
+
+    style A fill:#f8fafc,stroke:#64748b,color:#1e293b
+    style B fill:#f8fafc,stroke:#64748b,color:#1e293b
+    style C fill:#f8fafc,stroke:#64748b,color:#1e293b
+    style P fill:#dbeafe,stroke:#2563eb,color:#1e293b
+    style D fill:#dcfce7,stroke:#16a34a,color:#1e293b
+    style E fill:#dcfce7,stroke:#16a34a,color:#1e293b
+    style F fill:#dcfce7,stroke:#16a34a,color:#1e293b
+    style G fill:#dcfce7,stroke:#16a34a,color:#1e293b
+    style H fill:#dcfce7,stroke:#16a34a,color:#1e293b

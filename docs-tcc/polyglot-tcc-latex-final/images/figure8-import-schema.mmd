@@ -1,0 +1,40 @@
+flowchart LR
+    ROOT["import_config (raiz)\nversion*, additionalProperties: false"]
+    ROOT --> PG[postgres]
+    ROOT --> MG[mongodb]
+    ROOT --> CS[cassandra]
+    ROOT --> RD[redis]
+    ROOT --> NJ[neo4j]
+
+    PG --> PGE["entities*"]
+    PG --> PGR["relationships\nfrom*, to*, foreign_key*, references_key"]
+    MG --> MGE["entities*"]
+    CS --> CSE["entities*"]
+    RD --> RDE["entities*"]
+    NJ --> NJE["entities*"]
+    NJ --> NJR["relationships\nfrom*, to*, type*, columns -> columnSpec"]
+
+    PGE --> ENTITY
+    PGR --> ENTITY
+    MGE --> ENTITY
+    CSE --> ENTITY
+    RDE --> ENTITY
+    NJE --> ENTITY
+    NJR --> ENTITY
+
+    ENTITY["entity\n(definição reutilizável)"]
+    ENTITY --> COLS["columns*\n(mapa recursivo)"]
+    ENTITY --> FILT["filters: [filter]"]
+    ENTITY --> CPART["cassandra_partition: [string]"]
+    ENTITY --> CCLUST["cassandra_cluster: [string]"]
+
+    COLS --> CENTRY{"columnEntry\n(oneOf)"}
+    CENTRY --> CSPEC["columnSpec (folha)\ncsv_column, schema_column,\nis_key, db_type"]
+    CENTRY -->|"objeto aninhado\n(subdocumento MongoDB)\nrecursivo"| CENTRY
+
+    FILT --> FSPEC["filter\ncolumn*, operator*,\nvalue, target_suffix"]
+
+    style ROOT fill:#dbeafe,stroke:#2563eb,color:#1e293b
+    style ENTITY fill:#f8fafc,stroke:#64748b,color:#1e293b
+    style CSPEC fill:#dcfce7,stroke:#16a34a,color:#1e293b
+    style FSPEC fill:#dcfce7,stroke:#16a34a,color:#1e293b
