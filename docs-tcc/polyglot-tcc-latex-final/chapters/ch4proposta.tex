@@ -40,41 +40,31 @@ python -m polyglotimportcsv caminho/dados.csv \
   [--only postgres,redis]
 \end{lstlisting}
 
-Cada parte do comando tem o seguinte papel:
-
-\begin{itemize}
-  \item \texttt{caminho/dados.csv} --- o arquivo CSV com os dados a importar
-        (argumento obrigatório);
-  \item \texttt{-{}-config} --- o caminho do arquivo JSON de importação
-        (o mapeamento);
-  \item \texttt{-{}-sgbd-config} --- o caminho do arquivo JSON de conexão dos SGBDs;
-        se omitido, a ferramenta procura um arquivo \texttt{sgbd\_config.json} no
-        mesmo diretório do arquivo de importação;
-  \item \texttt{-{}-dry-run} (opcional) --- executa somente as validações e reporta
-        quantos registros \textbf{seriam} importados em cada destino, sem conectar a
-        nenhum SGBD; útil para revisar o mapeamento antes da carga real;
-  \item \texttt{-{}-create-schema} / \texttt{-{}-no-create-schema} (opcional) ---
-        controla se a ferramenta cria as estruturas de armazenamento necessárias
-        (tabelas no PostgreSQL, \textit{keyspace} e tabelas no Cassandra) antes de
-        gravar os dados; a criação é ativada por padrão;
-  \item \texttt{-{}-only} (opcional) --- restringe a execução a um subconjunto dos
-        SGBDs configurados (por exemplo, \texttt{-{}-only postgres,redis}).
-\end{itemize}
+Cada parte do comando tem o seguinte papel. O argumento \texttt{caminho/dados.csv} é
+obrigatório e indica o arquivo CSV com os dados a importar. A opção \texttt{-{}-config}
+indica o caminho do arquivo JSON de importação (o mapeamento), e
+\texttt{-{}-sgbd-config} indica o caminho do arquivo JSON de conexão dos SGBDs; se este
+último for omitido, a ferramenta procura um arquivo \texttt{sgbd\_config.json} no mesmo
+diretório do arquivo de importação. As demais opções são facultativas:
+\texttt{-{}-dry-run} executa somente as validações e reporta quantos registros
+\textbf{seriam} importados em cada destino, sem conectar a nenhum SGBD, o que é útil
+para revisar o mapeamento antes da carga real; \texttt{-{}-create-schema} e
+\texttt{-{}-no-create-schema} controlam se a ferramenta cria as estruturas de
+armazenamento necessárias (tabelas no PostgreSQL, \textit{keyspace} e tabelas no
+Cassandra) antes de gravar os dados, sendo a criação ativada por padrão; e
+\texttt{-{}-only} restringe a execução a um subconjunto dos SGBDs configurados (por
+exemplo, \texttt{-{}-only postgres,redis}).
 
 
 \section{Formato de Configuração (JSON Schema)}
 \label{sec:config-format}
 
 A configuração é dividida em \textbf{dois arquivos JSON}, cada um validado estaticamente
-por um \textbf{JSON Schema} próprio embutido em
-\texttt{src/polyglotimportcsv/schemas/} (rascunho 2020-12):
-
-\begin{itemize}
-  \item \texttt{import\_config.json} --- o \textbf{mapeamento} de entidades,
-        relacionamentos e colunas do CSV para cada SGBD;
-  \item \texttt{sgbd\_config.json} --- a \textbf{configuração de conexão} de cada
-        SGBD, isto é, quais bancos estão disponíveis e como alcançá-los.
-\end{itemize}
+por um \textbf{JSON Schema} próprio embutido em \texttt{src/polyglotimportcsv/schemas/}:
+o \texttt{import\_config.json} define o \textbf{mapeamento} de entidades,
+relacionamentos e colunas do CSV para cada SGBD; o \texttt{sgbd\_config.json} define a
+\textbf{configuração de conexão} de cada SGBD, isto é, quais bancos estão disponíveis e
+como alcançá-los.
 
 Essa separação atende a duas preocupações distintas: o \textit{mapeamento} muda conforme o
 domínio dos dados; a \textit{conexão} muda conforme o ambiente (desenvolvimento, testes,
@@ -95,7 +85,7 @@ leitura das subseções seguintes. A Figura~\ref{fig:import-schema} sintetiza
 graficamente o schema do arquivo de importação (\texttt{import\_config}) e a
 Figura~\ref{fig:sgbd-schema}, o schema do arquivo de conexão (\texttt{sgbd\_config}).
 
-\begin{figure}[H]
+\begin{figure}
   \centering
   \includegraphics[width=\textwidth]{images/figure8-import-schema}
   \caption{Estrutura do JSON Schema de importação (\texttt{import\_config}).}
@@ -169,8 +159,6 @@ conforme a Tabela~\ref{tab:columnspec}.
 
 \begin{table}[H]
   \centering
-  \caption{Campos de mapeamento de coluna (\texttt{columnSpec}).}
-  \label{tab:columnspec}
   \begin{tabular}{>{\ttfamily}l l l >{\raggedright\arraybackslash}p{5cm}}
     \toprule
     \normalfont\textbf{Campo} & \textbf{Tipo} & \textbf{Obrigatório} & \textbf{Descrição} \\
@@ -181,7 +169,9 @@ conforme a Tabela~\ref{tab:columnspec}.
     db\_type       & \textit{string} & não & Tipo SQL/CQL para geração de DDL. \\
     \bottomrule
   \end{tabular}
-  \\[4pt]
+  \caption{Campos de mapeamento de coluna (\texttt{columnSpec}).}
+  \label{tab:columnspec}
+  \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{table}
 
@@ -443,24 +433,18 @@ Listing~\ref{lst:neo4j-conn}.
 \subsection{Validação, Consistência entre Arquivos e Fluxo de Carregamento}
 \label{sec:validacao}
 
-A validação ocorre em \textbf{três camadas} antes de qualquer conexão com os SGBDs:
-
-\begin{enumerate}
-  \item \textbf{JSON Schema} --- cada arquivo é validado contra o seu schema
-        (sintaxe, tipos e propriedades permitidas):
-        \begin{itemize}
-          \item \texttt{import\_config.schema.json};
-          \item \texttt{sgbd\_config.schema.json}.
-        \end{itemize}
-  \item \textbf{Consistência entre arquivos}
-        (\texttt{config\_parser.merge\_configs}) --- todo \textit{backend} referenciado no
-        arquivo de importação deve estar declarado no arquivo de conexão.
-  \item \textbf{Validação cruzada CSV}
-        (\texttt{validation.validate\_import\_config}) --- colunas referenciadas existem no
-        CSV; filtros coerentes; FKs PostgreSQL e arestas Neo4j referenciam entidades
-        válidas; \textit{backends} planos não usam \texttt{columns} aninhados; índices
-        \texttt{csv\_column} dentro do intervalo.
-\end{enumerate}
+A validação ocorre em \textbf{três camadas} antes de qualquer conexão com os SGBDs. A
+primeira é a validação por \textbf{JSON Schema}: cada arquivo é validado contra o seu
+schema (sintaxe, tipos e propriedades permitidas) --- \texttt{import\_config.schema.json}
+para o arquivo de importação e \texttt{sgbd\_config.schema.json} para o arquivo de
+conexão. A segunda é a \textbf{consistência entre arquivos}
+(\texttt{config\_parser.merge\_configs}): todo \textit{backend} referenciado no arquivo
+de importação deve estar declarado no arquivo de conexão. A terceira é a
+\textbf{validação cruzada com o CSV} (\texttt{validation.validate\_import\_config}), que
+confere se as colunas referenciadas existem no CSV, se os filtros são coerentes, se as
+chaves estrangeiras do PostgreSQL e as arestas do Neo4j referenciam entidades válidas, se
+os \textit{backends} planos não usam \texttt{columns} aninhados e se os índices
+\texttt{csv\_column} estão dentro do intervalo válido.
 
 Qualquer falha levanta \texttt{BusinessException} e \textbf{impede} o início da
 importação. A Figura~\ref{fig:config-pipeline} apresenta o fluxo completo de
@@ -577,8 +561,6 @@ Considere uma linha do \texttt{ecommerce\_join.csv} com \texttt{action = stock},
 
 \begin{table}[H]
   \centering
-  \caption{Materialização de uma linha \texttt{action=stock} nos diferentes backends.}
-  \label{tab:exemplo-ecommerce}
   {\small%
   \renewcommand{\texttt}[1]{{\footnotesize\ttfamily #1}}%
   \setlength{\extrarowheight}{8pt}%
@@ -598,7 +580,9 @@ Considere uma linha do \texttt{ecommerce\_join.csv} com \texttt{action = stock},
     Neo4j & nó \texttt{Product} & \texttt{action == stock} & Nó \texttt{:Product} com \texttt{product\_\allowbreak id} como chave de \texttt{MERGE}. \\
     \bottomrule
   \end{tabular}}
-  \\[4pt]
+  \caption{Materialização de uma linha \texttt{action=stock} nos diferentes backends.}
+  \label{tab:exemplo-ecommerce}
+  \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{table}
 
@@ -635,8 +619,6 @@ abrir conexões com os SGBDs --- útil para revisar o mapeamento antes da carga.
 
 \begin{table}[H]
   \centering
-  \caption{Contagens reportadas pelo modo \texttt{-{}-dry-run} no cenário e-commerce.}
-  \label{tab:dryrun}
   \begin{tabular}{l l r}
     \toprule
     \textbf{Backend} & \textbf{Destino} & \textbf{Registros (após filtros/deduplicação)} \\
@@ -654,7 +636,9 @@ abrir conexões com os SGBDs --- útil para revisar o mapeamento antes da carga.
     Neo4j      & aresta \texttt{PURCHASED}   & conforme linhas \texttt{purchase} \\
     \bottomrule
   \end{tabular}
-  \\[4pt]
+  \caption{Contagens reportadas pelo modo \texttt{-{}-dry-run} no cenário e-commerce.}
+  \label{tab:dryrun}
+  \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{table}
 
