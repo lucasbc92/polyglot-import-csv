@@ -1,0 +1,229 @@
+\chapter{Arquivos de Configuração do Cenário E-commerce}
+\label{ap:config}
+
+Este apêndice reproduz na íntegra os dois arquivos de configuração do cenário de
+e-commerce utilizado no capítulo~4, tal como se encontram no diretório
+\texttt{data/ecommerce/} do repositório da ferramenta: o arquivo de importação
+\texttt{import\_config.json} (Listagem~\ref{lst:import-config-full}), cujos fragmentos
+por SGBD ilustraram a seção~\ref{sec:config-format}, e o arquivo de conexão
+\texttt{sgbd\_config.json} (Listagem~\ref{lst:sgbd-config-full}). Juntos com o arquivo
+de dados reproduzido no Apêndice~\ref{ap:csv}, eles constituem as três entradas
+completas do exemplo, e neles podem ser conferidas as entidades, filtros e chaves que
+fundamentam as saídas materializadas da seção~\ref{sec:importacao-sgbds} e as contagens
+da Tabela~\ref{tab:dryrun}.
+
+\section{Arquivo de Importação (\texttt{import\_config.json})}
+
+\begin{lstlisting}[style=jsonstyle,caption={Arquivo de importação completo do cenário e-commerce (\texttt{import\_config.json}).},label={lst:import-config-full}]
+{
+  "version": 1,
+
+  "postgres": {
+    "entities": {
+      "categories": {
+        "columns": {
+          "category_id": { "is_key": true, "db_type": "BIGINT" },
+          "category_name": { "db_type": "TEXT" }
+        },
+        "filters": []
+      },
+      "products": {
+        "columns": {
+          "product_id": { "is_key": true, "db_type": "BIGINT" },
+          "product_name": { "db_type": "TEXT" },
+          "product_variant": { "db_type": "TEXT" },
+          "product_brand": { "db_type": "TEXT" },
+          "category_id": { "db_type": "BIGINT" },
+          "price": { "db_type": "NUMERIC(14,2)" }
+        },
+        "filters": []
+      },
+      "inventory": {
+        "columns": {
+          "product_id": { "is_key": true, "db_type": "BIGINT" },
+          "quantity_available": { "db_type": "BIGINT" },
+          "last_restock_date": { "db_type": "TIMESTAMPTZ" },
+          "price": { "db_type": "NUMERIC(14,2)" }
+        },
+        "filters": [{ "column": "action", "operator": "==", "value": "stock" }]
+      },
+      "orders": {
+        "columns": {
+          "order_number": { "is_key": true, "db_type": "TEXT" },
+          "user_id": { "db_type": "TEXT" },
+          "order_date": { "db_type": "TIMESTAMPTZ" },
+          "order_status": { "db_type": "TEXT" },
+          "payment_method": { "db_type": "TEXT" },
+          "quantity": { "db_type": "BIGINT" },
+          "product_id": { "db_type": "BIGINT" },
+          "price": { "db_type": "NUMERIC(14,2)" },
+          "comment": { "db_type": "TEXT" },
+          "rating": { "db_type": "BIGINT" }
+        },
+        "filters": [{ "column": "action", "operator": "==", "value": "purchase" }]
+      }
+    },
+    "relationships": {
+      "product_category": {
+        "from": "products",
+        "to": "categories",
+        "foreign_key": "category_id",
+        "references_key": "category_id"
+      },
+      "order_product": {
+        "from": "orders",
+        "to": "products",
+        "foreign_key": "product_id",
+        "references_key": "product_id"
+      }
+    }
+  },
+
+  "mongodb": {
+    "entities": {
+      "product_catalog": {
+        "columns": {
+          "product_id": {},
+          "product_name": {},
+          "product_variant": {},
+          "product_brand": {},
+          "product_description": {},
+          "product_image": {},
+          "price": {},
+          "category": {
+            "category_id": {},
+            "category_name": {}
+          },
+          "stock": {
+            "quantity_available": {},
+            "last_restock_date": {}
+          }
+        },
+        "filters": [{ "column": "action", "operator": "==", "value": "stock" }]
+      }
+    }
+  },
+
+  "cassandra": {
+    "entities": {
+      "user_activity_log": {
+        "columns": {
+          "user_id": {},
+          "timestamp": { "schema_column": "event_time" },
+          "action": { "schema_column": "event_type" },
+          "product_id": {},
+          "order_number": {},
+          "selected_product_id": {},
+          "shopping_cart_id": {}
+        },
+        "cassandra_partition": ["user_id"],
+        "cassandra_cluster": ["timestamp"],
+        "filters": []
+      }
+    }
+  },
+
+  "redis": {
+    "entities": {
+      "shopping_cart": {
+        "columns": {
+          "shopping_cart_id": { "is_key": true },
+          "cart_product_id": {},
+          "cart_quantity": {}
+        },
+        "filters": [{ "column": "action", "operator": "==", "value": "add_to_cart" }]
+      },
+      "user_session": {
+        "columns": {
+          "user_id": { "is_key": true },
+          "user_name": {},
+          "user_email": {},
+          "timestamp": { "schema_column": "last_seen" }
+        },
+        "filters": [{ "column": "action", "operator": "==", "value": "select_product" }]
+      }
+    }
+  },
+
+  "neo4j": {
+    "entities": {
+      "User": {
+        "columns": {
+          "user_id": { "is_key": true },
+          "user_name": {},
+          "user_email": {}
+        },
+        "filters": [{ "column": "action", "operator": "==", "value": "purchase" }]
+      },
+      "Product": {
+        "columns": {
+          "product_id": { "is_key": true },
+          "product_name": {},
+          "product_brand": {}
+        },
+        "filters": [{ "column": "action", "operator": "==", "value": "stock" }]
+      }
+    },
+    "relationships": {
+      "PURCHASED": {
+        "from": "User",
+        "to": "Product",
+        "type": "PURCHASED",
+        "columns": {
+          "order_number": { "is_key": true },
+          "quantity": {},
+          "price": {},
+          "rating": {}
+        }
+      }
+    }
+  }
+}
+\end{lstlisting}
+
+\section{Arquivo de Conexão (\texttt{sgbd\_config.json})}
+
+\begin{lstlisting}[style=jsonstyle,caption={Arquivo de conexão completo do cenário e-commerce (\texttt{sgbd\_config.json}).},label={lst:sgbd-config-full}]
+{
+  "version": 1,
+
+  "postgres": {
+    "connection": {
+      "host": "127.0.0.1",
+      "port": 5432,
+      "database": "ecommerce",
+      "user": "postgres",
+      "password": "postgres"
+    },
+    "schema": "public"
+  },
+
+  "mongodb": {
+    "connection": {
+      "uri": "mongodb://127.0.0.1:27017",
+      "database": "ecommerce"
+    }
+  },
+
+  "cassandra": {
+    "connection": {
+      "hosts": ["127.0.0.1"],
+      "port": 9042,
+      "keyspace": "ecommerce"
+    }
+  },
+
+  "redis": {
+    "connection": { "host": "127.0.0.1", "port": 6379, "db": 0 }
+  },
+
+  "neo4j": {
+    "connection": {
+      "uri": "bolt://127.0.0.1:7687",
+      "user": "neo4j",
+      "password": "password",
+      "database": "neo4j"
+    }
+  }
+}
+\end{lstlisting}

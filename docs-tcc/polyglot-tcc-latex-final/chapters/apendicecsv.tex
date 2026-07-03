@@ -1,0 +1,209 @@
+\chapter{O Arquivo de Dados \texttt{ecommerce\_join.csv}}
+\label{ap:csv}
+
+Este apêndice reproduz, em forma tabular, o arquivo de dados do cenário e-commerce,
+\texttt{data/ecommerce/ecommerce\_join.csv}, utilizado nas seções~\ref{sec:algoritmo}
+e~\ref{sec:exemplo-uso}. O arquivo contém 32 linhas de dados e 39 colunas, e resulta da
+\textbf{junção} (\textit{join}) de todas as coleções de dados da fonte --- usuários,
+endereços, produtos, categorias, estoque, pedidos, seleções de produto e carrinhos de
+compra --- em uma única tabela larga. Por isso ele é \textbf{esparso}: cada linha
+representa um evento da loja virtual, identificado pela coluna \texttt{action}
+(\texttt{stock}, \texttt{purchase}, \texttt{select\_product} ou \texttt{add\_to\_cart}),
+e preenche apenas as colunas pertinentes àquele tipo de evento --- as demais permanecem
+vazias. A Tabela~\ref{tab:csv-colunas-acao} resume quais grupos de colunas cada ação
+preenche.
+
+\begin{table}[H]
+  \caption{Grupos de colunas do \texttt{ecommerce\_join.csv} preenchidos por ação.}
+  \label{tab:csv-colunas-acao}
+  \centering
+  {
+  \setlength{\extrarowheight}{4pt}%
+  \begin{tabular}{>{\raggedright\arraybackslash}p{2.6cm} >{\raggedright\arraybackslash}p{5.6cm} c c c c}
+    \toprule
+    \textbf{Grupo} & \textbf{Colunas} & \rotatebox{60}{\texttt{stock}} & \rotatebox{60}{\texttt{purchase}} & \rotatebox{60}{\texttt{select\_product}} & \rotatebox{60}{\texttt{add\_to\_cart}} \\
+    \midrule
+    Evento & \texttt{action}, \texttt{timestamp} & $\bullet$ & $\bullet$ & $\bullet$ & $\bullet$ \\
+    Usuário & \texttt{user\_id}, \texttt{user\_name}, \texttt{user\_email} & $\bullet$ & $\bullet$ & $\bullet$ & $\bullet$ \\
+    Endereço do usuário & \texttt{street}, \texttt{neighborhood}, \texttt{state}, \texttt{country}, \texttt{zip\_code} & $\bullet$ & $\bullet$ & --- & --- \\
+    Pedido & \texttt{order\_number}, \texttt{order\_date}, \texttt{order\_status} & --- & $\bullet$ & --- & --- \\
+    Contraparte da venda & \texttt{traded\_with}, \texttt{trader\_street}, \texttt{trader\_neighborhood}, \texttt{trader\_state}, \texttt{trader\_country}, \texttt{trader\_zip\_code} & --- & $\bullet$ & --- & --- \\
+    Avaliação e pagamento & \texttt{comment}, \texttt{rating}, \texttt{payment\_method}, \texttt{quantity} & --- & $\bullet$ & --- & --- \\
+    Produto & \texttt{product\_id}, \texttt{product\_name}, \texttt{product\_variant}, \texttt{product\_brand}, \texttt{product\_description}, \texttt{product\_image} & $\bullet$ & $\bullet$ & --- & --- \\
+    Categoria & \texttt{category\_id}, \texttt{category\_name} & $\bullet$ & $\bullet$ & --- & --- \\
+    Estoque & \texttt{quantity\_available}, \texttt{price}, \texttt{last\_restock\_date} & $\bullet$ & $\bullet$ & --- & --- \\
+    Seleção de produto & \texttt{selected\_product\_id}, \texttt{suggested\_product\_count} & --- & --- & $\bullet$ & --- \\
+    Carrinho & \texttt{shopping\_cart\_id}, \texttt{cart\_product\_id}, \texttt{cart\_quantity} & --- & --- & --- & $\bullet$ \\
+    \bottomrule
+  \end{tabular}}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{table}
+
+Vários valores do arquivo seguem padrões regulares, o que permite apresentá-los de
+forma resumida sem perda de informação. O produto \texttt{Product}$N$ tem
+\texttt{product\_id} $N$, pertence à categoria \texttt{Categoria}$N$
+(\texttt{category\_id} $N$) e tem descrição e imagem padronizadas
+(\texttt{Description}$M$ e \texttt{https://example.com/image}$M$\texttt{.jpg}). Cada
+usuário \texttt{user}$N$ tem e-mail \texttt{user}$N$\texttt{@example.com}, rua
+\texttt{Street }$N$\texttt{, 42} e um identificador alfanumérico
+(\texttt{user\_id}) cujo início é dado na Tabela~\ref{tab:csv-usuarios}, junto com os
+demais dados de endereço. Nas tabelas deste apêndice, os usuários são referidos pelo
+nome (\texttt{user}$N$), tanto na coluna \texttt{user\_id} quanto em
+\texttt{traded\_with}.
+
+\begin{table}[H]
+  \caption{Usuários do \texttt{ecommerce\_join.csv} e seus dados de identificação e endereço.}
+  \label{tab:csv-usuarios}
+  \centering
+  \begin{tabular}{l l l c l r}
+    \toprule
+    \textbf{Usuário} & \textbf{\texttt{user\_id} (início)} & \textbf{Bairro} & \textbf{Estado} & \textbf{País} & \textbf{CEP} \\
+    \midrule
+    user1 & \texttt{7fd7eee7-\ldots} & ABC & CA & United States & 12345 \\
+    user2 & \texttt{f246fb91-\ldots} & DEF & SC & Brasil & 84102149 \\
+    user3 & \texttt{09b3458a-\ldots} & GHI & RS & Brasil & 18057313 \\
+    user4 & \texttt{1fd3d09a-\ldots} & JKL & TO & Brasil & 19645442 \\
+    user5 & \texttt{0331463b-\ldots} & MNO & RJ & Brasil & 30097508 \\
+    user6 & \texttt{f4857da9-\ldots} & PQR & SP & Brasil & 92083256 \\
+    user7 & \texttt{a87df805-\ldots} & STU & SP & Brasil & 67065799 \\
+    user8 & \texttt{c11a1ef2-\ldots} & VWX & SE & Brasil & 18439703 \\
+    user9 & \texttt{d0416923-\ldots} & YZ  & AM & Brasil & 18439666 \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{table}
+
+Nas seções seguintes, o arquivo é apresentado em quatro blocos, um por ação. Cada
+tabela exibe as colunas com valores próprios daquele bloco; as colunas cujo valor é
+constante ou segue os padrões acima são descritas no texto que antecede cada tabela. Os
+valores e a ordem das linhas são exatamente os do arquivo original.
+
+\section{Linhas com \texttt{action == stock}}
+
+As oito linhas de reposição de estoque preenchem os grupos de usuário, endereço,
+produto, categoria e estoque (21 das 39 colunas). Todas ocorrem em 02/11/2023 e, em
+cada uma, \texttt{last\_restock\_date} repete o instante do próprio evento
+(\texttt{timestamp}). A Tabela~\ref{tab:csv-stock-ap} apresenta os valores.
+
+\begin{table}[H]
+  \caption{Linhas \texttt{action == stock} do \texttt{ecommerce\_join.csv}.}
+  \label{tab:csv-stock-ap}
+  \centering
+  \begin{tabular}{c l l l l l r r}
+    \toprule
+    \textbf{Hora} & \textbf{Usuário} & \textbf{Produto} & \textbf{Variante} & \textbf{Marca} & \textbf{Categoria} & \textbf{Qtd.} & \textbf{Preço} \\
+    \midrule
+    03:30 & user1 & Product2 & blue   & Microsoft & Categoria2 &  2 & 50.5 \\
+    06:45 & user2 & Product3 & green  & Google    & Categoria3 &  1 & 52.07 \\
+    09:15 & user2 & Product9 & black  & Pepsi     & Categoria9 & 67 & 32.78 \\
+    12:00 & user8 & Product8 & white  & Google    & Categoria8 & 60 & 46.79 \\
+    14:30 & user9 & Product4 & yellow & Apple     & Categoria4 & 82 & 55.94 \\
+    17:15 & user9 & Product5 & red    & Samsung   & Categoria5 & 57 & 34.21 \\
+    20:00 & user9 & Product6 & orange & Coca-Cola & Categoria6 & 64 & 51.98 \\
+    22:30 & user9 & Product7 & grey   & Audi      & Categoria7 &  1 & 100000 \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{table}
+
+\section{Linhas com \texttt{action == purchase}}
+
+As oito linhas de compra são as mais completas do arquivo (34 das 39 colunas):
+acrescentam aos grupos anteriores os dados de pedido, contraparte da venda, avaliação e
+pagamento. Em todas elas, \texttt{order\_status} vale \texttt{Completed} e
+\texttt{quantity} vale 1; o registro do evento (\texttt{timestamp}) ocorre entre 15 e
+19/11/2023, posterior à data do pedido (\texttt{order\_date}), que inclui hora e fuso
+horário no arquivo original. O pagamento (\texttt{payment\_method}) é \texttt{cash} nos
+pedidos \texttt{ORD1} e \texttt{ORD2} e \texttt{credit\_card} nos demais. As colunas de
+produto, categoria e estoque trazem os dados
+cadastrais do produto negociado, tal como nas linhas de estoque
+(Tabela~\ref{tab:csv-stock-ap}); o endereço do comprador e o do vendedor (colunas
+\texttt{trader\_*}) são os da Tabela~\ref{tab:csv-usuarios}. A
+Tabela~\ref{tab:csv-purchase-ap} apresenta os valores próprios de cada compra.
+
+\begin{table}[H]
+  \caption{Linhas \texttt{action == purchase} do \texttt{ecommerce\_join.csv}.}
+  \label{tab:csv-purchase-ap}
+  \centering
+  \setlength{\tabcolsep}{3pt}%
+  \begin{tabular}{l c l l l c l}
+    \toprule
+    \textbf{Pedido} & \textbf{Data} & \textbf{Comprador} & \textbf{Vendedor} & \textbf{Produto} & \textbf{Nota} & \textbf{Comentário} \\
+    \midrule
+    ORD1 & 03/11 & user1 & user2 & Product2 & 2 & Bad \\
+    ORD2 & 03/11 & user2 & user1 & Product3 & 4 & Bom \\
+    ORD3 & 05/11 & user3 & user9 & Product4 & 3 & Médio \\
+    ORD4 & 07/11 & user4 & user9 & Product5 & 5 & Ótimo produto \\
+    ORD5 & 09/11 & user5 & user9 & Product6 & 1 & Não gostei \\
+    ORD6 & 10/11 & user6 & user9 & Product7 & 5 & --- \\
+    ORD7 & 11/11 & user7 & user8 & Product8 & 1 & Reprovado \\
+    ORD8 & 14/11 & user8 & user2 & Product9 & 4 & Bom, bonito e barato \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{table}
+
+\section{Linhas com \texttt{action == select\_product}}
+
+As oito linhas de seleção de produto preenchem apenas a identificação do evento, o
+usuário e o grupo de seleção (7 das 39 colunas): o produto visualizado
+(\texttt{selected\_product\_id}) e a quantidade de sugestões exibidas
+(\texttt{suggested\_product\_count}), que vale 3 em todas as linhas. A
+Tabela~\ref{tab:csv-select-ap} apresenta os valores.
+
+\begin{table}[H]
+  \caption{Linhas \texttt{action == select\_product} do \texttt{ecommerce\_join.csv}.}
+  \label{tab:csv-select-ap}
+  \centering
+  \begin{tabular}{c l c c}
+    \toprule
+    \textbf{Momento} & \textbf{Usuário} & \textbf{Produto selecionado} & \textbf{Sugestões} \\
+    \midrule
+    15/11 15:09 & user1 & 11 & 3 \\
+    16/11 03:11 & user2 & 12 & 3 \\
+    16/11 17:50 & user3 & 22 & 3 \\
+    17/11 06:05 & user4 & 14 & 3 \\
+    17/11 21:56 & user5 & 14 & 3 \\
+    18/11 10:09 & user6 & 21 & 3 \\
+    18/11 23:20 & user7 & 33 & 3 \\
+    19/11 15:18 & user8 & 17 & 3 \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{table}
+
+\section{Linhas com \texttt{action == add\_to\_cart}}
+
+As oito linhas de adição ao carrinho preenchem a identificação do evento, o usuário e
+o grupo de carrinho (8 das 39 colunas). O identificador do carrinho
+(\texttt{shopping\_cart\_id}) segue o padrão
+\texttt{user:$\langle$user\_id$\rangle$:cart} --- por exemplo,
+\texttt{user:7fd7eee7-\ldots:cart} para \texttt{user1}. A
+Tabela~\ref{tab:csv-cart-ap} apresenta os demais valores.
+
+\begin{table}[H]
+  \caption{Linhas \texttt{action == add\_to\_cart} do \texttt{ecommerce\_join.csv}.}
+  \label{tab:csv-cart-ap}
+  \centering
+  \begin{tabular}{c l c c}
+    \toprule
+    \textbf{Momento} & \textbf{Usuário} & \textbf{Produto adicionado} & \textbf{Quantidade} \\
+    \midrule
+    15/11 15:17 & user1 & 3 & 1 \\
+    16/11 03:27 & user2 & 2 & 1 \\
+    16/11 18:08 & user3 & 2 & 1 \\
+    17/11 06:14 & user4 & 2 & 1 \\
+    17/11 22:11 & user5 & 2 & 1 \\
+    18/11 10:21 & user6 & 2 & 1 \\
+    18/11 23:34 & user7 & 2 & 1 \\
+    19/11 15:29 & user8 & 2 & 1 \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{table}
