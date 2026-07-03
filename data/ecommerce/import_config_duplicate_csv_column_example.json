@@ -1,0 +1,14 @@
+{
+  "postgres": {
+    "entities": {
+      "categories": {
+        "columns": {
+          "category_id_1": { "is_key": true, "db_type": "BIGINT", "csv_column": "category_id", "schema_column": "category_id_1" },
+		  "category_id_2": { "db_type": "BIGINT", "csv_column": "category_id", "schema_column": "category_id_2" },
+          "category_name": { "db_type": "TEXT" }
+        },
+        "filters": []
+      },
+	} 
+  }
+}

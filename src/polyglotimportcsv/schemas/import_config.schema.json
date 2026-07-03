@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://polyglot-import-csv.local/schemas/import_config.schema.json",
   "title": "PolyglotImportCSV import configuration",
-  "description": "Declarative mapping from a wide CSV file to entities and relationships of one or more database backends. Connection settings live in the separate SGBD configuration.",
+  "description": "Declarative mapping from a wide CSV file to entities and relationships of one or more SGBDs. Connection settings live in the separate SGBD configuration.",
   "type": "object",
   "required": ["version"],
   "properties": {
