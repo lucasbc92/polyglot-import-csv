@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import os
+
 from typing import Any, Dict, List
 
 import pandas as pd
@@ -72,17 +74,27 @@ def run_cassandra_import(
             for part_name, part_df in expand_each(dff, ecfg.get("filters") or [], ename):
                 lines.append(f"  table {part_name}: {len(part_df)} row(s)")
         return lines
+        
+    # Force the driver to bypass compiling or searching for legacy C extensions on Windows
+    os.environ['CASS_DRIVER_NO_EXTENSIONS'] = '1'
 
     try:
-        from cassandra.cluster import Cluster  # lazy: driver has heavy deps / py3.12+ quirks
+        # cassandra.cluster fails to import on Python 3.12+ unless a reactor backend
+        # is available (no gevent/eventlet, no compiled libev, and stdlib asyncore was
+        # removed). The "pyasyncore" package restores a working asyncore module so the
+        # import succeeds; we then switch to AsyncioConnection below instead of the
+        # legacy asyncore-based reactor.
+        from cassandra.cluster import Cluster
+        from cassandra.io.asyncioreactor import AsyncioConnection
     except Exception as e:
         raise BusinessException(
             f"Cassandra driver could not be loaded: {e}. "
-            "Use --dry-run without the driver, or Python <=3.11 with build deps; see DataStax docs."
+            "Install the 'pyasyncore' package (pip install pyasyncore) on Python 3.12+; see DataStax docs."
         ) from e
 
     try:
         cluster = Cluster(hosts, port=port, connect_timeout=5)
+        cluster.connection_class = AsyncioConnection  # <-- Forces the driver to use asyncio instead of deleted asyncore
         session = cluster.connect()
     except Exception as e:
         raise BusinessException(f"Cassandra connection failed: {e}") from e

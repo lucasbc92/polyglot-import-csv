@@ -1,5 +1,9 @@
 \chapter{Atividades Futuras}
 
+Como continuidade deste trabalho, as seguintes atividades estão previstas para o
+TCC~II, abrangendo tanto a avaliação da ferramenta quanto a ampliação de suas
+funcionalidades:
+
 \begin{itemize}
   \item \textbf{Avaliação de desempenho} das importações com diferentes volumes de dados
         CSV e configurações, comparando importações simples e complexas para os diferentes
@@ -10,6 +14,15 @@
 
   \item \textbf{Suporte a TSV/Excel} e a processamento \textit{chunked} para CSV maiores
         que a RAM.
+
+  \item \textbf{Importação com um arquivo CSV por entidade.} Identificar a origem de
+        cada dado é um requisito essencial do processo de importação: no formato atual,
+        cada linha do CSV precisa indicar a entidade a que pertence, papel cumprido pela
+        coluna discriminadora \texttt{action} em conjunto com os \texttt{filters} da
+        configuração (Seção~\ref{sec:config-format}). Uma evolução prevista é aceitar um arquivo CSV por
+        entidade, em que o próprio arquivo designa a origem dos dados, dispensando a
+        coluna discriminadora e os filtros correspondentes; o CSV único combinado
+        permaneceria como modo alternativo de entrada.
 
   \item \textbf{Operadores de filtro adicionais} e políticas de coerção de tipos
         configuráveis.

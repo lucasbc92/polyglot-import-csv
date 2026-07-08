@@ -2,13 +2,13 @@
 
 The configuration is split into two files:
 
-* ``sgbd_config.json`` — connection settings for each database backend
+* ``sgbd_config.json`` — connection settings for each SGBD
   (which SGBDs are available and how to reach them).
 * ``import_config.json`` — the entity/relationship/column mapping from the
-  CSV to each backend, with no connection details.
+  CSV to each SGBD, with no connection details.
 
 ``load_config`` validates each file against its own JSON Schema, ensures the
-import configuration only targets backends declared in the SGBD configuration,
+import configuration only targets SGBDs declared in the SGBD configuration,
 and returns a single merged structure (the shape the importers expect).
 """
 

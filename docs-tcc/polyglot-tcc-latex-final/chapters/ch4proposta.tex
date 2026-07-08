@@ -77,9 +77,9 @@ Apêndice~\ref{ap:schemas}.
 \subsection{Visão Geral da Estrutura dos Arquivos de Configuração}
 \label{sec:visao-schema}
 
-Antes de detalhar cada \textit{backend} --- termo usado daqui em diante para designar
-cada SGBD de destino suportado (\texttt{postgres}, \texttt{mongodb},
-\texttt{cassandra}, \texttt{redis}, \texttt{neo4j}) --- esta subseção apresenta a
+Antes de detalhar cada SGBD de destino suportado --- identificado nos arquivos de
+configuração pelos blocos \texttt{postgres}, \texttt{mongodb},
+\texttt{cassandra}, \texttt{redis} e \texttt{neo4j} --- esta subseção apresenta a
 estrutura dos dois schemas como um todo, fornecendo um mapa mental que orienta a
 leitura das subseções seguintes. A Figura~\ref{fig:import-schema} sintetiza
 graficamente o schema do arquivo de importação (\texttt{import\_config}) e a
@@ -104,18 +104,18 @@ Figura~\ref{fig:sgbd-schema}, o schema do arquivo de conexão (\texttt{sgbd\_con
 \end{figure}
 
 \textbf{Raízes simétricas.} Ambos os schemas partilham a mesma raiz: um campo
-\texttt{version} obrigatório e um bloco opcional por \textit{backend}
+\texttt{version} obrigatório e um bloco opcional por SGBD
 (\texttt{postgres}, \texttt{mongodb}, \texttt{cassandra}, \texttt{redis},
 \texttt{neo4j}), com \texttt{additionalProperties: false} rejeitando chaves
 desconhecidas. A diferença está no conteúdo de cada bloco: no arquivo de
 importação ele descreve \textit{o que} mapear; no de conexão, \textit{onde} gravar.
 
 \textbf{O arquivo de importação e a definição reutilizável \texttt{entity}.}
-Seguindo as setas a partir de \texttt{import\_config}, cada bloco de \textit{backend}
+Seguindo as setas a partir de \texttt{import\_config}, cada bloco de SGBD
 expande-se em um mapa \texttt{entities} (e, para PostgreSQL e Neo4j, também em
 \texttt{relationships}). O ponto central da Figura~\ref{fig:import-schema} --- e da economia de
 vocabulário do schema --- é que \textbf{todas as entidades, de todos os
-\textit{backends}, convergem para uma única definição reutilizável}, rotulada
+SGBDs, convergem para uma única definição reutilizável}, rotulada
 \texttt{entity}. Em vez de cinco formatos distintos, há apenas um: toda entidade
 possui um mapa \texttt{columns} (o mapeamento de colunas) e, opcionalmente,
 \texttt{filters} (predicados sobre as linhas do CSV) e os campos específicos do
@@ -133,14 +133,14 @@ e as chaves estrangeiras do PostgreSQL aparecem em \texttt{relationships},
 reutilizando o mesmo \texttt{columnSpec} para eventuais propriedades.
 
 \textbf{O arquivo de conexão.} Na Figura~\ref{fig:sgbd-schema}, cada bloco de
-\textit{backend} de \texttt{sgbd\_config} carrega apenas um descritor
+SGBD de \texttt{sgbd\_config} carrega apenas um descritor
 \texttt{connection} com os parâmetros de acesso pertinentes àquela tecnologia (por
 exemplo, \texttt{uri} para MongoDB e Neo4j; \texttt{hosts} e \texttt{keyspace} para
 Cassandra). É uma estrutura deliberadamente rasa: indica \textit{onde} alcançar cada
 SGBD, sem nenhuma informação de mapeamento.
 
 As subseções seguintes percorrem essa estrutura na ordem em que as duas figuras são
-lidas: primeiro a raiz e os elementos comuns a todos os \textit{backends}
+lidas: primeiro a raiz e os elementos comuns a todos os SGBDs
 (\texttt{columnSpec}, \texttt{entity} e filtros) e, em seguida, as particularidades
 de cada SGBD, ilustradas com fragmentos concretos de configuração.
 
@@ -149,7 +149,7 @@ de cada SGBD, ilustradas com fragmentos concretos de configuração.
 
 Como antecipado na visão geral, ambos os arquivos compartilham a mesma raiz: um
 campo \texttt{version} obrigatório (inteiro $\geq 1$) e um bloco opcional por
-\textit{backend}. A cláusula \texttt{additionalProperties: false} na raiz
+SGBD. A cláusula \texttt{additionalProperties: false} na raiz
 \textbf{rejeita} qualquer propriedade não prevista, impedindo que erros de digitação
 como \texttt{postgress} passem despercebidos.
 
@@ -158,6 +158,8 @@ do CSV alimenta um atributo no destino. Quatro campos opcionais compõem esse ma
 conforme a Tabela~\ref{tab:columnspec}.
 
 \begin{table}[H]
+  \caption{Campos de mapeamento de coluna (\texttt{columnSpec}).}
+  \label{tab:columnspec}
   \centering
   \begin{tabular}{>{\ttfamily}l l l >{\raggedright\arraybackslash}p{5cm}}
     \toprule
@@ -169,18 +171,19 @@ conforme a Tabela~\ref{tab:columnspec}.
     db\_type       & \textit{string} & não & Tipo SQL/CQL para geração de DDL. \\
     \bottomrule
   \end{tabular}
-  \caption{Campos de mapeamento de coluna (\texttt{columnSpec}).}
-  \label{tab:columnspec}
   \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{table}
 
-A forma mínima (\texttt{"campo": \{\}}) é usada quando três nomes coincidem: a
-\textbf{chave usada no mapeamento} (a chave JSON do próprio objeto \texttt{columns}),
-a \textbf{coluna de origem no CSV} e o \textbf{atributo de destino no SGBD}. Quando
-esses três nomes divergem, \texttt{csv\_column} e \texttt{schema\_column} permitem
-declará-los separadamente: \texttt{csv\_column} indica a origem no CSV;
-\texttt{schema\_column}, o destino no SGBD.
+A chave JSON de cada entrada em \texttt{columns} identifica o mapeamento e serve de
+\textbf{padrão} tanto para a coluna de origem no CSV quanto para o atributo de destino
+no SGBD; por isso a forma mínima (\texttt{"campo": \{\}}) basta quando os três nomes
+coincidem. Quando divergem, \texttt{csv\_column} redefine a origem --- por nome de
+cabeçalho ou por índice posicional de base 0, útil para CSVs sem cabeçalho --- e
+\texttt{schema\_column} redefine o destino no SGBD. Por ser um identificador
+independente da origem, a chave permite ainda que uma mesma coluna do CSV alimente
+atributos distintos (entradas com \texttt{csv\_column} repetido), recurso pontual para
+cenários de denormalização.
 
 \textbf{entity.} Uma entidade representa um alvo lógico: tabela (PostgreSQL/Cassandra),
 coleção (MongoDB), rótulo de nó (Neo4j) ou entidade Redis. Campos obrigatórios:
@@ -200,17 +203,18 @@ entidade por valores distintos da coluna, gerando múltiplos alvos com sufixo op
 \texttt{relationships} para declarar chaves estrangeiras. O campo \texttt{db\_type} em
 cada \texttt{columnSpec} alimenta a geração de DDL (\texttt{CREATE TABLE}) quando
 \texttt{-{}-create-schema} está ativo. Um exemplo é mostrado no
-Listing~\ref{lst:pg-import}, referente à importação de dados no domínio de
+Listagem~\ref{lst:pg-import}, referente à importação de dados no domínio de
 e-commerce.
 
 \begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação PostgreSQL (e-commerce).},label={lst:pg-import}]
 "postgres": {
   "entities": {
-    "products": {
+    "inventory": {
       "columns": {
-        "product_id": { "is_key": true, "db_type": "INTEGER" },
-        "name":       { "schema_column": "product_name", "db_type": "VARCHAR(200)" },
-        "price":      { "db_type": "NUMERIC(10,2)" }
+        "product_id":         { "is_key": true, "db_type": "BIGINT" },
+        "quantity_available": { "db_type": "BIGINT" },
+        "last_restock_date":  { "db_type": "TIMESTAMPTZ" },
+        "price":              { "db_type": "NUMERIC(14,2)" }
       },
       "filters": [{ "column": "action", "operator": "==", "value": "stock" }]
     },
@@ -222,29 +226,31 @@ e-commerce.
       "to":   "categories",
       "foreign_key":    "category_id",
       "references_key": "category_id"
-    }
+    },
+    ...
   }
 }
 \end{lstlisting}
 
-A reticência após a entidade \texttt{products} indica que o arquivo real declara
-outras entidades (\texttt{categories}, \texttt{inventory}, \texttt{orders}) antes do
-bloco \texttt{relationships}, omitidas aqui por brevidade. O campo \texttt{filters}
-restringe a entidade \texttt{products} às linhas do CSV cujo valor da coluna
+As reticências indicam que o arquivo real declara outras três entidades
+(\texttt{categories}, \texttt{products} e \texttt{orders}) e uma segunda chave
+estrangeira (\texttt{order\_product}), omitidas aqui por brevidade; o arquivo
+completo é reproduzido no Apêndice~\ref{ap:config}. O campo \texttt{filters}
+restringe a entidade \texttt{inventory} às linhas do CSV cujo valor da coluna
 \texttt{action} seja \texttt{stock}; a sintaxe geral de filtros foi apresentada
 anteriormente, em \textbf{Filtros}.
 
 \textbf{Arquivo de conexão.} O bloco \texttt{postgres} contém \texttt{connection}
 (host, port, database, user, password) e o campo \texttt{schema} (padrão
 \texttt{public}), que define o schema PostgreSQL de destino das tabelas. Um exemplo
-de configuração de conexão é mostrado no Listing~\ref{lst:pg-conn}.
+de configuração de conexão é mostrado na Listagem~\ref{lst:pg-conn}.
 
 \begin{lstlisting}[style=jsonstyle,caption={Fragmento de conexão PostgreSQL.},label={lst:pg-conn}]
 "postgres": {
   "connection": {
-    "host": "localhost", "port": 5432,
-    "database": "ecommerce_db",
-    "user": "pguser", "password": "secret"
+    "host": "127.0.0.1", "port": 5432,
+    "database": "ecommerce",
+    "user": "postgres", "password": "postgres"
   },
   "schema": "public"
 }
@@ -256,7 +262,7 @@ de configuração de conexão é mostrado no Listing~\ref{lst:pg-conn}.
 \texttt{entities}. O diferencial do MongoDB é o suporte a
 \textbf{aninhamento de \texttt{columns}}: chaves JSON aninhadas produzem subdocumentos
 BSON, sem necessidade de nenhum campo adicional --- o próprio mapa recursivo expressa a
-hierarquia. O Listing~\ref{lst:mongo-import} exemplifica esse aninhamento: as chaves
+hierarquia. A Listagem~\ref{lst:mongo-import} exemplifica esse aninhamento: as chaves
 \texttt{category} e \texttt{stock} não são colunas do CSV, e sim objetos que agrupam
 outras colunas, produzindo dois subdocumentos dentro de cada documento
 \texttt{product\_catalog}.
@@ -266,7 +272,9 @@ outras colunas, produzindo dois subdocumentos dentro de cada documento
   "entities": {
     "product_catalog": {
       "columns": {
-        "product_id": { "is_key": true },
+        "product_id":   {},
+        "product_name": {},
+        ...
         "category": {
           "category_id": {},
           "category_name": {}
@@ -282,16 +290,20 @@ outras colunas, produzindo dois subdocumentos dentro de cada documento
 }
 \end{lstlisting}
 
+As reticências omitem as demais colunas cadastrais do produto (variante, marca,
+descrição, imagem e preço), mapeadas de forma direta como \texttt{product\_id} e
+\texttt{product\_name}; o bloco completo encontra-se no Apêndice~\ref{ap:config}.
+
 \textbf{Arquivo de conexão.} O bloco \texttt{mongodb} contém \texttt{connection}
 com \texttt{uri} (string de conexão MongoDB, incluindo usuário e senha quando
 necessário) e \texttt{database} (nome do banco de destino), como no
-Listing~\ref{lst:mongo-conn}.
+Listagem~\ref{lst:mongo-conn}.
 
 \begin{lstlisting}[style=jsonstyle,caption={Fragmento de conexão MongoDB.},label={lst:mongo-conn}]
 "mongodb": {
   "connection": {
-    "uri": "mongodb://localhost:27017",
-    "database": "ecommerce_db"
+    "uri": "mongodb://127.0.0.1:27017",
+    "database": "ecommerce"
   }
 }
 \end{lstlisting}
@@ -306,17 +318,20 @@ e \texttt{cassandra\_\allowbreak cluster} (colunas de agrupamento). O campo
 sua ausência só é detectada quando \texttt{-{}-create-schema} está ativo, pois o CQL
 exige ao menos uma coluna de partição na cláusula \texttt{PRIMARY KEY}; esse campo é
 independente de \texttt{is\_key}, que no Cassandra não tem papel na definição da chave
-primária. O Listing~\ref{lst:cassandra-import} ilustra uma chave composta.
+primária. A Listagem~\ref{lst:cassandra-import} ilustra uma chave composta.
 
 \begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação Cassandra com chave composta.},label={lst:cassandra-import}]
 "cassandra": {
   "entities": {
     "user_activity_log": {
       "columns": {
-        "user_id":    {},
-        "timestamp":  { "schema_column": "event_time" },
-        "action":     {},
-        "product_id": {}
+        "user_id":             {},
+        "timestamp":           { "schema_column": "event_time" },
+        "action":              { "schema_column": "event_type" },
+        "product_id":          {},
+        "order_number":        {},
+        "selected_product_id": {},
+        "shopping_cart_id":    {}
       },
       "cassandra_partition": ["user_id"],
       "cassandra_cluster":   ["timestamp"]
@@ -325,21 +340,22 @@ primária. O Listing~\ref{lst:cassandra-import} ilustra uma chave composta.
 }
 \end{lstlisting}
 
-O campo \texttt{schema\_column} em \texttt{timestamp} renomeia a coluna CSV para
-\texttt{event\_time} na tabela CQL --- exemplo concreto de como \texttt{csv\_column}
-e \texttt{schema\_column} atuam independentemente.
+O campo \texttt{schema\_column} em \texttt{timestamp} e em \texttt{action} renomeia
+essas colunas do CSV para \texttt{event\_time} e \texttt{event\_type} na tabela CQL
+--- exemplo concreto de como \texttt{csv\_column} e \texttt{schema\_column} atuam
+independentemente.
 
 \textbf{Arquivo de conexão.} O bloco \texttt{cassandra} contém \texttt{connection}
 com \texttt{hosts} (lista de endereços de nós), \texttt{port} (padrão 9042),
 \texttt{keyspace} e \texttt{protocol\_version} opcional, conforme o
-Listing~\ref{lst:cassandra-conn}.
+Listagem~\ref{lst:cassandra-conn}.
 
 \begin{lstlisting}[style=jsonstyle,caption={Fragmento de conexão Cassandra.},label={lst:cassandra-conn}]
 "cassandra": {
   "connection": {
     "hosts": ["localhost"],
     "port": 9042,
-    "keyspace": "ecommerce_ks"
+    "keyspace": "ecommerce"
   }
 }
 \end{lstlisting}
@@ -350,32 +366,47 @@ Listing~\ref{lst:cassandra-conn}.
 A restrição fundamental é que \textbf{cada entidade deve ter exatamente uma coluna
 marcada com \texttt{is\_key}}: esse valor se torna a chave Redis --- usada exatamente
 como aparece no CSV, sem prefixo de entidade --- e todos os demais campos da linha
-compõem o valor JSON armazenado. O Listing~\ref{lst:redis-import} mostra um exemplo.
+compõem o valor JSON armazenado. A Listagem~\ref{lst:redis-import} mostra as duas
+entidades do cenário e-commerce.
 
-\begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação Redis.},label={lst:redis-import}]
+\begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação Redis (e-commerce).},label={lst:redis-import}]
 "redis": {
   "entities": {
     "shopping_cart": {
       "columns": {
-        "user_id":        { "is_key": true },
-        "product_id":     {},
-        "quantity":       {},
-        "added_at":       {}
+        "shopping_cart_id": { "is_key": true },
+        "cart_product_id":  {},
+        "cart_quantity":    {}
       },
       "filters": [{ "column": "action", "operator": "==", "value": "add_to_cart" }]
+    },
+    "user_session": {
+      "columns": {
+        "user_id":    { "is_key": true },
+        "user_name":  {},
+        "user_email": {},
+        "timestamp":  { "schema_column": "last_seen" }
+      },
+      "filters": [{ "column": "action", "operator": "==", "value": "select_product" }]
     }
   }
 }
 \end{lstlisting}
 
+A entidade \texttt{shopping\_cart} usa como chave o identificador do carrinho
+(\texttt{shopping\_cart\_id}) e restringe-se às linhas de adição ao carrinho; a
+entidade \texttt{user\_session} usa como chave o identificador do usuário e renomeia
+\texttt{timestamp} para \texttt{last\_seen}, registrando a última atividade de
+navegação de cada usuário.
+
 \textbf{Arquivo de conexão.} O bloco \texttt{redis} contém \texttt{connection}
 com \texttt{host}, \texttt{port} (padrão 6379), \texttt{db} (índice do banco,
-padrão 0) e \texttt{password} opcional, como no Listing~\ref{lst:redis-conn}.
+padrão 0) e \texttt{password} opcional, como na Listagem~\ref{lst:redis-conn}.
 
 \begin{lstlisting}[style=jsonstyle,caption={Fragmento de conexão Redis.},label={lst:redis-conn}]
 "redis": {
   "connection": {
-    "host": "localhost",
+    "host": "127.0.0.1",
     "port": 6379,
     "db": 0
   }
@@ -390,14 +421,28 @@ padrão 0) e \texttt{password} opcional, como no Listing~\ref{lst:redis-conn}.
 predicado de identificação no \texttt{MERGE} Cypher. As arestas em
 \texttt{relationships} declaram \texttt{from} (rótulo de origem), \texttt{to}
 (rótulo de destino), \texttt{type} (tipo da aresta em maiúsculas) e um mapa
-\texttt{columns} opcional com propriedades da aresta. O Listing~\ref{lst:neo4j-import}
+\texttt{columns} opcional com propriedades da aresta. A Listagem~\ref{lst:neo4j-import}
 mostra um nó de cada rótulo e uma aresta entre eles.
 
 \begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação Neo4j (nós e aresta).},label={lst:neo4j-import}]
 "neo4j": {
   "entities": {
-    "User":    { "columns": { "user_id":    { "is_key": true } } },
-    "Product": { "columns": { "product_id": { "is_key": true } } }
+    "User": {
+      "columns": {
+        "user_id":    { "is_key": true },
+        "user_name":  {},
+        "user_email": {}
+      },
+      "filters": [{ "column": "action", "operator": "==", "value": "purchase" }]
+    },
+    "Product": {
+      "columns": {
+        "product_id":    { "is_key": true },
+        "product_name":  {},
+        "product_brand": {}
+      },
+      "filters": [{ "column": "action", "operator": "==", "value": "stock" }]
+    }
   },
   "relationships": {
     "PURCHASED": {
@@ -406,9 +451,10 @@ mostra um nó de cada rótulo e uma aresta entre eles.
       "type": "PURCHASED",
       "columns": {
         "order_number": { "is_key": true },
-        "quantity":     {}
-      },
-      "filters": [{ "column": "action", "operator": "==", "value": "purchase" }]
+        "quantity":     {},
+        "price":        {},
+        "rating":       {}
+      }
     }
   }
 }
@@ -417,14 +463,14 @@ mostra um nó de cada rótulo e uma aresta entre eles.
 \textbf{Arquivo de conexão.} O bloco \texttt{neo4j} contém \texttt{connection}
 com \texttt{uri} (bolt://\ldots), \texttt{user}, \texttt{password} e
 \texttt{database} opcional (padrão \texttt{neo4j}), conforme o
-Listing~\ref{lst:neo4j-conn}.
+Listagem~\ref{lst:neo4j-conn}.
 
 \begin{lstlisting}[style=jsonstyle,caption={Fragmento de conexão Neo4j.},label={lst:neo4j-conn}]
 "neo4j": {
   "connection": {
-    "uri":      "bolt://localhost:7687",
+    "uri":      "bolt://127.0.0.1:7687",
     "user":     "neo4j",
-    "password": "secret",
+    "password": "password",
     "database": "neo4j"
   }
 }
@@ -438,12 +484,12 @@ primeira é a validação por \textbf{JSON Schema}: cada arquivo é validado con
 schema (sintaxe, tipos e propriedades permitidas) --- \texttt{import\_config.schema.json}
 para o arquivo de importação e \texttt{sgbd\_config.schema.json} para o arquivo de
 conexão. A segunda é a \textbf{consistência entre arquivos}
-(\texttt{config\_parser.merge\_configs}): todo \textit{backend} referenciado no arquivo
+(\texttt{config\_parser.merge\_configs}): todo SGBD referenciado no arquivo
 de importação deve estar declarado no arquivo de conexão. A terceira é a
 \textbf{validação cruzada com o CSV} (\texttt{validation.validate\_import\_config}), que
 confere se as colunas referenciadas existem no CSV, se os filtros são coerentes, se as
 chaves estrangeiras do PostgreSQL e as arestas do Neo4j referenciam entidades válidas, se
-os \textit{backends} planos não usam \texttt{columns} aninhados e se os índices
+os SGBDs de modelo plano não usam \texttt{columns} aninhados e se os índices
 \texttt{csv\_column} estão dentro do intervalo válido.
 
 Qualquer falha levanta \texttt{BusinessException} e \textbf{impede} o início da
@@ -466,83 +512,11 @@ falhas: um \texttt{sgbd\_config.json} inválido é detectado independentemente d
 \section{Algoritmo de Execução da Importação}
 \label{sec:algoritmo}
 
-O núcleo da ferramenta está em \texttt{runner.run\_import}. A seguir descreve-se o fluxo
-de alto nível desde a linha de comando até a persistência em cada SGBD.
-
-\subsection{Fases do Algoritmo}
-
-\begin{enumerate}
-  \item \textbf{Entrada} --- caminho do CSV, caminhos dos dois JSON de configuração
-        (importação e conexão) e \textit{flags}: \texttt{-{}-dry-run},
-        \texttt{-{}-create-schema} / \texttt{-{}-no-create-schema}, \texttt{-{}-only}
-        (lista de \textit{backends}).
-  \item \textbf{Carregar configuração} --- \texttt{load\_config}: \textit{parse} dos dois
-        JSON + \texttt{jsonschema
-        .validate} de cada um contra o seu schema embutido +
-        verificação de consistência entre arquivos (\textit{backends} declarados) e
-        mesclagem das conexões.
-  \item \textbf{Carregar CSV} --- \texttt{load\_csv\_with\_inference}: leitura com
-        \texttt{dtype=str} (evita erros de \textit{parse} em \textit{timestamps} com
-        \texttt{+}) e inferência de \textit{kind} (tipo de dado) por coluna
-        (\texttt{integer}, \texttt{float}, \texttt{datetime}, \texttt{string},
-        \texttt{empty}).
-  \item \textbf{Validar config $\times$ CSV} ---
-        \texttt{validate\_import\_config}: checagens semânticas descritas na
-        seção~\ref{sec:validacao}.
-  \item \textbf{Para cada \textit{backend}} presente na configuração e não filtrado por
-        \texttt{-{}-only}:
-        \begin{itemize}
-          \item \textbf{Para cada entidade} declarada em \texttt{entities}:
-          \begin{itemize}
-            \item Aplicar filtros (exceto operador \texttt{each}) sobre o DataFrame completo.
-            \item Expandir partições \texttt{each} (opcional) --- uma entidade lógica pode
-                  gerar várias tabelas/coleções com sufixo.
-            \item \textbf{Materializar} registros conforme o paradigma do \textit{backend}:
-            \begin{itemize}
-              \item PostgreSQL / Cassandra: \texttt{flatten\_entity\_dataframe} ---
-                    seleção, renomeação, deduplicação por \texttt{is\_key}.
-              \item MongoDB: \texttt{mongo\_document\_from\_row} --- documento recursivo
-                    a partir de \texttt{columns} aninhados.
-              \item Redis: \texttt{redis\_payload\_from\_row} --- par (chave, valor JSON).
-              \item Neo4j: propriedades de nós; depois \texttt{MERGE} de arestas a partir
-                    de \texttt{relationships}.
-            \end{itemize}
-            \item Conectar ao SGBD (omitido em \texttt{-{}-dry-run}).
-            \item Criar schema se \texttt{-{}-create-schema} (DDL PostgreSQL/Cassandra).
-            \item Persistir (\texttt{INSERT}, \texttt{insert\_many}, \texttt{SET},
-                  \texttt{MERGE} Cypher, etc.).
-          \end{itemize}
-        \end{itemize}
-  \item \textbf{Saída} --- linhas de \textit{log} com contagens por entidade/\textit{backend}.
-\end{enumerate}
-
-\subsection{Pseudocódigo}
-
-\begin{lstlisting}[style=textstyle]
-funcao run_import(csv_path, config_path, sgbd_config_path, dry_run, create_schema, only):
-    config <- load_config(config_path, sgbd_config_path)
-    df, kinds <- load_csv_with_inference(csv_path)
-    validate_import_config(config, df, kinds)
-
-    para cada backend em (postgres, mongodb, cassandra, redis, neo4j):
-        se backend nao esta em config ou nao esta em only: continuar
-        linhas <- run_{backend}_import(config[backend], df, kinds,
-                                       dry_run, create_schema)
-        registrar linhas no log
-\end{lstlisting}
-
-Dentro de cada \texttt{run\_*\_import}, para cada entidade:
-
-\begin{lstlisting}[style=textstyle]
-    df_filtrado <- apply_filters(df, filtros_sem_each)
-    para cada (nome_particao, df_parte) em expand_each(...):
-        registros <- materializar(df_parte, entidade, backend)
-        se nao dry_run: conectar, DDL se necessario, gravar registros
-\end{lstlisting}
-
-\subsection{Diagrama do Fluxo}
-
-A Figura~\ref{fig:import-algorithm} resume o \textit{pipeline} de execução descrito acima.
+Definidos o formato de configuração e as validações, esta seção descreve como a
+ferramenta executa a importação propriamente dita, desde o comando de linha de comando
+apresentado na seção~\ref{sec:visao-geral} até a persistência em cada SGBD. A
+Figura~\ref{fig:import-algorithm} apresenta o fluxo completo de execução; cada etapa do
+diagrama é explicada textualmente na sequência.
 
 \begin{figure}[H]
   \centering
@@ -553,13 +527,276 @@ A Figura~\ref{fig:import-algorithm} resume o \textit{pipeline} de execução des
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{figure}
 
-\subsection{Exemplo: Uma Linha \texttt{action=stock} no E-commerce}
+A execução parte da \textbf{entrada} fornecida pelo usuário na linha de comando: o
+caminho do arquivo CSV, os caminhos dos dois arquivos JSON de configuração (importação e
+conexão) e as opções de execução \texttt{-{}-dry-run},
+\texttt{-{}-create-schema}/\texttt{-{}-no-create-schema} e \texttt{-{}-only}, descritas
+na seção~\ref{sec:visao-geral}.
 
-Considere uma linha do \texttt{ecommerce\_join.csv} com \texttt{action = stock}, contendo
-\texttt{product\_id}, \texttt{category\_id}, \texttt{quantity\_available},
-\texttt{timestamp}, etc.
+Na etapa de \textbf{carregamento da configuração}, os dois arquivos JSON são lidos e
+validados contra os seus respectivos JSON Schemas (camada 1 da
+seção~\ref{sec:validacao}); em seguida, verifica-se a consistência entre os arquivos ---
+todo SGBD referenciado no arquivo de importação deve estar declarado no
+arquivo de conexão (camada 2) --- e as conexões são mescladas em uma configuração única
+de execução.
+
+Na etapa de \textbf{carregamento do CSV}, todos os valores são lidos inicialmente como
+texto, preservando o conteúdo original do arquivo e evitando conversões prematuras de
+tipo (por exemplo, em datas com fuso horário). Em seguida, a ferramenta classifica cada
+coluna segundo o tipo de dado predominante entre os seus valores --- inteiro, real,
+data/hora, texto ou vazia. Essa classificação alimenta a etapa seguinte, a
+\textbf{validação cruzada entre configuração e CSV} (camada 3 da
+seção~\ref{sec:validacao}). Qualquer falha, em qualquer camada, encerra a execução com
+uma mensagem de erro antes que qualquer conexão com os SGBDs seja aberta.
+
+Validadas as entradas, inicia-se o núcleo do algoritmo, que percorre os SGBDs presentes
+na configuração (excluídos os não selecionados por \texttt{-{}-only}) e, para cada um,
+as entidades declaradas em \texttt{entities}. O tratamento de cada entidade ocorre em
+duas fases: primeiro delimita-se o subconjunto de linhas do CSV que pertence à
+entidade; depois, cada linha desse subconjunto é transformada na estrutura de dados
+própria do modelo de destino.
+
+Na primeira fase, a ferramenta \textbf{aplica os filtros} declarados na configuração,
+operação que corresponde à \textit{seleção} da álgebra relacional: apenas as linhas que
+satisfazem os predicados (por exemplo, \texttt{action == stock}) participam da
+entidade. Havendo filtro com o operador \texttt{each}, a entidade é adicionalmente
+\textbf{particionada} pelos valores distintos da coluna indicada --- um particionamento
+horizontal em que cada valor dá origem a um destino próprio, identificado por sufixo.
+
+Na segunda fase, a \textbf{materialização}, cada linha selecionada é convertida na
+estrutura do modelo de dados de destino, segundo os conceitos revisados no capítulo~2.
+Para os SGBDs de organização tabular (o relacional PostgreSQL e o colunar Cassandra), a
+conversão combina três operações também descritas pela álgebra relacional:
+\textit{projeção} (somente as colunas mapeadas em \texttt{columns} são mantidas),
+\textit{renomeação} (aplicação de \texttt{schema\_column}) e \textit{eliminação de
+duplicatas} com base nas colunas de chave (\texttt{is\_key}), de modo que cada tabela
+receba apenas tuplas únicas. Para o modelo de documentos (MongoDB), os valores da linha
+são agregados em um documento cuja hierarquia reproduz o aninhamento declarado em
+\texttt{columns}, materializando a representação desnormalizada característica desse
+modelo. Para o modelo chave-valor (Redis), cada linha dá origem a um par em que a chave
+é o valor da coluna marcada com \texttt{is\_key} e o valor é a representação textual
+(JSON) dos demais campos mapeados. Para o modelo de grafo (Neo4j), cada linha dá origem
+a um nó com as propriedades mapeadas; na sequência, as arestas declaradas em
+\texttt{relationships} conectam os nós criados, com semântica de mesclagem --- a aresta
+só é criada se ainda não existir, evitando duplicação quando a mesma relação aparece em
+várias linhas do CSV.
+
+Por fim, para cada entidade materializada, a ferramenta \textbf{conecta-se} ao SGBD
+(etapa suprimida quando \texttt{-{}-dry-run} está ativo), \textbf{cria as estruturas de
+armazenamento} quando \texttt{-{}-create-schema} está ativo (tabelas no PostgreSQL;
+\textit{keyspace} e tabelas no Cassandra) e \textbf{grava} os registros por meio da
+operação de escrita própria de cada tecnologia. A \textbf{saída} da execução é um
+relatório com as contagens de registros gravados por entidade e por SGBD, que permite
+conferir o resultado da carga.
+
+\subsection{O Cenário de Exemplo e o Arquivo de Dados}
+\label{sec:exemplo-linha}
+
+Para concretizar o algoritmo, esta subseção e a seguinte percorrem o cenário de
+e-commerce que acompanha o repositório da ferramenta --- o mesmo cenário cujos
+fragmentos de configuração ilustraram a seção~\ref{sec:config-format} e cuja execução
+completa é demonstrada na seção~\ref{sec:exemplo-uso}.
+
+O arquivo de dados do cenário, \texttt{ecommerce\_join.csv}, registra 32 eventos de
+uma loja virtual em 39 colunas. O arquivo resulta da \textbf{junção}
+(\textit{join}) de todas as coleções de dados da fonte --- usuários, endereços,
+produtos, categorias, estoque, pedidos, seleções de produto e carrinhos de compra ---
+em uma única tabela larga, como indica o próprio sufixo \texttt{\_join} do nome. Por
+isso ele é \textbf{esparso}: cada linha representa um evento, identificado pela coluna
+\texttt{action} (\texttt{stock}, \texttt{purchase}, \texttt{select\_product} ou
+\texttt{add\_to\_cart}), e preenche apenas o subconjunto de colunas pertinente àquele
+tipo de evento, permanecendo vazias as demais. O Apêndice~\ref{ap:csv} reproduz o
+arquivo completo em forma tabular, organizado por ação, e indica quais grupos de
+colunas cada ação preenche.
+
+A Tabela~\ref{tab:csv-stock} apresenta as oito linhas de reposição de estoque
+(\texttt{action == stock}), que servem de fio condutor do exemplo. Para caber na
+página, a tabela resume as colunas de identificação, cujos valores seguem padrões
+regulares no arquivo: o produto \texttt{Product}$N$ tem \texttt{product\_id} $N$ e
+pertence à categoria \texttt{Categoria}$N$ (\texttt{category\_id} $N$); o usuário
+\texttt{user}$N$ é identificado por um \texttt{user\_id} alfanumérico
+(por exemplo, \texttt{7fd7eee7-\ldots} para \texttt{user1}), tem e-mail
+\texttt{user}$N$\texttt{@example.com} e um endereço próprio, detalhado no
+Apêndice~\ref{ap:csv}; a descrição e a imagem do produto seguem padrões análogos. Todos
+os eventos de estoque ocorrem em 02/11/2023, e a coluna \texttt{last\_restock\_date}
+repete o instante do próprio evento.
 
 \begin{table}[H]
+  \caption{Linhas \texttt{action == stock} do \texttt{ecommerce\_join.csv} (colunas de identificação resumidas).}
+  \label{tab:csv-stock}
+  \centering
+  \begin{tabular}{c l l l l l r r}
+    \toprule
+    \textbf{Hora} & \textbf{Usuário} & \textbf{Produto} & \textbf{Variante} & \textbf{Marca} & \textbf{Categoria} & \textbf{Qtd.} & \textbf{Preço} \\
+    \midrule
+    03:30 & user1 & Product2 & blue   & Microsoft & Categoria2 &  2 & 50.5 \\
+    06:45 & user2 & Product3 & green  & Google    & Categoria3 &  1 & 52.07 \\
+    09:15 & user2 & Product9 & black  & Pepsi     & Categoria9 & 67 & 32.78 \\
+    12:00 & user8 & Product8 & white  & Google    & Categoria8 & 60 & 46.79 \\
+    14:30 & user9 & Product4 & yellow & Apple     & Categoria4 & 82 & 55.94 \\
+    17:15 & user9 & Product5 & red    & Samsung   & Categoria5 & 57 & 34.21 \\
+    20:00 & user9 & Product6 & orange & Coca-Cola & Categoria6 & 64 & 51.98 \\
+    22:30 & user9 & Product7 & grey   & Audi      & Categoria7 &  1 & 100000 \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026), a partir de \texttt{data/ecommerce/ecommerce\_join.csv}.}
+\end{table}
+
+\subsection{A Importação em Cada SGBD}
+\label{sec:importacao-sgbds}
+
+Apresentado o arquivo de dados, esta subseção acompanha o percurso dessas linhas pelo
+núcleo do algoritmo, SGBD a SGBD. Em cada caso estão em jogo as três entradas da
+ferramenta: as linhas do CSV (Tabela~\ref{tab:csv-stock}), o trecho correspondente do
+arquivo de importação e o arquivo de conexão --- trechos reproduzidos nas listagens da
+seção~\ref{sec:config-format} e, na íntegra, no Apêndice~\ref{ap:config}. O que varia
+de um SGBD para outro é a estrutura de dados produzida como saída, apresentada a
+seguir.
+
+\textbf{PostgreSQL.} O arquivo de importação declara quatro entidades
+(Listagem~\ref{lst:pg-import}). A entidade \texttt{inventory} seleciona as linhas de
+estoque (\texttt{action == stock}) e projeta quatro colunas, com o
+\texttt{product\_id} como chave: o resultado é a relação da
+Tabela~\ref{tab:pg-inventory}, criada e gravada no banco \texttt{ecommerce} declarado
+no arquivo de conexão (Listagem~\ref{lst:pg-conn}). As entidades \texttt{categories} e
+\texttt{products} não declaram filtro --- a seleção abrange o arquivo inteiro ---, mas
+a eliminação de duplicatas pela chave (e o descarte das linhas em que a chave está
+vazia, caso das ações de navegação) reduz o resultado aos oito produtos e oito
+categorias distintos; a entidade \texttt{orders} seleciona as oito linhas de compra. As
+chaves estrangeiras declaradas em \texttt{relationships} ligam produtos a categorias e
+pedidos a produtos.
+
+\begin{table}[H]
+  \caption{Relação \texttt{inventory} materializada no PostgreSQL a partir das linhas de estoque.}
+  \label{tab:pg-inventory}
+  \centering
+  \begin{tabular}{c r c r}
+    \toprule
+    \texttt{product\_id} & \texttt{quantity\_available} & \texttt{last\_restock\_date} & \texttt{price} \\
+    \midrule
+    2 &  2 & 02/11/2023 03:30 & 50.5 \\
+    3 &  1 & 02/11/2023 06:45 & 52.07 \\
+    9 & 67 & 02/11/2023 09:15 & 32.78 \\
+    8 & 60 & 02/11/2023 12:00 & 46.79 \\
+    4 & 82 & 02/11/2023 14:30 & 55.94 \\
+    5 & 57 & 02/11/2023 17:15 & 34.21 \\
+    6 & 64 & 02/11/2023 20:00 & 51.98 \\
+    7 &  1 & 02/11/2023 22:30 & 100000 \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{table}
+
+\textbf{MongoDB.} A entidade \texttt{product\_catalog}
+(Listagem~\ref{lst:mongo-import}) também seleciona as linhas de estoque, mas as
+materializa como documentos: cada linha da Tabela~\ref{tab:csv-stock} torna-se um
+documento cuja hierarquia reproduz o aninhamento declarado em \texttt{columns}. A
+Listagem~\ref{lst:mongo-doc} mostra o documento gerado a partir da primeira linha de
+estoque. Os valores preservam a forma textual lida do CSV, coerente com a política de
+carregamento descrita no início desta seção; os subdocumentos \texttt{category} e
+\texttt{stock} agrupam, sem repetição de linhas, o que no PostgreSQL ficou distribuído
+em três tabelas ligadas por chaves estrangeiras --- a representação desnormalizada
+característica do modelo de documentos.
+
+\begin{lstlisting}[style=jsonstyle,caption={Documento gerado na coleção \texttt{product\_catalog} para a primeira linha de estoque.},label={lst:mongo-doc}]
+{
+  "product_id": "2",
+  "product_name": "Product2",
+  "product_variant": "blue",
+  "product_brand": "Microsoft",
+  "product_description": "Description1",
+  "product_image": "https://example.com/image1.jpg",
+  "price": "50.5",
+  "category": {
+    "category_id": "2",
+    "category_name": "Categoria2"
+  },
+  "stock": {
+    "quantity_available": "2",
+    "last_restock_date": "2023-11-02 03:30:00Z"
+  }
+}
+\end{lstlisting}
+
+\textbf{Cassandra.} A entidade \texttt{user\_activity\_log}
+(Listagem~\ref{lst:cassandra-import}) não declara filtro: todos os 32 eventos do
+arquivo alimentam a tabela, com \texttt{timestamp} e \texttt{action} renomeados para
+\texttt{event\_time} e \texttt{event\_type}. A chave primária composta --- partição por
+\texttt{user\_id}, agrupamento por \texttt{timestamp} --- faz com que todos os eventos
+de um mesmo usuário fiquem na mesma partição, ordenados no tempo. A
+Tabela~\ref{tab:cassandra-particao} mostra a partição do usuário \texttt{user1}: os
+seus quatro eventos, um de cada tipo, com as colunas de referência preenchidas conforme
+a ação --- a mesma esparsidade do CSV de origem, agora a serviço de uma consulta típica
+do modelo colunar (``o histórico de atividades de um usuário'').
+
+\begin{table}[H]
+  \caption{Partição do usuário \texttt{user1} na tabela \texttt{user\_activity\_log} (Cassandra).}
+  \label{tab:cassandra-particao}
+  \centering
+  \setlength{\tabcolsep}{4pt}%
+  \begin{tabular}{c l c c c l}
+    \toprule
+    \rotatebox{60}{\texttt{event\_time}} & \rotatebox{60}{\texttt{event\_type}} & \rotatebox{60}{\texttt{product\_id}} & \rotatebox{60}{\texttt{order\_number}} & \rotatebox{60}{\texttt{selected\_product\_id}} & \rotatebox{60}{\texttt{shopping\_cart\_id}} \\
+    \midrule
+    02/11 03:30 & stock            & 2   & --- & --- & --- \\
+    15/11 15:09 & select\_product  & --- & --- & 11  & --- \\
+    15/11 15:17 & add\_to\_cart    & --- & --- & --- & user:7fd7\ldots:cart \\
+    15/11 15:46 & purchase         & 2   & ORD1 & --- & --- \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{table}
+
+\textbf{Redis.} As linhas de estoque não alimentam o Redis: as duas entidades desse
+SGBD (Listagem~\ref{lst:redis-import}) selecionam as ações de navegação ---
+\texttt{add\_to\_cart} para \texttt{shopping\_cart} e \texttt{select\_product} para
+\texttt{user\_session}. Cada linha selecionada torna-se um par chave-valor: a chave é o
+valor da coluna marcada com \texttt{is\_key} e o valor é a representação textual (JSON)
+dos demais campos mapeados. A Listagem~\ref{lst:redis-pares} mostra os dois pares
+gerados a partir dos eventos de \texttt{user1}; ao todo, são oito carrinhos e oito
+sessões. Note-se que o padrão \texttt{user:\ldots:cart} da chave do carrinho vem do
+próprio CSV (coluna \texttt{shopping\_cart\_id}), e não de alguma convenção da
+ferramenta.
+
+\begin{lstlisting}[style=textstyle,caption={Pares chave-valor gerados no Redis a partir dos eventos de \texttt{user1}.},label={lst:redis-pares}]
+chave: user:7fd7eee7-4675-4f56-ad81-108da6cecebc:cart
+valor: {"cart_product_id": "3", "cart_quantity": "1"}
+
+chave: 7fd7eee7-4675-4f56-ad81-108da6cecebc
+valor: {"user_name": "user1", "user_email": "user1@example.com",
+        "last_seen": "2023-11-15 15:09:30Z"}
+\end{lstlisting}
+
+\textbf{Neo4j.} As entidades e a aresta da Listagem~\ref{lst:neo4j-import} produzem um
+grafo de propriedades: as oito linhas de estoque dão origem aos nós \texttt{Product}; as
+oito linhas de compra dão origem aos nós \texttt{User} --- repare que \texttt{user9},
+que apenas vende e nunca compra, não gera nó --- e às oito arestas
+\texttt{PURCHASED}, identificadas pelo número do pedido e decoradas com quantidade,
+preço e nota da avaliação. A semântica de mesclagem garante que nós e arestas não se
+dupliquem quando a mesma chave reaparece. A Listagem~\ref{lst:neo4j-grafo} representa,
+na notação usual de grafos de propriedades, o fragmento do grafo derivado da primeira
+compra (\texttt{ORD1}).
+
+\begin{lstlisting}[style=textstyle,caption={Fragmento do grafo materializado no Neo4j para o pedido \texttt{ORD1}.},label={lst:neo4j-grafo}]
+(:User {user_id: "7fd7eee7-...", user_name: "user1",
+        user_email: "user1@example.com"})
+    -[:PURCHASED {order_number: "ORD1", quantity: "1",
+                  price: "50.5", rating: "2"}]->
+(:Product {product_id: "2", product_name: "Product2",
+           product_brand: "Microsoft"})
+\end{lstlisting}
+
+A Tabela~\ref{tab:exemplo-ecommerce} consolida o percurso, tomando por referência a
+primeira linha de dados da Tabela~\ref{tab:csv-stock} (o produto \texttt{Product2}):
+cada célula da coluna ``Saída materializada'' decorre diretamente das entidades,
+filtros e \texttt{columns} declarados no arquivo de importação.
+
+\begin{table}[H]
+  \caption{Materialização de uma linha \texttt{action == stock} nos diferentes SGBDs.}
+  \label{tab:exemplo-ecommerce}
   \centering
   {\small%
   \renewcommand{\texttt}[1]{{\footnotesize\ttfamily #1}}%
@@ -571,57 +808,65 @@ Considere uma linha do \texttt{ecommerce\_join.csv} com \texttt{action = stock},
     >{\raggedright\arraybackslash}p{5.25cm}
   }
     \toprule
-    \textbf{Backend} & \textbf{Entidade} & \textbf{Filtro} & \textbf{Saída materializada} \\
+    \textbf{SGBD} & \textbf{Entidade} & \textbf{Filtro} & \textbf{Saída materializada} \\
     \midrule
-    PostgreSQL & \texttt{inventory} & \texttt{action == stock} & Linha plana: \texttt{product\_\allowbreak id}, \texttt{quantity\_\allowbreak available}, \texttt{last\_\allowbreak restock\_\allowbreak date}, \texttt{price}. \\
-    MongoDB & \texttt{product\_catalog} & \texttt{action == stock} & Documento com campos de produto e subobjetos \texttt{category} e \texttt{stock} aninhados. \\
-    Cassandra & \texttt{user\_\allowbreak activity\_\allowbreak log} & nenhum (todas as linhas) & Registro com \texttt{timestamp} renomeado para \texttt{event\_\allowbreak time}; PK composta \texttt{(user\_\allowbreak id, timestamp)}. \\
-    Redis & --- & --- & Entidades Redis usam outros filtros; esta linha não alimenta Redis. \\
-    Neo4j & nó \texttt{Product} & \texttt{action == stock} & Nó \texttt{:Product} com \texttt{product\_\allowbreak id} como chave de \texttt{MERGE}. \\
+    PostgreSQL & \texttt{inventory} (a linha também alimenta \texttt{products} e \texttt{categories}) & \texttt{action == stock} & Linha da Tabela~\ref{tab:pg-inventory}: \texttt{product\_\allowbreak id}, \texttt{quantity\_\allowbreak available}, \texttt{last\_\allowbreak restock\_\allowbreak date}, \texttt{price}. \\
+    MongoDB & \texttt{product\_catalog} & \texttt{action == stock} & Documento da Listagem~\ref{lst:mongo-doc}, com subdocumentos \texttt{category} e \texttt{stock} aninhados. \\
+    Cassandra & \texttt{user\_\allowbreak activity\_\allowbreak log} & nenhum (todas as linhas) & Registro com \texttt{timestamp} e \texttt{action} renomeados para \texttt{event\_\allowbreak time} e \texttt{event\_\allowbreak type}; chave primária composta \texttt{(user\_\allowbreak id, timestamp)}. \\
+    Redis & --- & --- & Entidades Redis selecionam outras ações; esta linha não alimenta o Redis. \\
+    Neo4j & nó \texttt{Product} & \texttt{action == stock} & Nó \texttt{:Product} da Listagem~\ref{lst:neo4j-grafo}, identificado por \texttt{product\_\allowbreak id}. \\
     \bottomrule
   \end{tabular}}
-  \caption{Materialização de uma linha \texttt{action=stock} nos diferentes backends.}
-  \label{tab:exemplo-ecommerce}
   \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{table}
 
 Assim, um \textbf{único CSV largo} alimenta destinos heterogêneos: tabelas relacionais
 filtradas por tipo de evento, documentos aninhados, \textit{log} colunar com renomeação de
-colunas e nós de grafo --- materializando a persistência poliglota descrita no capítulo 2.
+colunas, pares chave-valor e um grafo de propriedades --- materializando a persistência
+poliglota descrita no capítulo 2. As contagens observadas neste percurso (oito
+registros por entidade filtrada e 32 no registro de atividades) reaparecem na
+verificação prévia da execução, apresentada a seguir.
 
-\section{Validação e Execução}
+\subsection{Exemplo de Uso e Evidência de Execução (Cenário E-commerce)}
+\label{sec:exemplo-uso}
 
-Erros de configuração levantam \texttt{BusinessException} antes de qualquer conexão. O
-modo \texttt{-{}-dry-run} lista contagens por entidade sem contatar os SGBDs. O
-\textit{driver} Apache Cassandra é importado de forma tardia para permitir
-\texttt{-{}-dry-run} em ambientes onde a extensão C do \textit{driver} não está disponível
-(por exemplo, versões recentes do Python).
+Esta seção demonstra o uso da ferramenta em uma execução completa do cenário de
+e-commerce que acompanha o código-fonte. Todos os arquivos de entrada encontram-se no
+diretório \texttt{data/\allowbreak ecommerce/} do repositório da ferramenta: o arquivo
+de dados \texttt{ecommerce\_\allowbreak join.csv}, com 32 linhas de eventos de uma loja
+virtual (ações \texttt{stock}, \texttt{purchase}, \texttt{add\_to\_cart} e
+\texttt{select\_product}), reproduzido em forma tabular no Apêndice~\ref{ap:csv}; o
+arquivo de importação \texttt{import\_config.json}, cujos fragmentos por SGBD foram
+apresentados nas Listagens~\ref{lst:pg-import} a~\ref{lst:neo4j-import}; e o arquivo de
+conexão \texttt{sgbd\_config.json}, cujos fragmentos acompanham as mesmas subseções ---
+ambos reproduzidos na íntegra no Apêndice~\ref{ap:config}. Além
+deles, o arquivo \texttt{docker-compose.yml}, na raiz do repositório, define os
+contêineres dos cinco SGBDs usados no exemplo. A execução usa o comando apresentado na
+seção~\ref{sec:visao-geral}, instanciado com esses arquivos:
 
-Testes automatizados (\texttt{pytest}) cobrem validação de schema, separação e mesclagem
-dos dois arquivos de configuração, mapeamento de colunas (\texttt{csv\_column},
-\texttt{schema\_column}, aninhamento), filtros e \textit{smoke tests} de validação +
-\textit{dry-run}. O arquivo \texttt{docker-compose.yml} na raiz define os contêineres de
-PostgreSQL, Redis, MongoDB, Cassandra e Neo4j para testes de integração manuais; o script
-\texttt{run\_example.sh} lê o \texttt{sgbd\_config.json} e \textbf{sobe apenas os SGBDs
-ali declarados}, em seguida orquestra um \textit{dry-run} e a importação real com
-\texttt{-{}-create-schema}.
-
-\subsection{Evidência de Execução (Cenário E-commerce)}
+\begin{lstlisting}[style=bashstyle]
+python -m polyglotimportcsv data/ecommerce/ecommerce_join.csv \
+  --config data/ecommerce/import_config.json \
+  --sgbd-config data/ecommerce/sgbd_config.json \
+  --dry-run
+\end{lstlisting}
 
 \looseness=-1
-O arquivo \texttt{data/\allowbreak ecommerce/\allowbreak ecommerce\_\allowbreak join.csv}
-contém 32 linhas de eventos
-(\texttt{stock}, \texttt{purchase}, \texttt{add\_to\_cart}, \texttt{select\_product}).
-Usando \texttt{import\_config.json} e \texttt{sgbd\_config.json} com a \textit{flag}
-\texttt{-{}-dry-run}, a ferramenta reporta as contagens da Tabela~\ref{tab:dryrun} sem
-abrir conexões com os SGBDs --- útil para revisar o mapeamento antes da carga.
+Com a \textit{flag} \texttt{-{}-dry-run}, a ferramenta executa todas as validações e a
+materialização, mas não abre conexão com nenhum SGBD --- o \textit{driver} Apache
+Cassandra, por exemplo, sequer é importado, o que permite o \textit{dry-run} em
+ambientes onde a sua extensão C não está disponível. O resultado são as contagens de
+registros por destino mostradas na Tabela~\ref{tab:dryrun}, úteis para revisar o
+mapeamento antes da carga real.
 
 \begin{table}[H]
+  \caption{Contagens reportadas pelo modo \texttt{-{}-dry-run} no cenário e-commerce.}
+  \label{tab:dryrun}
   \centering
   \begin{tabular}{l l r}
     \toprule
-    \textbf{Backend} & \textbf{Destino} & \textbf{Registros (após filtros/deduplicação)} \\
+    \textbf{SGBD} & \textbf{Destino} & \textbf{Registros (após filtros/deduplicação)} \\
     \midrule
     PostgreSQL & \texttt{categories}        & 8 \\
     PostgreSQL & \texttt{products}           & 8 \\
@@ -633,15 +878,22 @@ abrir conexões com os SGBDs --- útil para revisar o mapeamento antes da carga.
     Redis      & \texttt{user\_session}      & 8 \\
     Neo4j      & nó \texttt{User}            & 8 \\
     Neo4j      & nó \texttt{Product}         & 8 \\
-    Neo4j      & aresta \texttt{PURCHASED}   & conforme linhas \texttt{purchase} \\
+    Neo4j      & aresta \texttt{PURCHASED}   & 8 (uma por linha \texttt{purchase}) \\
     \bottomrule
   \end{tabular}
-  \caption{Contagens reportadas pelo modo \texttt{-{}-dry-run} no cenário e-commerce.}
-  \label{tab:dryrun}
   \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{table}
 
-Com \texttt{docker compose up -d} e \texttt{run\_example.sh} (ou importação sem
-\texttt{-{}-dry-run}), os mesmos volumes são persistidos nos cinco \textit{backends}
-configurados, materializando o cenário poliglota da seção 2.1.
+Para a importação real, basta subir os contêineres com \texttt{docker compose up -d} e
+repetir o mesmo comando sem a \textit{flag} \texttt{-{}-dry-run}: os mesmos volumes da
+Tabela~\ref{tab:dryrun} são então persistidos nos cinco SGBDs configurados,
+materializando o cenário poliglota da seção 2.1. Alternativamente, o script
+\texttt{run\_example.sh}, na raiz do repositório, automatiza o fluxo completo: lê o
+\texttt{sgbd\_config.json}, sobe apenas os contêineres dos SGBDs ali declarados e, em
+seguida, executa o \textit{dry-run} e a importação real com \texttt{-{}-create-schema}.
+
+Complementarmente à evidência de execução, testes automatizados (\texttt{pytest}) cobrem
+a validação por schema, a separação e mesclagem dos dois arquivos de configuração, o
+mapeamento de colunas (\texttt{csv\_column}, \texttt{schema\_column}, aninhamento), os
+filtros e \textit{smoke tests} de validação com \textit{dry-run}.
