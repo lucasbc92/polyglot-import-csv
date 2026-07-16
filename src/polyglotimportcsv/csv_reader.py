@@ -8,6 +8,8 @@ from typing import Dict, Tuple
 
 import pandas as pd
 
+from polyglotimportcsv.casting import is_boolean_series
+
 
 def read_csv(path: str | Path) -> pd.DataFrame:
     """
@@ -37,6 +39,9 @@ def infer_column_kinds(df: pd.DataFrame) -> Dict[str, str]:
         s2 = s.replace("", pd.NA).dropna()
         if s2.empty:
             kinds[col] = "empty"
+            continue
+        if is_boolean_series(s2):
+            kinds[col] = "boolean"
             continue
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
