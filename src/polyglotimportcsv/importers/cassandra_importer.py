@@ -9,13 +9,14 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
-from polyglotimportcsv.business_exception import BusinessException
+from polyglotimportcsv.business_exception import ImportExecutionError
 from polyglotimportcsv.entity_utils import (
     flat_leaf_columns,
     resolve_csv_column,
     target_field_name,
 )
 from polyglotimportcsv.filter_engine import apply_filters, expand_each
+from polyglotimportcsv.mapping_resolver import BoundEntity
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,8 @@ def _cassandra_type_for(spec: Dict[str, Any]) -> str:
         return "bigint"
     if t in ("DOUBLE", "FLOAT", "NUMERIC", "DECIMAL"):
         return "double"
+    if t in ("BOOLEAN", "BOOL"):
+        return "boolean"
     return "text"
 
 
@@ -53,28 +56,26 @@ def _primary_key_clause(part_db: List[str], clust_db: List[str]) -> str:
 
 def run_cassandra_import(
     backend_cfg: Dict[str, Any],
-    df: pd.DataFrame,
-    column_kinds: Dict[str, str],
+    entities: Dict[str, "BoundEntity"],
     *,
     dry_run: bool,
     create_schema: bool,
 ) -> List[str]:
     lines: List[str] = []
     conn = backend_cfg.get("connection") or {}
-    entities = backend_cfg.get("entities") or {}
     hosts = conn.get("hosts") or ["127.0.0.1"]
     port = int(conn.get("port", 9042))
     keyspace = conn.get("keyspace", "ecommerce")
 
     if dry_run:
         lines.append("[cassandra] dry-run: would create tables and insert rows.")
-        for ename, ecfg in entities.items():
-            non_each = [f for f in (ecfg.get("filters") or []) if f.get("operator") != "each"]
-            dff = apply_filters(df, non_each, column_kinds)
-            for part_name, part_df in expand_each(dff, ecfg.get("filters") or [], ename):
+        for ename, be in entities.items():
+            non_each = [f for f in (be.cfg.get("filters") or []) if f.get("operator") != "each"]
+            dff = apply_filters(be.df, non_each, be.kinds)
+            for part_name, part_df in expand_each(dff, be.cfg.get("filters") or [], ename):
                 lines.append(f"  table {part_name}: {len(part_df)} row(s)")
         return lines
-        
+
     # Force the driver to bypass compiling or searching for legacy C extensions on Windows
     os.environ['CASS_DRIVER_NO_EXTENSIONS'] = '1'
 
@@ -87,7 +88,7 @@ def run_cassandra_import(
         from cassandra.cluster import Cluster
         from cassandra.io.asyncioreactor import AsyncioConnection
     except Exception as e:
-        raise BusinessException(
+        raise ImportExecutionError(
             f"Cassandra driver could not be loaded: {e}. "
             "Install the 'pyasyncore' package (pip install pyasyncore) on Python 3.12+; see DataStax docs."
         ) from e
@@ -97,7 +98,7 @@ def run_cassandra_import(
         cluster.connection_class = AsyncioConnection  # <-- Forces the driver to use asyncio instead of deleted asyncore
         session = cluster.connect()
     except Exception as e:
-        raise BusinessException(f"Cassandra connection failed: {e}") from e
+        raise ImportExecutionError(f"Cassandra connection failed: {e}") from e
 
     session.execute(
         f"""
@@ -107,29 +108,29 @@ def run_cassandra_import(
     )
     session.set_keyspace(keyspace)
 
-    for ename, ecfg in entities.items():
-        csv_columns = list(df.columns)
-        pmap = _source_to_db_map(ecfg, csv_columns)
-        part_src = ecfg.get("cassandra_partition") or []
-        clust_src = ecfg.get("cassandra_cluster") or []
+    for ename, be in entities.items():
+        csv_columns = list(be.df.columns)
+        pmap = _source_to_db_map(be.cfg, csv_columns)
+        part_src = be.cfg.get("cassandra_partition") or []
+        clust_src = be.cfg.get("cassandra_cluster") or []
         part_db = [pmap[c] for c in part_src]
         clust_db = [pmap[c] for c in clust_src]
         all_src = [
             resolve_csv_column(fk, spec, csv_columns)
-            for fk, _, spec in flat_leaf_columns(ecfg)
+            for fk, _, spec in flat_leaf_columns(be.cfg)
         ]
         other_src = [s for s in all_src if s not in list(part_src) + list(clust_src)]
         ordered_src = list(part_src) + list(clust_src) + other_src
         ordered_db: List[str] = [pmap[s] for s in ordered_src]
         spec_by_src = {
             resolve_csv_column(fk, spec, csv_columns): spec
-            for fk, _, spec in flat_leaf_columns(ecfg)
+            for fk, _, spec in flat_leaf_columns(be.cfg)
         }
         pk_clause = _primary_key_clause(part_db, clust_db)
 
-        non_each = [f for f in (ecfg.get("filters") or []) if f.get("operator") != "each"]
-        dff = apply_filters(df, non_each, column_kinds)
-        for table, part_df in expand_each(dff, ecfg.get("filters") or [], ename):
+        non_each = [f for f in (be.cfg.get("filters") or []) if f.get("operator") != "each"]
+        dff = apply_filters(be.df, non_each, be.kinds)
+        for table, part_df in expand_each(dff, be.cfg.get("filters") or [], ename):
             if create_schema:
                 col_defs = []
                 for src in ordered_src:
