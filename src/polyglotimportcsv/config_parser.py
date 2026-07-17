@@ -4,8 +4,9 @@ The configuration is split into two files:
 
 * ``sgbd_config.json`` — connection settings for each SGBD
   (which SGBDs are available and how to reach them).
-* ``import_config.json`` — the entity/relationship/column mapping from the
-  CSV to each SGBD, with no connection details.
+* ``import_config.json`` — a ``sources`` block naming the CSV(s) to import,
+  plus the entity/relationship/column mapping from those sources to each
+  SGBD, with no connection details.
 
 ``load_config`` validates each file against its own JSON Schema, ensures the
 import configuration only targets SGBDs declared in the SGBD configuration,
@@ -22,7 +23,7 @@ from typing import Any, Dict, Optional, Union
 
 import jsonschema
 
-from polyglotimportcsv.business_exception import BusinessException
+from polyglotimportcsv.business_exception import BusinessException, ConfigError
 
 BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
 
@@ -40,12 +41,12 @@ def _load_schema(name: str) -> Dict[str, Any]:
 def _read_json(path: Union[str, Path], label: str) -> Dict[str, Any]:
     p = Path(path)
     if not p.is_file():
-        raise BusinessException(f"{label} file not found: {p}")
+        raise ConfigError(f"{label} file not found: {p}")
     with p.open(encoding="utf-8") as f:
         try:
             return json.load(f)
         except json.JSONDecodeError as e:
-            raise BusinessException(f"Invalid JSON in {label} ({p}): {e}") from e
+            raise ConfigError(f"Invalid JSON in {label} ({p}): {e}") from e
 
 
 def load_sgbd_config(path: Union[str, Path]) -> Dict[str, Any]:
@@ -67,7 +68,7 @@ def validate_sgbd_config(data: Dict[str, Any]) -> None:
     try:
         jsonschema.validate(instance=data, schema=schema)
     except jsonschema.ValidationError as e:
-        raise BusinessException(f"Invalid SGBD configuration JSON: {e.message}") from e
+        raise ConfigError(f"Invalid SGBD configuration JSON: {e.message}") from e
 
 
 def validate_import_config_schema(data: Dict[str, Any]) -> None:
@@ -75,7 +76,7 @@ def validate_import_config_schema(data: Dict[str, Any]) -> None:
     try:
         jsonschema.validate(instance=data, schema=schema)
     except jsonschema.ValidationError as e:
-        raise BusinessException(f"Invalid import configuration JSON: {e.message}") from e
+        raise ConfigError(f"Invalid import configuration JSON: {e.message}") from e
 
 
 def merge_configs(
@@ -89,13 +90,13 @@ def merge_configs(
     import_backends = [b for b in BACKENDS if b in import_cfg]
     missing = [b for b in import_backends if b not in sgbd_cfg]
     if missing:
-        raise BusinessException(
+        raise ConfigError(
             "Import config targets backend(s) not declared in the SGBD config: "
             f"{', '.join(missing)}. Add them to sgbd_config.json or remove them "
             "from import_config.json."
         )
 
-    merged: Dict[str, Any] = {"version": import_cfg.get("version", 1)}
+    merged: Dict[str, Any] = {"sources": copy.deepcopy(import_cfg.get("sources") or {})}
     for backend in import_backends:
         backend_cfg = copy.deepcopy(import_cfg[backend])
         sgbd_backend = sgbd_cfg.get(backend) or {}

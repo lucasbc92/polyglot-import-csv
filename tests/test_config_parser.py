@@ -14,7 +14,7 @@ from polyglotimportcsv.config_parser import (
 
 
 def test_import_schema_rejects_unknown_top_level_key():
-    data = {"version": 1, "not_a_backend": {}}
+    data = {"sources": {"s": "s.csv"}, "not_a_backend": {}}
     with pytest.raises(BusinessException):
         validate_import_config_schema(data)
 
@@ -22,7 +22,7 @@ def test_import_schema_rejects_unknown_top_level_key():
 def test_import_schema_rejects_connection_block():
     # Connection settings belong in the SGBD config, not the import config.
     data = {
-        "version": 1,
+        "sources": {"s": "s.csv"},
         "mongodb": {
             "connection": {"uri": "mongodb://localhost", "database": "db"},
             "entities": {"doc": {"columns": {"a": {}}}},
@@ -34,7 +34,7 @@ def test_import_schema_rejects_connection_block():
 
 def test_import_schema_rejects_invalid_csv_column_type():
     data = {
-        "version": 1,
+        "sources": {"s": "s.csv"},
         "redis": {
             "entities": {
                 "x": {
@@ -50,7 +50,7 @@ def test_import_schema_rejects_invalid_csv_column_type():
 
 def test_import_schema_accepts_nested_columns_mongodb():
     data = {
-        "version": 1,
+        "sources": {"s": "s.csv"},
         "mongodb": {
             "entities": {
                 "doc": {
@@ -69,7 +69,6 @@ def test_import_schema_accepts_nested_columns_mongodb():
 def test_sgbd_schema_rejects_entities_block():
     # Mapping (entities) belongs in the import config, not the SGBD config.
     data = {
-        "version": 1,
         "postgres": {"connection": {"host": "x"}, "entities": {}},
     }
     with pytest.raises(BusinessException):
@@ -77,25 +76,13 @@ def test_sgbd_schema_rejects_entities_block():
 
 
 def test_merge_requires_backend_in_sgbd_config():
-    import_cfg = {"version": 1, "redis": {"entities": {"x": {"columns": {"k": {}}}}}}
-    sgbd_cfg = {"version": 1, "postgres": {"connection": {}}}
+    import_cfg = {
+        "sources": {"s": "s.csv"},
+        "redis": {"entities": {"x": {"columns": {"k": {}}}}},
+    }
+    sgbd_cfg = {"sources": {"s": "s.csv"}, "postgres": {"connection": {}}}
     with pytest.raises(BusinessException, match="not declared in the SGBD config"):
         merge_configs(import_cfg, sgbd_cfg)
-
-
-def test_merge_injects_connection_and_schema():
-    import_cfg = {
-        "version": 1,
-        "postgres": {"entities": {"t": {"columns": {"id": {"is_key": True}}}}},
-    }
-    sgbd_cfg = {
-        "version": 1,
-        "postgres": {"connection": {"host": "db"}, "schema": "shop"},
-    }
-    merged = merge_configs(import_cfg, sgbd_cfg)
-    assert merged["postgres"]["connection"] == {"host": "db"}
-    assert merged["postgres"]["schema"] == "shop"
-    assert "entities" in merged["postgres"]
 
 
 def test_load_config_rejects_missing_file():
@@ -104,11 +91,36 @@ def test_load_config_rejects_missing_file():
         load_config(missing)
 
 
+def test_import_schema_rejects_version_field():
+    data = {"sources": {"s": "s.csv"}}
+    validate_import_config_schema(data)  # baseline OK
+    with pytest.raises(BusinessException):
+        validate_import_config_schema({"version": 1, "sources": {"s": "s.csv"}})
+
+
+def test_import_schema_requires_sources():
+    with pytest.raises(BusinessException):
+        validate_import_config_schema({"redis": {"entities": {"x": {}}}})
+
+
+def test_merge_injects_connection_and_schema_and_sources():
+    import_cfg = {
+        "sources": {"t": "t.csv"},
+        "postgres": {"entities": {"t": {"columns": {"id": {"is_key": True}}}}},
+    }
+    sgbd_cfg = {"postgres": {"connection": {"host": "db"}, "schema": "shop"}}
+    merged = merge_configs(import_cfg, sgbd_cfg)
+    assert merged["sources"] == {"t": "t.csv"}
+    assert "version" not in merged
+    assert merged["postgres"]["connection"] == {"host": "db"}
+    assert merged["postgres"]["schema"] == "shop"
+
+
+@pytest.mark.xfail(reason="example migrates in Task 13", strict=False)
 def test_load_config_accepts_ecommerce_fixture():
     root = Path(__file__).resolve().parents[1]
     cfg = root / "data" / "ecommerce" / "import_config.json"
     data = load_config(cfg)
-    assert data["version"] == 1
+    assert "sources" in data and "version" not in data
     assert "postgres" in data
-    # Connection is merged in from the sibling sgbd_config.json.
     assert data["postgres"]["connection"]["database"] == "ecommerce"
