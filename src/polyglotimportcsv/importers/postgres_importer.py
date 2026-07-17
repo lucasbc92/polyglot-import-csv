@@ -10,7 +10,8 @@ import psycopg2
 from psycopg2 import sql
 from psycopg2.extras import execute_values
 
-from polyglotimportcsv.business_exception import BusinessException
+from polyglotimportcsv.business_exception import ImportExecutionError
+from polyglotimportcsv.mapping_resolver import BoundEntity
 from polyglotimportcsv.filter_engine import apply_filters, expand_each
 from polyglotimportcsv.entity_utils import flat_leaf_columns, target_field_name
 from polyglotimportcsv.materialize import flatten_entity_dataframe
@@ -34,8 +35,7 @@ def _connect(conn: Dict[str, Any]):
 
 def run_postgres_import(
     backend_cfg: Dict[str, Any],
-    df: pd.DataFrame,
-    column_kinds: Dict[str, str],
+    entities: Dict[str, "BoundEntity"],
     *,
     dry_run: bool,
     create_schema: bool,
@@ -44,26 +44,26 @@ def run_postgres_import(
     lines: List[str] = []
     conn_cfg = backend_cfg.get("connection") or {}
     schema = backend_cfg.get("schema") or "public"
-    entities = backend_cfg.get("entities") or {}
     relationships = backend_cfg.get("relationships") or {}
+    entity_cfgs = {name: be.cfg for name, be in entities.items()}
 
     if dry_run:
         lines.append("[postgres] dry-run: would connect and import entities.")
-        for ename, ecfg in entities.items():
-            non_each = [f for f in (ecfg.get("filters") or []) if f.get("operator") != "each"]
-            dff = apply_filters(df, non_each, column_kinds)
-            for part_name, part_df in expand_each(dff, ecfg.get("filters") or [], ename):
-                mat = flatten_entity_dataframe(part_df, ecfg)
+        for ename, be in entities.items():
+            non_each = [f for f in (be.cfg.get("filters") or []) if f.get("operator") != "each"]
+            dff = apply_filters(be.df, non_each, be.kinds)
+            for part_name, part_df in expand_each(dff, be.cfg.get("filters") or [], ename):
+                mat = flatten_entity_dataframe(part_df, be.cfg)
                 lines.append(f"  entity {part_name}: {len(mat)} row(s) after dedupe")
         return lines
 
-    create_stmts = build_postgres_create_tables(schema, entities, relationships)
-    fk_stmts = build_postgres_foreign_keys(schema, entities, relationships)
+    create_stmts = build_postgres_create_tables(schema, entity_cfgs, relationships)
+    fk_stmts = build_postgres_foreign_keys(schema, entity_cfgs, relationships)
 
     try:
         cx = _connect(conn_cfg)
     except Exception as e:
-        raise BusinessException(f"PostgreSQL connection failed: {e}") from e
+        raise ImportExecutionError(f"PostgreSQL connection failed: {e}") from e
 
     cx.autocommit = True
     with cx.cursor() as cur:
@@ -75,16 +75,15 @@ def run_postgres_import(
                     sub = sub.strip()
                     if sub:
                         cur.execute(sub + ";")
-        # Insert order
         ordered_names = [n for n in _DEFAULT_INSERT_ORDER if n in entities] + [
             n for n in sorted(entities.keys()) if n not in _DEFAULT_INSERT_ORDER
         ]
         for ename in ordered_names:
-            ecfg = entities[ename]
-            non_each = [f for f in (ecfg.get("filters") or []) if f.get("operator") != "each"]
-            dff = apply_filters(df, non_each, column_kinds)
-            for part_name, part_df in expand_each(dff, ecfg.get("filters") or [], ename):
-                mat = flatten_entity_dataframe(part_df, ecfg)
+            be = entities[ename]
+            non_each = [f for f in (be.cfg.get("filters") or []) if f.get("operator") != "each"]
+            dff = apply_filters(be.df, non_each, be.kinds)
+            for part_name, part_df in expand_each(dff, be.cfg.get("filters") or [], ename):
+                mat = flatten_entity_dataframe(part_df, be.cfg)
                 if mat.empty:
                     continue
                 cols = list(mat.columns)
@@ -92,7 +91,7 @@ def run_postgres_import(
                 col_sql = sql.SQL(", ").join(map(sql.Identifier, cols))
                 pks = [
                     target_field_name(fk, spec)
-                    for fk, _, spec in flat_leaf_columns(ecfg)
+                    for fk, _, spec in flat_leaf_columns(be.cfg)
                     if spec.get("is_key")
                 ]
                 base = sql.SQL("INSERT INTO {} ({}) VALUES %s").format(fq, col_sql)
