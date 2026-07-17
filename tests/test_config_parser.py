@@ -116,7 +116,6 @@ def test_merge_injects_connection_and_schema_and_sources():
     assert merged["postgres"]["schema"] == "shop"
 
 
-@pytest.mark.xfail(reason="example migrates in Task 13", strict=False)
 def test_load_config_accepts_ecommerce_fixture():
     root = Path(__file__).resolve().parents[1]
     cfg = root / "data" / "ecommerce" / "import_config.json"

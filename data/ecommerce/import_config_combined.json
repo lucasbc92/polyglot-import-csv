@@ -1,9 +1,6 @@
 {
   "sources": {
-    "stock": "ecommerce_stock.csv",
-    "purchase": "ecommerce_purchase.csv",
-    "select_product": "ecommerce_select_product.csv",
-    "add_to_cart": "ecommerce_add_to_cart.csv"
+    "ecommerce": { "file": "ecommerce_join.csv", "origin_column": true }
   },
 
   "postgres": {

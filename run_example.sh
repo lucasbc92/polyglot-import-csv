@@ -7,12 +7,11 @@
 #   ./run_example.sh
 #   ./run_example.sh --dry-run
 #   ./run_example.sh --clean --import
-#   ./run_example.sh --csv data/ecommerce/ecommerce_join.csv --inspect
+#   ./run_example.sh --config data/ecommerce/import_config_combined.json  # combined CSV mode
 #   ./run_example.sh --no-create-schema --import
 #   ./run_example.sh --fresh-start   # first-time: wipe volumes/images, re-pull, full default flow
 #
 # Options:
-#   --csv PATH              CSV file (default: data/ecommerce/ecommerce_join.csv)
 #   --config PATH           Import (mapping) JSON config (default: data/ecommerce/import_config.json)
 #   --sgbd-config PATH      SGBD connection JSON config (default: data/ecommerce/sgbd_config.json)
 #   --dry-run               Validate only (no Docker, no import)
@@ -43,7 +42,6 @@ if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   export FORCE_COLOR=1
 fi
 
-CSV="data/ecommerce/ecommerce_join.csv"
 CONFIG="data/ecommerce/import_config.json"
 SGBD_CONFIG="data/ecommerce/sgbd_config.json"
 DO_DOCKER=true
@@ -59,7 +57,7 @@ LOG_FILE=""
 DO_FRESH_START=false
 
 usage() {
-  sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -67,10 +65,6 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       usage
       exit 0
-      ;;
-    --csv)
-      CSV="$2"
-      shift 2
       ;;
     --config)
       CONFIG="$2"
@@ -153,10 +147,6 @@ if [[ "${DO_DRY_RUN}" == false && "${DO_IMPORT}" == false && "${DO_CLEAN}" == fa
   exit 1
 fi
 
-if [[ ! -f "${CSV}" ]]; then
-  log_err "CSV not found: ${CSV}"
-  exit 1
-fi
 if [[ ! -f "${CONFIG}" ]]; then
   log_err "Config not found: ${CONFIG}"
   exit 1
@@ -431,7 +421,7 @@ fresh_start_stack() {
 
 run_polyglot() {
   local dry_run="$1"
-  local -a args=(-m polyglotimportcsv "${CSV}" --config "${CONFIG}" --sgbd-config "${SGBD_CONFIG}")
+  local -a args=(-m polyglotimportcsv --config "${CONFIG}" --sgbd-config "${SGBD_CONFIG}")
   if [[ -n "${ONLY}" ]]; then
     args+=(--only "${ONLY}")
   fi
@@ -455,7 +445,6 @@ if [[ "${DO_DOCKER}" == true ]]; then
 fi
 
 log_banner "Polyglot Import CSV · run example"
-log_kv "CSV" "${CSV}"
 log_kv "Config" "${CONFIG}"
 log_kv "SGBD config" "${SGBD_CONFIG}"
 log_kv "Services" "${SELECTED_SERVICES[*]}"

@@ -11,7 +11,6 @@ ROOT = Path(__file__).resolve().parents[1]
 CFG = ROOT / "data" / "ecommerce" / "import_config.json"
 
 
-@pytest.mark.xfail(reason="example migrates in Task 13", strict=False)
 def test_run_import_with_stub_registry():
     calls: list[str] = []
 
