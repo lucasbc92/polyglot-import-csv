@@ -26,7 +26,15 @@ def is_boolean_series(non_empty: pd.Series) -> bool:
 
 
 def cast_value(val: Any, kind: str) -> Any:
-    """Convert one CSV string to a native Python value; '' and None become None."""
+    """Convert one CSV string to a native Python value; '' and None become None.
+
+    Caveat: the "boolean" branch assumes ``val`` was already validated by
+    ``is_boolean_series`` (i.e. every non-empty value in the column is
+    'true'/'false', case-insensitive). It does not itself validate the
+    input — any value that isn't the literal string 'true' (case-insensitive)
+    silently maps to False, so passing unvalidated/dirty data here can
+    produce misleading results.
+    """
     if val is None or val == "":
         return None
     if kind == "integer":
@@ -57,6 +65,14 @@ def cast_frame(df: pd.DataFrame, kinds: Dict[str, str]) -> pd.DataFrame:
     for col in out.columns:
         kind = kinds.get(col, "string")
         if kind in ("integer", "float", "boolean", "datetime"):
-            mapped = out[col].map(lambda v, k=kind: cast_value(v, k))
-            out[col] = mapped.astype(object).where(pd.notna(mapped), None)
+            # Build the object column directly from a list of already-cast
+            # native Python values, rather than via Series.map(). map()
+            # lets pandas infer a dtype for the intermediate result (e.g.
+            # float64 for a mix of int and None), which silently upcasts
+            # ints to floats (1 -> 1.0) before astype(object) ever runs.
+            out[col] = pd.Series(
+                [cast_value(v, kind) for v in out[col]],
+                index=out.index,
+                dtype=object,
+            )
     return out

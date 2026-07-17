@@ -51,3 +51,38 @@ def test_cast_frame_converts_typed_columns_and_keeps_strings():
     assert list(out["name"]) == ["a", "", "c"]
     # Original frame is not mutated.
     assert list(df["n"]) == ["1", "", "3"]
+    # Element types must be native Python int/bool, not upcast to float by
+    # pandas when a column mixes numbers with None (regression: a column
+    # like ['1', '', '3'] must not silently become [1.0, None, 3.0]).
+    for v in out["n"]:
+        if v is not None:
+            assert type(v) is int, f"expected int, got {type(v)} for {v!r}"
+    for v in out["flag"]:
+        if v is not None:
+            assert type(v) is bool, f"expected bool, got {type(v)} for {v!r}"
+
+
+def test_cast_frame_float_column_keeps_none_and_float_type():
+    df = pd.DataFrame({"x": ["1.5", "", "3.0"]})
+    kinds = {"x": "float"}
+    out = cast_frame(df, kinds)
+    assert list(out["x"]) == [1.5, None, 3.0]
+    for v in out["x"]:
+        if v is not None:
+            assert type(v) is float, f"expected float, got {type(v)} for {v!r}"
+        else:
+            assert v is None
+
+
+def test_cast_frame_datetime_column_yields_plain_datetime():
+    df = pd.DataFrame({"d": ["2023-11-02 03:30:00Z", "", "2024-01-01T00:00:00Z"]})
+    kinds = {"d": "datetime"}
+    out = cast_frame(df, kinds)
+    values = list(out["d"])
+    assert values[1] is None
+    for v in (values[0], values[2]):
+        # The contract is plain datetime.datetime. pandas.Timestamp is a
+        # subclass of datetime, so isinstance() alone would not catch a
+        # regression back to Timestamp objects here.
+        assert type(v) is datetime, f"expected datetime.datetime, got {type(v)}"
+        assert type(v) is not pd.Timestamp
