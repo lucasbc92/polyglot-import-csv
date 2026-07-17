@@ -95,3 +95,41 @@ def test_resolve_backend_entities_casts_and_strips_keys(sources):
     assert "source" not in be.cfg and "auto_map" not in be.cfg
     assert be.cfg["columns"]["product_id"] == {"is_key": True}
     assert list(be.df["product_id"]) == [1, 2]  # cast to int
+
+
+def test_union_binding_cache_key_no_collision():
+    # "+".join(["a+b", "c"]) == "+".join(["a", "b+c"]) == "a+b+c": a
+    # string-joined cache key collides two distinct union bindings (and
+    # would also collide with a real source literally named "a+b+c").
+    sources = {
+        "a+b": _source("a+b", {"val": ["AB1", "AB2"]}),
+        "a": _source("a", {"val": ["A1"]}),
+        "b+c": _source("b+c", {"val": ["BC1"]}),
+        "c": _source("c", {"val": ["C1"]}),
+    }
+    bcfg = {
+        "entities": {
+            "e1": {"source": ["a+b", "c"]},
+            "e2": {"source": ["a", "b+c"]},
+        }
+    }
+    bound = resolve_backend_entities(bcfg, sources)
+    assert list(bound["e1"].df["val"]) == ["AB1", "AB2", "C1"]
+    assert list(bound["e2"].df["val"]) == ["A1", "BC1"]
+
+
+def test_binding_empty_source_list_raises(sources):
+    with pytest.raises(MappingError, match="empty"):
+        bind_entity_source("x", {"source": []}, sources)
+
+
+def test_binding_invalid_source_type_raises(sources):
+    with pytest.raises(MappingError, match="invalid"):
+        bind_entity_source("x", {"source": 123}, sources)
+
+
+def test_manual_only_columns_returns_copy_not_original(sources):
+    ecfg = {"columns": {"product_id": {"is_key": True}}}
+    cols = expand_entity_columns("stock", ecfg, sources["stock"])
+    cols["product_id"] = "mutated"
+    assert ecfg["columns"]["product_id"] == {"is_key": True}

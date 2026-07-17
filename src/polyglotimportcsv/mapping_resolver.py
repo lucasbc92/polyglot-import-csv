@@ -60,7 +60,35 @@ def bind_entity_source(
         if ref not in sources:
             raise MappingError(f"Entity '{entity_name}': unknown source '{ref}'.")
         return sources[ref]
-    return _union_source(entity_name, list(ref), sources)
+    if isinstance(ref, list):
+        if not ref:
+            raise MappingError(
+                f"Entity '{entity_name}': 'source' list is empty; "
+                "provide at least one source name."
+            )
+        return _union_source(entity_name, list(ref), sources)
+    raise MappingError(
+        f"Entity '{entity_name}': invalid 'source' value {ref!r} "
+        f"(type {type(ref).__name__}); expected a string or a list of strings."
+    )
+
+
+def _binding_cache_key(entity_cfg: Dict[str, Any], entity_name: str) -> tuple:
+    """Collision-proof cast-cache key for an already-validated binding.
+
+    Must be called only after ``bind_entity_source`` has validated the
+    binding, so ``ref`` here is guaranteed to be ``None``, a ``str``, or a
+    non-empty ``list``. A plain "+".join(names) string key would collide
+    between distinct union bindings (e.g. ["a+b", "c"] vs ["a", "b+c"]) and
+    with a real source literally named after the join; keying on a typed
+    tuple instead makes those cases distinguishable.
+    """
+    ref = entity_cfg.get("source")
+    if ref is None:
+        return ("single", entity_name)
+    if isinstance(ref, str):
+        return ("single", ref)
+    return ("union", tuple(ref))
 
 
 def expand_entity_columns(
@@ -75,7 +103,7 @@ def expand_entity_columns(
                 f"Entity '{entity_name}': 'csv_columns' requires auto-mapping "
                 "(omit 'columns' or set \"auto_map\": true)."
             )
-        return manual
+        return dict(manual)
     selection = entity_cfg.get("csv_columns")
     if selection:
         base_cols = select_columns(
@@ -94,7 +122,7 @@ def expand_entity_columns(
 def resolve_backend_entities(
     backend_cfg: Dict[str, Any],
     sources: Dict[str, SourceData],
-    cast_cache: Optional[Dict[str, pd.DataFrame]] = None,
+    cast_cache: Optional[Dict[tuple, pd.DataFrame]] = None,
 ) -> Dict[str, BoundEntity]:
     """Bind every entity of one backend and cast its frame to native values."""
     cast_cache = cast_cache if cast_cache is not None else {}
@@ -106,9 +134,10 @@ def resolve_backend_entities(
         cfg.pop("source", None)
         cfg.pop("csv_columns", None)
         cfg.pop("auto_map", None)
-        if src.name not in cast_cache:
-            cast_cache[src.name] = cast_frame(src.df, src.kinds)
+        cache_key = _binding_cache_key(ecfg, ename)
+        if cache_key not in cast_cache:
+            cast_cache[cache_key] = cast_frame(src.df, src.kinds)
         out[ename] = BoundEntity(
-            name=ename, cfg=cfg, df=cast_cache[src.name], kinds=src.kinds
+            name=ename, cfg=cfg, df=cast_cache[cache_key], kinds=src.kinds
         )
     return out
