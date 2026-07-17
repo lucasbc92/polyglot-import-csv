@@ -33,14 +33,14 @@ def output_column_name(source_col: str, spec: Dict[str, Any]) -> str:
 def resolve_csv_column(
     field_key: str, spec: Dict[str, Any], csv_columns: Sequence[str]
 ) -> str:
-    """Resolve csv_column (name or 0-based index) to the actual CSV header."""
+    """Resolve csv_column (name or 1-based index) to the actual CSV header."""
     csv = spec.get("csv_column")
     if isinstance(csv, int):
-        if csv < 0 or csv >= len(csv_columns):
+        if csv < 1 or csv > len(csv_columns):
             raise ValueError(
-                f"csv_column index {csv} out of range (CSV has {len(csv_columns)} column(s))."
+                f"csv_column index {csv} out of range (valid: 1-{len(csv_columns)})."
             )
-        return csv_columns[csv]
+        return csv_columns[csv - 1]
     if isinstance(csv, str):
         return csv
     return field_key
