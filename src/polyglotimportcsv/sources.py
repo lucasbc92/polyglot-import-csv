@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -10,6 +11,8 @@ import pandas as pd
 
 from polyglotimportcsv.business_exception import SourceError
 from polyglotimportcsv.csv_reader import infer_column_kinds, read_csv
+
+logger = logging.getLogger(__name__)
 
 #: Pseudo-column carrying each row's origin (source name or origin value).
 SOURCE_COLUMN = "_source"
@@ -36,6 +39,9 @@ def _register(
         )
     kinds = infer_column_kinds(df[file_header])
     kinds[SOURCE_COLUMN] = "string"
+    logger.debug("source %s: inferred kinds: %s", name, {c: kinds[c] for c in file_header})
+    if len(df) == 0:
+        logger.warning("source %s has 0 row(s)", name)
     registry[name] = SourceData(name=name, df=df, kinds=kinds, file_header=file_header)
 
 

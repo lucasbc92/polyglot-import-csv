@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 #: Inferred column kind -> DDL type used when auto-mapping (spec §2.5).
 KIND_TO_DB_TYPE: Dict[str, str] = {
@@ -70,9 +73,17 @@ def cast_frame(df: pd.DataFrame, kinds: Dict[str, str]) -> pd.DataFrame:
             # lets pandas infer a dtype for the intermediate result (e.g.
             # float64 for a mix of int and None), which silently upcasts
             # ints to floats (1 -> 1.0) before astype(object) ever runs.
-            out[col] = pd.Series(
-                [cast_value(v, kind) for v in out[col]],
-                index=out.index,
-                dtype=object,
+            values = [cast_value(v, kind) for v in out[col]]
+            fallbacks = sum(
+                1
+                for orig, v in zip(out[col], values)
+                if v is orig and orig is not None and orig != ""
             )
+            if fallbacks:
+                logger.warning(
+                    "column %r: %d value(s) could not be cast to %s and stayed text",
+                    col, fallbacks, kind,
+                )
+            logger.debug("column %r cast to %s (%d value(s))", col, kind, len(values))
+            out[col] = pd.Series(values, index=out.index, dtype=object)
     return out
