@@ -1,3 +1,4 @@
+% TODO(TCC2): atualizar listagens de filters/sources na reescrita do capítulo
 \chapter{A Proposta da Ferramenta PolyglotImportCSV}
 
 \section{Visão Geral}
@@ -103,12 +104,12 @@ Figura~\ref{fig:sgbd-schema}, o schema do arquivo de conexão (\texttt{sgbd\_con
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{figure}
 
-\textbf{Raízes simétricas.} Ambos os schemas partilham a mesma raiz: um campo
-\texttt{version} obrigatório e um bloco opcional por SGBD
-(\texttt{postgres}, \texttt{mongodb}, \texttt{cassandra}, \texttt{redis},
-\texttt{neo4j}), com \texttt{additionalProperties: false} rejeitando chaves
-desconhecidas. A diferença está no conteúdo de cada bloco: no arquivo de
-importação ele descreve \textit{o que} mapear; no de conexão, \textit{onde} gravar.
+\textbf{Raízes simétricas.} Ambos os schemas partilham a mesma raiz: um bloco
+opcional por SGBD (\texttt{postgres}, \texttt{mongodb}, \texttt{cassandra},
+\texttt{redis}, \texttt{neo4j}), com \texttt{additionalProperties: false}
+rejeitando chaves desconhecidas. A diferença está no conteúdo de cada bloco: no
+arquivo de importação ele descreve \textit{o que} mapear; no de conexão,
+\textit{onde} gravar.
 
 \textbf{O arquivo de importação e a definição reutilizável \texttt{entity}.}
 Seguindo as setas a partir de \texttt{import\_config}, cada bloco de SGBD
@@ -148,8 +149,7 @@ de cada SGBD, ilustradas com fragmentos concretos de configuração.
 \label{sec:raiz}
 
 Como antecipado na visão geral, ambos os arquivos compartilham a mesma raiz: um
-campo \texttt{version} obrigatório (inteiro $\geq 1$) e um bloco opcional por
-SGBD. A cláusula \texttt{additionalProperties: false} na raiz
+bloco opcional por SGBD. A cláusula \texttt{additionalProperties: false} na raiz
 \textbf{rejeita} qualquer propriedade não prevista, impedindo que erros de digitação
 como \texttt{postgress} passem despercebidos.
 

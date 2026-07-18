@@ -16,18 +16,24 @@ da Tabela~\ref{tab:dryrun}.
 
 \begin{lstlisting}[style=jsonstyle,caption={Arquivo de importação completo do cenário e-commerce (\texttt{import\_config.json}).},label={lst:import-config-full}]
 {
-  "version": 1,
+  "sources": {
+    "stock": "ecommerce_stock.csv",
+    "purchase": "ecommerce_purchase.csv",
+    "select_product": "ecommerce_select_product.csv",
+    "add_to_cart": "ecommerce_add_to_cart.csv"
+  },
 
   "postgres": {
     "entities": {
       "categories": {
+        "source": "stock",
         "columns": {
           "category_id": { "is_key": true, "db_type": "BIGINT" },
           "category_name": { "db_type": "TEXT" }
-        },
-        "filters": []
+        }
       },
       "products": {
+        "source": "stock",
         "columns": {
           "product_id": { "is_key": true, "db_type": "BIGINT" },
           "product_name": { "db_type": "TEXT" },
@@ -35,19 +41,19 @@ da Tabela~\ref{tab:dryrun}.
           "product_brand": { "db_type": "TEXT" },
           "category_id": { "db_type": "BIGINT" },
           "price": { "db_type": "NUMERIC(14,2)" }
-        },
-        "filters": []
+        }
       },
       "inventory": {
+        "source": "stock",
         "columns": {
           "product_id": { "is_key": true, "db_type": "BIGINT" },
           "quantity_available": { "db_type": "BIGINT" },
           "last_restock_date": { "db_type": "TIMESTAMPTZ" },
           "price": { "db_type": "NUMERIC(14,2)" }
-        },
-        "filters": [{ "column": "action", "operator": "==", "value": "stock" }]
+        }
       },
       "orders": {
+        "source": "purchase",
         "columns": {
           "order_number": { "is_key": true, "db_type": "TEXT" },
           "user_id": { "db_type": "TEXT" },
@@ -59,8 +65,7 @@ da Tabela~\ref{tab:dryrun}.
           "price": { "db_type": "NUMERIC(14,2)" },
           "comment": { "db_type": "TEXT" },
           "rating": { "db_type": "BIGINT" }
-        },
-        "filters": [{ "column": "action", "operator": "==", "value": "purchase" }]
+        }
       }
     },
     "relationships": {
@@ -82,6 +87,7 @@ da Tabela~\ref{tab:dryrun}.
   "mongodb": {
     "entities": {
       "product_catalog": {
+        "source": "stock",
         "columns": {
           "product_id": {},
           "product_name": {},
@@ -98,8 +104,7 @@ da Tabela~\ref{tab:dryrun}.
             "quantity_available": {},
             "last_restock_date": {}
           }
-        },
-        "filters": [{ "column": "action", "operator": "==", "value": "stock" }]
+        }
       }
     }
   },
@@ -107,18 +112,18 @@ da Tabela~\ref{tab:dryrun}.
   "cassandra": {
     "entities": {
       "user_activity_log": {
+        "source": ["stock", "purchase", "select_product", "add_to_cart"],
         "columns": {
           "user_id": {},
           "timestamp": { "schema_column": "event_time" },
-          "action": { "schema_column": "event_type" },
+          "_source": { "schema_column": "event_type" },
           "product_id": {},
           "order_number": {},
           "selected_product_id": {},
           "shopping_cart_id": {}
         },
         "cassandra_partition": ["user_id"],
-        "cassandra_cluster": ["timestamp"],
-        "filters": []
+        "cassandra_cluster": ["timestamp"]
       }
     }
   },
@@ -126,21 +131,20 @@ da Tabela~\ref{tab:dryrun}.
   "redis": {
     "entities": {
       "shopping_cart": {
+        "source": "add_to_cart",
+        "auto_map": true,
         "columns": {
-          "shopping_cart_id": { "is_key": true },
-          "cart_product_id": {},
-          "cart_quantity": {}
-        },
-        "filters": [{ "column": "action", "operator": "==", "value": "add_to_cart" }]
+          "shopping_cart_id": { "is_key": true }
+        }
       },
       "user_session": {
+        "source": "select_product",
         "columns": {
           "user_id": { "is_key": true },
           "user_name": {},
           "user_email": {},
           "timestamp": { "schema_column": "last_seen" }
-        },
-        "filters": [{ "column": "action", "operator": "==", "value": "select_product" }]
+        }
       }
     }
   },
@@ -148,20 +152,20 @@ da Tabela~\ref{tab:dryrun}.
   "neo4j": {
     "entities": {
       "User": {
+        "source": "purchase",
         "columns": {
           "user_id": { "is_key": true },
           "user_name": {},
           "user_email": {}
-        },
-        "filters": [{ "column": "action", "operator": "==", "value": "purchase" }]
+        }
       },
       "Product": {
+        "source": "stock",
         "columns": {
           "product_id": { "is_key": true },
           "product_name": {},
           "product_brand": {}
-        },
-        "filters": [{ "column": "action", "operator": "==", "value": "stock" }]
+        }
       }
     },
     "relationships": {

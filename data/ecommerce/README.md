@@ -2,29 +2,28 @@
 
 | File | Purpose |
 |------|---------|
-| `ecommerce_join.csv` | Wide operational CSV (all `action` types in one file). Default input for `./run_example.sh`. |
-| `ecommerce_stock.csv`, `ecommerce_purchase.csv`, `ecommerce_select_product.csv`, `ecommerce_add_to_cart.csv` | `ecommerce_join.csv` split by the `action` column, one file per entity. Not consumed by the current importer; kept as a data basis for a possible future one-CSV-per-entity import mode (no `action`/`filters` discriminator needed). |
-| `import_config.json` | JSON Schema–validated mapping to PostgreSQL, MongoDB, Cassandra, Redis, and Neo4j. Used by the CLI and `run_example.sh`. |
+| `ecommerce_stock.csv`, `ecommerce_purchase.csv`, `ecommerce_select_product.csv`, `ecommerce_add_to_cart.csv` | One CSV per entity (default input mode). Each file IS the origin of its rows — no discriminator column needed. |
+| `ecommerce_join.csv` | Combined CSV (alternative input mode): column 0 (`action`) is the origin column; each distinct value becomes a source. |
+| `import_config.json` | v2 mapping config (multi-CSV `sources`). Default for `./run_example.sh`. |
+| `import_config_combined.json` | Same SGBD blocks, `sources` pointing at the combined CSV — demonstrates that switching input modes changes nothing in the per-SGBD mapping. |
+| `import_config_duplicate_csv_column_example.json` | Mapping one CSV column into two destination columns via `csv_column`. |
+| `sgbd_config.json` | Connection settings per SGBD. |
 
-## Why the `action` column exists
+## Knowing each row's origin
 
-Knowing the **source (entity) of every row** is an essential requirement of the import
-process. In the combined `ecommerce_join.csv`, that role is played by the `action`
-discriminator column: it is the only thing that tells the importer which entity each
-row belongs to, and it is what the `filters` in `import_config.json` match against
-(`action == stock`, `action == purchase`, …). Without such a column (`action`,
-`table`, `collection`, or similar), a combined CSV cannot be partitioned into entities
-at all.
+Knowing the **source (entity) of every row** is an essential requirement of the
+import process. In the per-entity files the file itself designates the origin.
+In the combined `ecommerce_join.csv`, column 0 plays that role: the importer
+slices the file by its distinct values and each value becomes a named source
+(also exposed to mappings as the `_source` pseudo-column).
 
-The per-entity CSVs above illustrate the alternative that removes this requirement:
-when each file holds exactly one entity, the file itself designates the data's origin,
-so no discriminator column and no `filters` are needed. This one-CSV-per-entity mode
-is planned as future work (TCC II).
-
-For a larger stress test, add another CSV (e.g. `ecommerce_join_large.csv`) and pass:
+For a larger stress test, add another CSV (e.g. `ecommerce_stock_large.csv`) and
+override just that source's path:
 
 ```bash
-./run_example.sh --csv data/ecommerce/ecommerce_join_large.csv
+python -m polyglotimportcsv --config data/ecommerce/import_config.json \
+  --source stock=data/ecommerce/ecommerce_stock_large.csv \
+  --dry-run
 ```
 
 The config must reference columns present in that CSV.
