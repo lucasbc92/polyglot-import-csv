@@ -23,22 +23,23 @@ def _row_cell(row: pd.Series, field_key: str, spec: Dict[str, Any]) -> Any:
 
 
 def flatten_entity_dataframe(df: pd.DataFrame, entity_cfg: Dict[str, Any]) -> pd.DataFrame:
-    """Select entity columns, rename to schema targets, drop duplicate primary keys."""
+    """Select entity columns, rename to schema targets, drop duplicate primary keys.
+
+    Built per leaf column (not select+rename) so one CSV column mapped to two
+    schema_column targets (the duplicate csv_column feature) doesn't collide.
+    """
     csv_columns = list(df.columns)
-    src_cols: list[str] = []
-    rename: Dict[str, str] = {}
+    data: Dict[str, pd.Series] = {}
     key_outs: list[str] = []
     for field_key, _, spec in flat_leaf_columns(entity_cfg):
         src = resolve_csv_column(field_key, spec, csv_columns)
-        src_cols.append(src)
         out = target_field_name(field_key, spec)
-        rename[src] = out
+        data[out] = df[src].copy()
         if spec.get("is_key"):
             key_outs.append(out)
-    if not src_cols:
+    if not data:
         raise ValueError("Entity has no columns")
-    sub = df.loc[:, src_cols].copy()
-    sub = sub.rename(columns=rename)
+    sub = pd.DataFrame(data, index=df.index)
     if key_outs:
         for kc in key_outs:
             sub[kc] = sub[kc].replace("", pd.NA)
