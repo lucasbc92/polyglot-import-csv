@@ -12,13 +12,22 @@ from __future__ import annotations
 import logging
 import os
 import re
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import IO, Any, Dict, Optional, Sequence
+from typing import IO, Any, Callable, Dict, Iterator, Optional, Sequence
 
 from rich.console import Console
 from rich.json import JSON
 from rich.logging import RichHandler
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    ProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
@@ -263,3 +272,35 @@ def backend_text(line: str) -> Text:
     else:
         out.append(f" {rest}")
     return out
+
+
+class _RowRateColumn(ProgressColumn):
+    def render(self, task) -> Text:
+        speed = task.finished_speed or task.speed
+        if speed is None:
+            return Text("- rows/s", style="progress.data.speed")
+        return Text(f"{speed:.0f} rows/s", style="progress.data.speed")
+
+
+@contextmanager
+def entity_progress(description: str, total: int) -> Iterator[Callable[[int], None]]:
+    """Live progress for entities above the dump threshold (spec §4.4).
+
+    No-op (yields a do-nothing advance) when the entity is small enough to
+    be dumped instead, or when stdout is not a terminal.
+    """
+    if total <= DATA_DUMP_THRESHOLD or not _console.is_terminal:
+        yield lambda n=1: None
+        return
+    progress = Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        _RowRateColumn(),
+        TimeElapsedColumn(),
+        console=_console,
+        transient=True,
+    )
+    with progress:
+        task_id = progress.add_task(description, total=total)
+        yield lambda n=1: progress.advance(task_id, n)

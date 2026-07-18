@@ -118,3 +118,17 @@ def test_dump_entity_frame_force_flags(capsys):
     small = pd.DataFrame({"id": [1, 2]})
     reporting.dump_entity_frame("postgres", "items", small, force=False)
     assert '"id"' not in capsys.readouterr().out
+
+
+def test_entity_progress_noop_at_or_below_threshold(capsys):
+    with reporting.entity_progress("x", reporting.DATA_DUMP_THRESHOLD) as advance:
+        assert callable(advance)
+        advance(10)
+    assert capsys.readouterr().out == ""  # no bar rendered at/below threshold
+
+
+def test_entity_progress_noop_when_not_a_terminal(capsys):
+    with reporting.entity_progress("x", 10_000) as advance:
+        assert callable(advance)
+        advance(500)  # pytest stdout is not a tty -> no-op path
+    assert capsys.readouterr().out == ""
