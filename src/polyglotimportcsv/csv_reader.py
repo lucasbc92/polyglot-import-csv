@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import warnings
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict
 
 import pandas as pd
 
@@ -55,9 +55,3 @@ def infer_column_kinds(df: pd.DataFrame) -> Dict[str, str]:
             continue
         kinds[col] = "string"
     return kinds
-
-
-def load_csv_with_inference(path: str | Path) -> Tuple[pd.DataFrame, Dict[str, str]]:
-    df = read_csv(path)
-    kinds = infer_column_kinds(df)
-    return df, kinds

@@ -23,7 +23,7 @@ from typing import Any, Dict, Optional, Union
 
 import jsonschema
 
-from polyglotimportcsv.business_exception import BusinessException, ConfigError
+from polyglotimportcsv.business_exception import ConfigError
 
 BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
 

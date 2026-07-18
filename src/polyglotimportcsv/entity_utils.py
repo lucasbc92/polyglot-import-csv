@@ -79,25 +79,6 @@ def entity_has_nested_branches(entity_cfg: Dict[str, Any]) -> bool:
     return False
 
 
-def collect_source_columns(
-    entity_cfg: Dict[str, Any], csv_columns: Sequence[str] | None = None
-) -> List[str]:
-    """All CSV column names referenced by an entity (including nested)."""
-    out: List[str] = []
-    for _, field_key, spec in iter_leaf_columns(entity_cfg):
-        if csv_columns is not None:
-            out.append(resolve_csv_column(field_key, spec, csv_columns))
-        else:
-            csv = spec.get("csv_column")
-            if isinstance(csv, int):
-                out.append(str(csv))
-            elif isinstance(csv, str):
-                out.append(csv)
-            else:
-                out.append(field_key)
-    return out
-
-
 def primary_key_source_columns(
     entity_cfg: Dict[str, Any], csv_columns: Sequence[str] | None = None
 ) -> List[str]:

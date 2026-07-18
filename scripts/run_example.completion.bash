@@ -16,7 +16,7 @@ _run_example_completion() {
   prev="${COMP_WORDS[COMP_CWORD-1]}"
 
   local flags=(
-    --csv --config
+    --config --sgbd-config
     --dry-run --import --clean --inspect
     --create-schema --no-create-schema
     --no-docker --fresh-start
@@ -27,17 +27,7 @@ _run_example_completion() {
   local backends=(postgres mongodb cassandra redis neo4j)
 
   case "${prev}" in
-    --csv)
-      local -a samples=( "${_RUN_EXAMPLE_REPO_ROOT}"/data/ecommerce/*.csv )
-      if [[ -e "${samples[0]}" ]]; then
-        COMPREPLY=( $(compgen -W "$(printf '%s\n' "${samples[@]}")" -- "${cur}") )
-      fi
-      if [[ ${#COMPREPLY[@]} -eq 0 ]]; then
-        COMPREPLY=( $(compgen -f -X '!*.csv' -- "${cur}") )
-      fi
-      return 0
-      ;;
-    --config)
+    --config|--sgbd-config)
       local -a configs=( "${_RUN_EXAMPLE_REPO_ROOT}"/data/ecommerce/*.json )
       if [[ -e "${configs[0]}" ]]; then
         COMPREPLY=( $(compgen -W "$(printf '%s\n' "${configs[@]}")" -- "${cur}") )

@@ -3,7 +3,6 @@
 import pytest
 
 from polyglotimportcsv.entity_utils import (
-    collect_source_columns,
     entity_has_nested_branches,
     is_column_branch,
     is_column_spec,
@@ -53,8 +52,3 @@ def test_iter_leaf_columns_nested_in_columns():
 def test_entity_has_nested_branches():
     assert entity_has_nested_branches({"columns": {"a": {"b": {}}}})
     assert not entity_has_nested_branches({"columns": {"a": {}, "b": {"schema_column": "c"}}})
-
-
-def test_collect_source_columns_with_index():
-    ecfg = {"columns": {"logical": {"csv_column": 1}}}
-    assert collect_source_columns(ecfg, ["hdr_a", "hdr_b"]) == ["hdr_a"]

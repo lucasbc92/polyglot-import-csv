@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Tuple
 
-import pandas as pd
 import psycopg2
 from psycopg2 import sql
 from psycopg2.extras import execute_values
