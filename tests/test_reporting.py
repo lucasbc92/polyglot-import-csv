@@ -3,6 +3,8 @@
 import logging
 from pathlib import Path
 
+import pandas as pd
+
 from polyglotimportcsv import reporting
 
 
@@ -91,3 +93,28 @@ def test_warn_and_error_route_through_logging(capsys):
     reporting.error("it broke")
     out = capsys.readouterr().out
     assert "watch out" in out and "it broke" in out
+
+
+def test_dump_entity_frame_threshold_boundary(capsys):
+    reporting.setup_reporting(logging.INFO, no_log=True)
+    at_limit = pd.DataFrame({"id": range(reporting.DATA_DUMP_THRESHOLD)})
+    reporting.dump_entity_frame("postgres", "items", at_limit)
+    out = capsys.readouterr().out
+    assert '"id"' in out
+
+    above = pd.DataFrame({"id": range(reporting.DATA_DUMP_THRESHOLD + 1)})
+    reporting.dump_entity_frame("postgres", "items", above)
+    out = capsys.readouterr().out
+    assert '"id"' not in out
+    assert "51 row(s)" in out
+
+
+def test_dump_entity_frame_force_flags(capsys):
+    reporting.setup_reporting(logging.INFO, no_log=True)
+    big = pd.DataFrame({"id": range(60)})
+    reporting.dump_entity_frame("postgres", "items", big, force=True)
+    assert '"id"' in capsys.readouterr().out
+
+    small = pd.DataFrame({"id": [1, 2]})
+    reporting.dump_entity_frame("postgres", "items", small, force=False)
+    assert '"id"' not in capsys.readouterr().out

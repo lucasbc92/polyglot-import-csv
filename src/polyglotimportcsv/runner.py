@@ -16,6 +16,7 @@ from polyglotimportcsv.mapping_resolver import resolve_backend_entities
 from polyglotimportcsv.reporting import (
     backend_text,
     banner,
+    dump_entity_frame,
     note,
     print_rich,
     section,
@@ -43,6 +44,7 @@ def run_import(
     only: Optional[Iterable[str]] = None,
     importers: Optional[ImporterRegistry] = None,
     source_overrides: Optional[Dict[str, str]] = None,
+    show_data: Optional[bool] = None,
 ) -> List[str]:
     """
     Load config and sources, bind entities, validate, then run configured backends.
@@ -97,6 +99,8 @@ def run_import(
         bcfg = config[backend]
         bound = resolve_backend_entities(bcfg, sources, cast_cache)
         validate_backend_entities(backend, bcfg, bound)
+        for ename, be in bound.items():
+            dump_entity_frame(backend, ename, be.df, force=show_data)
         backend_lines = fn(bcfg, bound, dry_run=dry_run, create_schema=create_schema)
         log_lines.extend(backend_lines)
         for line in backend_lines:

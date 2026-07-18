@@ -36,3 +36,19 @@ def test_run_import_rejects_invalid_config_even_with_stub():
         pytest.skip("data/db.json missing")
     with pytest.raises(BusinessException):
         run_import(bad_cfg, dry_run=True, importers={"postgres": never_called})
+
+
+def test_run_import_dumps_bound_entities(monkeypatch):
+    calls = []
+
+    def fake_dump(backend, entity, df, *, force=None):
+        calls.append((backend, entity, len(df), force))
+
+    monkeypatch.setattr("polyglotimportcsv.runner.dump_entity_frame", fake_dump)
+
+    def stub(cfg, entities, *, dry_run, create_schema):
+        return ["[postgres] stub"]
+
+    run_import(CFG, dry_run=True, only=["postgres"], importers={"postgres": stub})
+    assert calls, "expected one dump call per bound entity"
+    assert all(backend == "postgres" and force is None for backend, _, _, force in calls)

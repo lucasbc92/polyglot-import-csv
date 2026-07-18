@@ -59,3 +59,23 @@ def test_cli_log_level_controls_terminal_verbosity(tmp_path, monkeypatch):
     result = runner.invoke(main, ["--config", str(cfg)])
     assert result.exit_code == 0, result.output
     assert "dbg-marker" not in result.output
+
+
+def test_cli_show_data_tristate(tmp_path, monkeypatch):
+    captured = {}
+
+    def fake_run_import(config_path, **kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr("polyglotimportcsv.cli.run_import", fake_run_import)
+    cfg = tmp_path / "cfg.json"
+    cfg.write_text("{}", encoding="utf-8")
+    runner = CliRunner()
+
+    assert runner.invoke(main, ["--config", str(cfg)]).exit_code == 0
+    assert captured["show_data"] is None
+    assert runner.invoke(main, ["--config", str(cfg), "--show-data"]).exit_code == 0
+    assert captured["show_data"] is True
+    assert runner.invoke(main, ["--config", str(cfg), "--no-data"]).exit_code == 0
+    assert captured["show_data"] is False

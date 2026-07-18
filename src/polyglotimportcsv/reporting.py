@@ -210,6 +210,19 @@ def dump_rows(label: str, rows: Sequence[Dict[str, Any]]) -> None:
         print_rich(line)
 
 
+def dump_entity_frame(
+    backend: str, entity: str, df: Any, *, force: Optional[bool] = None
+) -> None:
+    """Dump entity records up to DATA_DUMP_THRESHOLD rows; counts only above (spec §4.3)."""
+    n = len(df)
+    show = force if force is not None else n <= DATA_DUMP_THRESHOLD
+    if not show:
+        note(f"{backend} · {entity}: {n} row(s) (data dump suppressed; --show-data forces it)")
+        logger.debug("%s · %s: data dump suppressed for %d row(s)", backend, entity, n)
+        return
+    dump_rows(f"{backend} · {entity}", df.to_dict(orient="records"))
+
+
 def backend_text(line: str) -> Text:
     """Style an importer log line ('[postgres] inserted ...') for the terminal."""
     m = _BACKEND_LINE.match(line.strip())

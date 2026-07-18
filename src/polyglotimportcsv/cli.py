@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import click
 
@@ -74,6 +74,12 @@ def _parse_source_overrides(pairs: Tuple[str, ...]) -> Dict[str, str]:
     type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
     help="Terminal log level; the session log file always records DEBUG.",
 )
+@click.option(
+    "--show-data/--no-data",
+    "show_data",
+    default=None,
+    help="Force or suppress per-entity data dumps (default: dump entities up to 50 rows).",
+)
 def main(
     config_path: Path,
     sgbd_config_path: Path,
@@ -82,6 +88,7 @@ def main(
     only: str,
     source_pairs: Tuple[str, ...],
     log_level: str,
+    show_data: Optional[bool],
 ) -> None:
     """Import CSV sources into multiple databases according to --config."""
     log_path = setup_reporting(getattr(logging, log_level.upper()))
@@ -97,6 +104,7 @@ def main(
             create_schema=create_schema,
             only=only_list,
             source_overrides=overrides or None,
+            show_data=show_data,
         )
     except BusinessException as e:
         error(str(e))
