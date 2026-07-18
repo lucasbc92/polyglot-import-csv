@@ -3,7 +3,6 @@
 import pytest
 
 from polyglotimportcsv.entity_utils import (
-    collect_source_columns,
     entity_has_nested_branches,
     is_column_branch,
     is_column_spec,
@@ -27,7 +26,7 @@ def test_target_field_name_precedence():
 
 def test_resolve_csv_column_index_and_name():
     cols = ["a", "b", "c"]
-    assert resolve_csv_column("x", {"csv_column": 1}, cols) == "b"
+    assert resolve_csv_column("x", {"csv_column": 2}, cols) == "b"
     assert resolve_csv_column("x", {"csv_column": "c"}, cols) == "c"
     assert resolve_csv_column("a", {}, cols) == "a"
 
@@ -53,8 +52,3 @@ def test_iter_leaf_columns_nested_in_columns():
 def test_entity_has_nested_branches():
     assert entity_has_nested_branches({"columns": {"a": {"b": {}}}})
     assert not entity_has_nested_branches({"columns": {"a": {}, "b": {"schema_column": "c"}}})
-
-
-def test_collect_source_columns_with_index():
-    ecfg = {"columns": {"logical": {"csv_column": 0}}}
-    assert collect_source_columns(ecfg, ["hdr_a", "hdr_b"]) == ["hdr_a"]

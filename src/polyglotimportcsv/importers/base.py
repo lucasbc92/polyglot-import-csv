@@ -7,9 +7,9 @@ protocol-shaped callable, not on driver-specific types.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Protocol
+from typing import Any, Dict, List, Protocol
 
-import pandas as pd
+from polyglotimportcsv.mapping_resolver import BoundEntity
 
 
 class BackendImporterFn(Protocol):
@@ -18,8 +18,7 @@ class BackendImporterFn(Protocol):
     def __call__(
         self,
         backend_cfg: Dict[str, Any],
-        df: pd.DataFrame,
-        column_kinds: Dict[str, str],
+        entities: Dict[str, BoundEntity],
         *,
         dry_run: bool,
         create_schema: bool,

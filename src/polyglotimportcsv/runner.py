@@ -1,9 +1,11 @@
-"""Orchestrate validation and per-backend import."""
+"""Orchestrate source loading, entity resolution, validation, and per-backend import."""
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, List, Optional, Set
+from typing import Dict, Iterable, List, Optional, Set, Tuple
+
+import pandas as pd
 
 from polyglotimportcsv.config_parser import load_config
 from polyglotimportcsv.console import (
@@ -14,14 +16,14 @@ from polyglotimportcsv.console import (
     step,
     success,
 )
-from polyglotimportcsv.csv_reader import load_csv_with_inference
 from polyglotimportcsv.importers import default_importer_registry
 from polyglotimportcsv.importers.base import ImporterRegistry
-from polyglotimportcsv.validation import BACKENDS, validate_import_config
+from polyglotimportcsv.mapping_resolver import resolve_backend_entities
+from polyglotimportcsv.sources import load_sources
+from polyglotimportcsv.validation import BACKENDS, validate_backend_entities
 
 
 def run_import(
-    csv_path: str | Path,
     config_path: str | Path,
     *,
     sgbd_config_path: Optional[str | Path] = None,
@@ -29,19 +31,15 @@ def run_import(
     create_schema: bool = True,
     only: Optional[Iterable[str]] = None,
     importers: Optional[ImporterRegistry] = None,
+    source_overrides: Optional[Dict[str, str]] = None,
 ) -> List[str]:
     """
-    Load CSV and config, validate, then run configured backends.
+    Load config and sources, bind entities, validate, then run configured backends.
 
-    The configuration is split in two files: ``config_path`` points to the
-    import (mapping) JSON and ``sgbd_config_path`` to the SGBD connection JSON.
-    When ``sgbd_config_path`` is omitted, a ``sgbd_config.json`` file next to
-    the import configuration is used.
-
-    ``importers`` defaults to production callables; tests may inject a stub
-    registry to avoid real database I/O (Dependency Inversion).
+    Data comes from the config's ``sources`` block (one CSV per entity, or a
+    combined CSV with the origin in column 0). ``source_overrides`` remaps a
+    source name to another CSV path without editing the config (CLI --source).
     """
-    csv_path = Path(csv_path)
     config_path = Path(config_path)
 
     mode = "dry-run" if dry_run else "import"
@@ -52,13 +50,13 @@ def run_import(
     backends_in_cfg = [b for b in BACKENDS if b in config]
     note(f"{len(backends_in_cfg)} backend(s) configured: {', '.join(backends_in_cfg)}")
 
-    step("Load CSV", str(csv_path))
-    df, kinds = load_csv_with_inference(csv_path)
-    note(f"{len(df)} data row(s), {len(df.columns)} column(s)")
-
-    step("Validate config × CSV")
-    validate_import_config(config, df, kinds)
-    success("Validation passed")
+    step("Load sources")
+    sources = load_sources(
+        config.get("sources") or {}, config_path.parent, overrides=source_overrides
+    )
+    for name in sorted(sources):
+        sd = sources[name]
+        note(f"source {name}: {len(sd.df)} row(s), {len(sd.file_header)} data column(s)")
 
     registry = importers or default_importer_registry()
 
@@ -74,6 +72,7 @@ def run_import(
     else:
         note("existing schema only (--no-create-schema)")
 
+    cast_cache: Dict[Tuple[str, object], pd.DataFrame] = {}
     log_lines: List[str] = []
     for backend in BACKENDS:
         if backend not in config:
@@ -85,7 +84,9 @@ def run_import(
             continue
         section(f"Backend · {backend}")
         bcfg = config[backend]
-        backend_lines = fn(bcfg, df, kinds, dry_run=dry_run, create_schema=create_schema)
+        bound = resolve_backend_entities(bcfg, sources, cast_cache)
+        validate_backend_entities(backend, bcfg, bound)
+        backend_lines = fn(bcfg, bound, dry_run=dry_run, create_schema=create_schema)
         log_lines.extend(backend_lines)
         for line in backend_lines:
             print(f"  {color_backend_line(line)}")

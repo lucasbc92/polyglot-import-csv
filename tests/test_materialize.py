@@ -51,3 +51,26 @@ def test_flatten_entity_dataframe_rename():
     }
     flat = flatten_entity_dataframe(df, ecfg)
     assert list(flat.columns) == ["event_time", "user_id"]
+
+
+def test_flatten_entity_dataframe_duplicate_csv_column_mapping():
+    df = pd.DataFrame([{"category_id": "1", "category_name": "Books"}])
+    ecfg = {
+        "columns": {
+            "category_id_1": {
+                "is_key": True,
+                "csv_column": "category_id",
+                "schema_column": "category_id_1",
+            },
+            "category_id_2": {
+                "csv_column": "category_id",
+                "schema_column": "category_id_2",
+            },
+            "category_name": {},
+        }
+    }
+    flat = flatten_entity_dataframe(df, ecfg)
+    assert list(flat.columns) == ["category_id_1", "category_id_2", "category_name"]
+    assert flat.iloc[0]["category_id_1"] == "1"
+    assert flat.iloc[0]["category_id_2"] == "1"
+    assert flat.iloc[0]["category_name"] == "Books"

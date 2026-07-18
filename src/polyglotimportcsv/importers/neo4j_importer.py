@@ -9,13 +9,14 @@ from typing import Any, Dict, List
 import pandas as pd
 from neo4j import GraphDatabase
 
-from polyglotimportcsv.business_exception import BusinessException
+from polyglotimportcsv.business_exception import ImportExecutionError
 from polyglotimportcsv.entity_utils import (
     flat_leaf_columns,
     resolve_csv_column,
     target_field_name,
 )
 from polyglotimportcsv.filter_engine import apply_filters, expand_each
+from polyglotimportcsv.mapping_resolver import BoundEntity
 from polyglotimportcsv.materialize import cell_scalar
 
 logger = logging.getLogger(__name__)
@@ -27,24 +28,22 @@ def _sanitize_label(label: str) -> str:
 
 def run_neo4j_import(
     backend_cfg: Dict[str, Any],
-    df: pd.DataFrame,
-    column_kinds: Dict[str, str],
+    entities: Dict[str, "BoundEntity"],
     *,
     dry_run: bool,
     create_schema: bool,
 ) -> List[str]:
     lines: List[str] = []
     conn = backend_cfg.get("connection") or {}
-    entities = backend_cfg.get("entities") or {}
     relationships = backend_cfg.get("relationships") or {}
     _ = create_schema
 
     if dry_run:
         lines.append("[neo4j] dry-run: would MERGE nodes and relationships.")
-        for ename, ecfg in entities.items():
-            non_each = [f for f in (ecfg.get("filters") or []) if f.get("operator") != "each"]
-            dff = apply_filters(df, non_each, column_kinds)
-            for part_name, part_df in expand_each(dff, ecfg.get("filters") or [], ename):
+        for ename, be in entities.items():
+            non_each = [f for f in (be.cfg.get("filters") or []) if f.get("operator") != "each"]
+            dff = apply_filters(be.df, non_each, be.kinds)
+            for part_name, part_df in expand_each(dff, be.cfg.get("filters") or [], ename):
                 lines.append(f"  label {part_name}: {len(part_df)} row(s)")
         for rname, rspec in (relationships or {}).items():
             lines.append(f"  relationship type {rspec.get('type', rname)}")
@@ -59,7 +58,7 @@ def run_neo4j_import(
         driver = GraphDatabase.driver(uri, auth=(user, password))
         driver.verify_connectivity()
     except Exception as e:
-        raise BusinessException(f"Neo4j connection failed: {e}") from e
+        raise ImportExecutionError(f"Neo4j connection failed: {e}") from e
 
     def props_from_row(row: pd.Series, ecfg: Dict[str, Any]) -> Dict[str, Any]:
         csv_columns = list(row.index)
@@ -71,24 +70,24 @@ def run_neo4j_import(
         return out
 
     with driver.session(database=database) as session:
-        for ename, ecfg in entities.items():
+        for ename, be in entities.items():
             key_cols = [
-                (fk, sp) for fk, _, sp in flat_leaf_columns(ecfg) if sp.get("is_key")
+                (fk, sp) for fk, _, sp in flat_leaf_columns(be.cfg) if sp.get("is_key")
             ]
             if len(key_cols) != 1:
-                raise BusinessException(f"Neo4j entity '{ename}' must have exactly one is_key column.")
+                raise ImportExecutionError(f"Neo4j entity '{ename}' must have exactly one is_key column.")
             key_field, key_spec = key_cols[0]
             key_name = target_field_name(key_field, key_spec)
-            key_src = resolve_csv_column(key_field, key_spec, list(df.columns))
+            key_src = resolve_csv_column(key_field, key_spec, list(be.df.columns))
             label = _sanitize_label(ename)
-            non_each = [f for f in (ecfg.get("filters") or []) if f.get("operator") != "each"]
-            dff = apply_filters(df, non_each, column_kinds)
-            for part_name, part_df in expand_each(dff, ecfg.get("filters") or [], ename):
+            non_each = [f for f in (be.cfg.get("filters") or []) if f.get("operator") != "each"]
+            dff = apply_filters(be.df, non_each, be.kinds)
+            for part_name, part_df in expand_each(dff, be.cfg.get("filters") or [], ename):
                 plabel = _sanitize_label(part_name)
                 seen = set()
                 merged = 0
                 for _, row in part_df.iterrows():
-                    props = props_from_row(row, ecfg)
+                    props = props_from_row(row, be.cfg)
                     kid = props.get(key_name)
                     if kid is None or kid in seen:
                         continue
@@ -103,22 +102,22 @@ def run_neo4j_import(
             from_label = _sanitize_label(rspec["from"])
             to_label = _sanitize_label(rspec["to"])
             rel_type = _sanitize_label(rspec.get("type") or rname)
-            from_ent = entities[rspec["from"]]
-            to_ent = entities[rspec["to"]]
-            fk_from = [(fk, sp) for fk, _, sp in flat_leaf_columns(from_ent) if sp.get("is_key")][0]
-            fk_to = [(fk, sp) for fk, _, sp in flat_leaf_columns(to_ent) if sp.get("is_key")][0]
+            from_be = entities[rspec["from"]]
+            to_be = entities[rspec["to"]]
+            fk_from = [(fk, sp) for fk, _, sp in flat_leaf_columns(from_be.cfg) if sp.get("is_key")][0]
+            fk_to = [(fk, sp) for fk, _, sp in flat_leaf_columns(to_be.cfg) if sp.get("is_key")][0]
             from_key = target_field_name(fk_from[0], fk_from[1])
             to_key = target_field_name(fk_to[0], fk_to[1])
-            from_src = resolve_csv_column(fk_from[0], fk_from[1], list(df.columns))
-            to_src = resolve_csv_column(fk_to[0], fk_to[1], list(df.columns))
+            from_src = resolve_csv_column(fk_from[0], fk_from[1], list(from_be.df.columns))
+            to_src = resolve_csv_column(fk_to[0], fk_to[1], list(from_be.df.columns))
             rel_cols = rspec.get("columns") or {}
             merge_key_cols = [
                 (fk, target_field_name(fk, spec))
                 for fk, spec in rel_cols.items()
                 if spec.get("is_key")
             ]
-            f1 = [x for x in (from_ent.get("filters") or []) if x.get("operator") != "each"]
-            dff = apply_filters(df, f1, column_kinds)
+            f1 = [x for x in (from_be.cfg.get("filters") or []) if x.get("operator") != "each"]
+            dff = apply_filters(from_be.df, f1, from_be.kinds)
             count = 0
             for _, row in dff.iterrows():
                 a_id = cell_scalar(row[from_src] if from_src in row.index else None)

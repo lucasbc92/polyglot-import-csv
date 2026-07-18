@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import warnings
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict
 
 import pandas as pd
+
+from polyglotimportcsv.casting import is_boolean_series
 
 
 def read_csv(path: str | Path) -> pd.DataFrame:
@@ -38,6 +40,9 @@ def infer_column_kinds(df: pd.DataFrame) -> Dict[str, str]:
         if s2.empty:
             kinds[col] = "empty"
             continue
+        if is_boolean_series(s2):
+            kinds[col] = "boolean"
+            continue
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             parsed = pd.to_datetime(s2, errors="coerce", utc=True)
@@ -50,9 +55,3 @@ def infer_column_kinds(df: pd.DataFrame) -> Dict[str, str]:
             continue
         kinds[col] = "string"
     return kinds
-
-
-def load_csv_with_inference(path: str | Path) -> Tuple[pd.DataFrame, Dict[str, str]]:
-    df = read_csv(path)
-    kinds = infer_column_kinds(df)
-    return df, kinds
