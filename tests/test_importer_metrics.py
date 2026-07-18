@@ -21,3 +21,15 @@ def test_postgres_dry_run_records_filter_phase():
 
 def test_mongodb_dry_run_records_filter_phase():
     assert ("mongodb", "filter") in _filter_phases("mongodb")
+
+
+def test_cassandra_dry_run_records_filter_phase():
+    assert ("cassandra", "filter") in _filter_phases("cassandra")
+
+
+def test_redis_dry_run_records_filter_phase():
+    assert ("redis", "filter") in _filter_phases("redis")
+
+
+def test_neo4j_dry_run_records_filter_phase():
+    assert ("neo4j", "filter") in _filter_phases("neo4j")
