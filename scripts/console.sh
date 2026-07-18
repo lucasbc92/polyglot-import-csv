@@ -133,6 +133,8 @@ init_session_log() {
 
   export POLYGLOT_LOG_FILE="${LOG_FILE}"
   export POLYGLOT_LOG_TEE=1
+  # Python steps append full-DEBUG records here (terminal shows INFO via tee above).
+  export POLYGLOT_DEBUG_LOG="${LOG_FILE%.log}_debug.log"
 
   {
     echo ""

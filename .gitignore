@@ -5,6 +5,8 @@ _temp_skills/
 logs/*
 !logs/.gitignore
 
+# Benchmark outputs (--benchmark); consolidated results are cited in the report
+benchmarks/
 
 # Large local datasets not tracked in git
 2018-census-totals-by-topic-national-highlights-csv/

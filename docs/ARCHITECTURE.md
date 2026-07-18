@@ -10,13 +10,14 @@ This document reflects the **Software Architecture** skill: separate parsing fro
 
 | Layer | Responsibility | Modules |
 |-------|------------------|---------|
-| **Drivers / Frameworks** | DB clients, CLI | `cli.py`, `importers/*.py` |
-| **Application / use case** | Orchestration, validation before I/O | `runner.py`, `validation.py` |
+| **Drivers / Frameworks** | DB clients, CLI, terminal/log output | `cli.py`, `importers/*.py`, `reporting.py` |
+| **Application / use case** | Orchestration, validation before I/O, metrics | `runner.py`, `validation.py`, `metrics.py` |
 | **Domain helpers** | Source loading/binding, mapping resolution, casting, filters, row materialisation, column naming | `sources.py`, `mapping_resolver.py`, `casting.py`, `column_selector.py`, `filter_engine.py`, `materialize.py`, `entity_utils.py` |
 | **Parsing / ports** | CSV + JSON config | `csv_reader.py`, `config_parser.py`, `schemas/` |
 
 - **Parsing is independent** of any database: `csv_reader` and `config_parser` do not import drivers.
 - **Source pipeline (config v2)**: `sources.py` loads the `sources` block (one CSV per source, or a combined CSV sliced by its origin column) and appends the `_source` pseudo-column; `mapping_resolver.py` binds each entity to its source(s) and resolves auto/hybrid/manual column maps into `BoundEntity` frames; `casting.py` converts columns to native Python values by inferred kind. Importers receive ready `BoundEntity` frames and never read CSV themselves.
+- **Reporting (rich)**: `reporting.py` drives two destinations — a terminal `RichHandler` filtered by `--log-level` and an always-DEBUG plain-text session file under `logs/`. `metrics.py` collects per-phase (read/filter/map/write) row counts and durations; `--benchmark` persists them under `benchmarks/`.
 - **Importers** implement the same callable shape (`BackendImporterFn` in `importers/base.py`). `runner.run_import(..., importers=...)` accepts a registry so tests can inject fakes (**Dependency Inversion**).
 
 ## SOLID mapping
@@ -44,12 +45,13 @@ Este documento segue a skill de **arquitetura de software**: separar *parsing* d
 
 | Camada | Papel | Módulos |
 |--------|--------|---------|
-| **Drivers** | Clientes de SGBD, CLI | `cli.py`, `importers/*.py` |
-| **Caso de uso** | Orquestração, validação antes de I/O | `runner.py`, `validation.py` |
+| **Drivers** | Clientes de SGBD, CLI, saída de terminal/log | `cli.py`, `importers/*.py`, `reporting.py` |
+| **Caso de uso** | Orquestração, validação antes de I/O, métricas | `runner.py`, `validation.py`, `metrics.py` |
 | **Domínio** | Fontes, resolução de mapeamento, conversão de tipos, filtros, materialização de linhas | `sources.py`, `mapping_resolver.py`, `casting.py`, `column_selector.py`, `filter_engine.py`, `materialize.py`, `entity_utils.py` |
 | **Parsing** | CSV + JSON | `csv_reader.py`, `config_parser.py`, `schemas/` |
 
 No formato v2 da configuração, `sources.py` carrega o bloco `sources` (um CSV por fonte ou um CSV combinado fatiado pela coluna de origem) e acrescenta a pseudocoluna `_source`; `mapping_resolver.py` vincula cada entidade à(s) sua(s) fonte(s) e resolve os mapeamentos de colunas em quadros `BoundEntity`; `casting.py` converte as colunas para valores nativos conforme o tipo inferido. Os importadores recebem os quadros prontos e não leem CSV diretamente.
+A camada de saída usa a biblioteca `rich`: o terminal respeita `--log-level` (padrão INFO) e o arquivo de sessão em `logs/` sempre grava DEBUG em texto puro; `metrics.py` mede linhas e duração por fase (leitura, filtro, mapeamento, escrita) e o flag `--benchmark` persiste os resultados em `benchmarks/`.
 
 ### Testes (skill TDD)
 

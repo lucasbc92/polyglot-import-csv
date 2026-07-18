@@ -454,6 +454,9 @@ fi
 if [[ -n "${POLYGLOT_LOG_FILE:-}" ]]; then
   log_kv "Log file" "${POLYGLOT_LOG_FILE}"
 fi
+if [[ -n "${POLYGLOT_DEBUG_LOG:-}" ]]; then
+  log_kv "Debug log" "${POLYGLOT_DEBUG_LOG}"
+fi
 
 if [[ ${#ORIGINAL_ARGS[@]} -gt 0 ]]; then
   log_command "./run_example.sh" "${ORIGINAL_ARGS[@]}"
@@ -495,4 +498,7 @@ fi
 log_done "All requested steps completed"
 if [[ -n "${POLYGLOT_LOG_FILE:-}" ]]; then
   log_kv "Log saved to" "${POLYGLOT_LOG_FILE}"
+fi
+if [[ -n "${POLYGLOT_DEBUG_LOG:-}" && -f "${POLYGLOT_DEBUG_LOG}" ]]; then
+  log_kv "Debug log saved to" "${POLYGLOT_DEBUG_LOG}"
 fi
