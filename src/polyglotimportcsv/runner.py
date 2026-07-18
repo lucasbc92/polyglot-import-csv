@@ -2,25 +2,36 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 import pandas as pd
+from rich.text import Text
 
 from polyglotimportcsv.config_parser import load_config
-from polyglotimportcsv.console import (
+from polyglotimportcsv.importers import default_importer_registry
+from polyglotimportcsv.importers.base import ImporterRegistry
+from polyglotimportcsv.mapping_resolver import resolve_backend_entities
+from polyglotimportcsv.reporting import (
+    backend_text,
     banner,
-    color_backend_line,
     note,
+    print_rich,
     section,
     step,
     success,
 )
-from polyglotimportcsv.importers import default_importer_registry
-from polyglotimportcsv.importers.base import ImporterRegistry
-from polyglotimportcsv.mapping_resolver import resolve_backend_entities
 from polyglotimportcsv.sources import load_sources
 from polyglotimportcsv.validation import BACKENDS, validate_backend_entities
+
+logger = logging.getLogger(__name__)
+
+
+def _print_backend_line(line: str) -> None:
+    out = Text("  ")
+    out.append_text(backend_text(line))
+    print_rich(out)
 
 
 def run_import(
@@ -89,7 +100,7 @@ def run_import(
         backend_lines = fn(bcfg, bound, dry_run=dry_run, create_schema=create_schema)
         log_lines.extend(backend_lines)
         for line in backend_lines:
-            print(f"  {color_backend_line(line)}")
+            _print_backend_line(line)
 
     success(f"Finished {mode} — {len(log_lines)} log line(s) from importer(s)")
     return log_lines

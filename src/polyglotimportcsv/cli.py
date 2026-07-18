@@ -10,7 +10,7 @@ from typing import Dict, Tuple
 import click
 
 from polyglotimportcsv.business_exception import BusinessException
-from polyglotimportcsv.console import error, init_session_log, setup_logging
+from polyglotimportcsv.reporting import error, kv, setup_reporting
 from polyglotimportcsv.runner import run_import
 
 logger = logging.getLogger(__name__)
@@ -66,6 +66,14 @@ def _parse_source_overrides(pairs: Tuple[str, ...]) -> Dict[str, str]:
     metavar="NAME=PATH",
     help="Override the CSV path of a source declared in the config (repeatable).",
 )
+@click.option(
+    "--log-level",
+    "log_level",
+    default="INFO",
+    show_default=True,
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
+    help="Terminal log level; the session log file always records DEBUG.",
+)
 def main(
     config_path: Path,
     sgbd_config_path: Path,
@@ -73,14 +81,12 @@ def main(
     create_schema: bool,
     only: str,
     source_pairs: Tuple[str, ...],
+    log_level: str,
 ) -> None:
     """Import CSV sources into multiple databases according to --config."""
-    setup_logging()
-    log_path = init_session_log(prefix="polyglotimportcsv")
+    log_path = setup_reporting(getattr(logging, log_level.upper()))
     if log_path is not None:
-        from polyglotimportcsv.console import kv
-
-        kv("Log file", str(log_path))
+        kv("Log file", log_path)
     only_list = [x.strip() for x in only.split(",") if x.strip()] if only else None
     overrides = _parse_source_overrides(source_pairs)
     try:
