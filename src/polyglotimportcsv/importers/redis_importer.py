@@ -60,7 +60,6 @@ def run_redis_import(
             if part_df.empty:
                 logger.warning("[redis] entity %s has 0 row(s) after filters", part_name)
             count = 0
-            first_key = None
             with metrics.timed_phase("redis", part_name, "write") as tw:
                 with entity_progress(f"redis · {part_name}", len(part_df)) as advance:
                     for _, row in part_df.iterrows():
@@ -68,12 +67,10 @@ def run_redis_import(
                             k, v = redis_payload_from_row(row, be.cfg)
                         except ValueError:
                             continue
-                        if first_key is None:
-                            first_key = k
                         r.set(k, v)
                         count += 1
                         advance(1)
                 tw.rows = count
-            logger.debug("[redis] SET %d key(s) for %s (first key: %s)", count, part_name, first_key)
+            logger.debug("[redis] SET %d key(s) for %s", count, part_name)
             lines.append(f"[redis] SET {count} key(s) for {part_name}")
     return lines
