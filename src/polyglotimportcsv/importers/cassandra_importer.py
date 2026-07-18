@@ -28,8 +28,19 @@ def _source_to_db_map(ecfg: Dict[str, Any], csv_columns: List[str]) -> Dict[str,
     }
 
 
-def _cassandra_type_for(spec: Dict[str, Any]) -> str:
-    t = (spec.get("db_type") or "TEXT").upper()
+_KIND_TO_CQL_TYPE: Dict[str, str] = {
+    "integer": "bigint",
+    "float": "double",
+    "datetime": "timestamp",
+    "boolean": "boolean",
+}
+
+
+def _cassandra_type_for(spec: Dict[str, Any], kind: str) -> str:
+    db_type = spec.get("db_type")
+    if not db_type:
+        return _KIND_TO_CQL_TYPE.get(kind, "text")
+    t = db_type.upper()
     if t in ("TIMESTAMPTZ", "TIMESTAMP"):
         return "timestamp"
     if t in ("BIGINT", "INT", "INTEGER"):
@@ -127,6 +138,10 @@ def run_cassandra_import(
             for fk, _, spec in flat_leaf_columns(be.cfg)
         }
         pk_clause = _primary_key_clause(part_db, clust_db)
+        cql_by_src = {
+            src: _cassandra_type_for(spec_by_src[src], be.kinds.get(src, "string"))
+            for src in ordered_src
+        }
 
         non_each = [f for f in (be.cfg.get("filters") or []) if f.get("operator") != "each"]
         dff = apply_filters(be.df, non_each, be.kinds)
@@ -134,8 +149,7 @@ def run_cassandra_import(
             if create_schema:
                 col_defs = []
                 for src in ordered_src:
-                    spec = spec_by_src[src]
-                    col_defs.append(f'"{pmap[src]}" {_cassandra_type_for(spec)}')
+                    col_defs.append(f'"{pmap[src]}" {cql_by_src[src]}')
                 ddl = f'CREATE TABLE IF NOT EXISTS "{table}" (' + ", ".join(col_defs) + f", {pk_clause});"
                 session.execute(ddl)
 
@@ -148,7 +162,12 @@ def run_cassandra_import(
                 values = []
                 for src in ordered_src:
                     val = row.get(src)
-                    values.append(None if pd.isna(val) else val)
+                    if pd.isna(val):
+                        values.append(None)
+                    elif cql_by_src[src] == "text":
+                        values.append(str(val))
+                    else:
+                        values.append(val)
                 session.execute(prep, values)
                 count += 1
             lines.append(f"[cassandra] inserted {count} row(s) into {keyspace}.{table}")
