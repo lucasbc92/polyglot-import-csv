@@ -2,7 +2,7 @@
 
 import pytest
 
-from polyglotimportcsv import reporting
+from polyglotimportcsv import metrics, reporting
 
 
 @pytest.fixture(autouse=True)
@@ -10,3 +10,4 @@ def _quiet_reporting(monkeypatch):
     monkeypatch.setenv("POLYGLOT_NO_LOG", "1")
     yield
     reporting.reset()
+    metrics.set_current(None)

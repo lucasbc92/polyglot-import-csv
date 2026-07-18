@@ -20,6 +20,7 @@ from rich.console import Console
 from rich.json import JSON
 from rich.logging import RichHandler
 from rich.rule import Rule
+from rich.table import Table
 from rich.text import Text
 
 logger = logging.getLogger(__name__)
@@ -221,6 +222,28 @@ def dump_entity_frame(
         logger.debug("%s · %s: data dump suppressed for %d row(s)", backend, entity, n)
         return
     dump_rows(f"{backend} · {entity}", df.to_dict(orient="records"))
+
+
+def metrics_table(records: Sequence[Dict[str, Any]]) -> Table:
+    """Summary table for the end of a run (spec §4.4)."""
+    table = Table(title="Import metrics", header_style="bold")
+    table.add_column("backend")
+    table.add_column("entity")
+    table.add_column("phase")
+    table.add_column("rows", justify="right")
+    table.add_column("seconds", justify="right")
+    table.add_column("rows/s", justify="right")
+    for rec in records:
+        rate = rec.get("rows_per_second")
+        table.add_row(
+            str(rec.get("backend", "")),
+            str(rec.get("entity", "")),
+            str(rec.get("phase", "")),
+            str(rec.get("rows", 0)),
+            f"{float(rec.get('seconds', 0.0) or 0.0):.3f}",
+            "-" if rate is None else f"{float(rate):.0f}",
+        )
+    return table
 
 
 def backend_text(line: str) -> Text:
