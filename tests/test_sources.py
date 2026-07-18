@@ -71,3 +71,11 @@ def test_override_replaces_path(tmp_path):
     _write(tmp_path, "real.csv", "a\n1\n")
     reg = load_sources({"stock": "nope.csv"}, tmp_path, overrides={"stock": str(tmp_path / "real.csv")})
     assert len(reg["stock"].df) == 1
+
+
+def test_unknown_override_name_raises(tmp_path):
+    _write(tmp_path, "stock.csv", "a\n1\n")
+    with pytest.raises(SourceError, match="stok"):
+        load_sources(
+            {"stock": "stock.csv"}, tmp_path, overrides={"stok": "big.csv"}
+        )

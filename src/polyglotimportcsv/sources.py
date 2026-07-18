@@ -60,6 +60,15 @@ def load_sources(
     overrides = overrides or {}
     base_dir = Path(base_dir)
 
+    unknown = set(overrides) - set(sources_cfg or {})
+    if unknown:
+        raise SourceError(
+            f"--source override name(s) not declared in config: {', '.join(sorted(unknown))}. "
+            f"Declared source names: {', '.join(sorted(sources_cfg or {})) or '(none)'}. "
+            "Only names declared in the config's 'sources' block can be overridden "
+            "(origin-derived slice names of a combined CSV are not overridable)."
+        )
+
     for name, decl in (sources_cfg or {}).items():
         if isinstance(decl, str):
             path = _resolve_path(name, decl, base_dir, overrides)
