@@ -80,6 +80,11 @@ def _parse_source_overrides(pairs: Tuple[str, ...]) -> Dict[str, str]:
     default=None,
     help="Force or suppress per-entity data dumps (default: dump entities up to 50 rows).",
 )
+@click.option(
+    "--benchmark",
+    is_flag=True,
+    help="Record per-phase metrics to benchmarks/ after the run (implies --no-data).",
+)
 def main(
     config_path: Path,
     sgbd_config_path: Path,
@@ -89,6 +94,7 @@ def main(
     source_pairs: Tuple[str, ...],
     log_level: str,
     show_data: Optional[bool],
+    benchmark: bool,
 ) -> None:
     """Import CSV sources into multiple databases according to --config."""
     log_path = setup_reporting(getattr(logging, log_level.upper()))
@@ -105,6 +111,7 @@ def main(
             only=only_list,
             source_overrides=overrides or None,
             show_data=show_data,
+            benchmark=benchmark,
         )
     except BusinessException as e:
         error(str(e))

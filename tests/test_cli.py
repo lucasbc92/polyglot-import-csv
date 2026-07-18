@@ -79,3 +79,18 @@ def test_cli_show_data_tristate(tmp_path, monkeypatch):
     assert captured["show_data"] is True
     assert runner.invoke(main, ["--config", str(cfg), "--no-data"]).exit_code == 0
     assert captured["show_data"] is False
+
+
+def test_cli_benchmark_flag_passes_through(tmp_path, monkeypatch):
+    captured = {}
+
+    def fake_run_import(config_path, **kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr("polyglotimportcsv.cli.run_import", fake_run_import)
+    cfg = tmp_path / "cfg.json"
+    cfg.write_text("{}", encoding="utf-8")
+    result = CliRunner().invoke(main, ["--config", str(cfg), "--benchmark"])
+    assert result.exit_code == 0, result.output
+    assert captured["benchmark"] is True

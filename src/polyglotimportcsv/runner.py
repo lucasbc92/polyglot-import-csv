@@ -19,6 +19,7 @@ from polyglotimportcsv.reporting import (
     backend_text,
     banner,
     dump_entity_frame,
+    kv,
     metrics_table,
     note,
     print_rich,
@@ -49,6 +50,7 @@ def run_import(
     source_overrides: Optional[Dict[str, str]] = None,
     show_data: Optional[bool] = None,
     collector: Optional[metrics.MetricsCollector] = None,
+    benchmark: bool = False,
 ) -> List[str]:
     """
     Load config and sources, bind entities, validate, then run configured backends.
@@ -73,8 +75,9 @@ def run_import(
             only=only,
             importers=importers,
             source_overrides=source_overrides,
-            show_data=show_data,
+            show_data=False if benchmark else show_data,
             collector=collector,
+            benchmark=benchmark,
         )
     finally:
         metrics.set_current(None)
@@ -91,6 +94,7 @@ def _run(
     source_overrides: Optional[Dict[str, str]],
     show_data: Optional[bool],
     collector: metrics.MetricsCollector,
+    benchmark: bool,
 ) -> List[str]:
     mode = "dry-run" if dry_run else "import"
     step("Load config", str(config_path))
@@ -155,5 +159,12 @@ def _run(
 
     if collector.entries():
         print_rich(metrics_table(collector.to_records()))
+    if benchmark:
+        meta = metrics.environment_metadata(
+            config_path, {n: len(sd.df) for n, sd in sources.items()}
+        )
+        json_path, csv_path = metrics.write_benchmark_files(collector, meta)
+        kv("Benchmark JSON", json_path)
+        kv("Benchmark CSV", csv_path)
     success(f"Finished {mode} — {len(log_lines)} log line(s) from importer(s)")
     return log_lines

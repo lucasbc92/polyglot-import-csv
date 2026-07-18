@@ -7,10 +7,16 @@ to their frozen signature. Phases: read, filter, map, write.
 
 from __future__ import annotations
 
+import csv
+import json
+import platform
+import sys
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Dict, Iterator, List, Optional
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, Iterator, List, Optional, Tuple
 
 PHASES = ("read", "filter", "map", "write")
 
@@ -94,3 +100,51 @@ def timed_phase(backend: str, entity: str, phase: str) -> Iterator[_Timed]:
         return
     with _current.timed(backend, entity, phase) as t:
         yield t
+
+
+_CSV_FIELDS = ("timestamp", "backend", "entity", "phase", "rows", "seconds", "rows_per_second")
+
+
+def environment_metadata(
+    config_path: "str | Path", source_rows: Dict[str, int]
+) -> Dict[str, object]:
+    """Run metadata stored with each benchmark (spec §4.4)."""
+    return {
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "python": sys.version.split()[0],
+        "platform": platform.platform(),
+        "config": str(config_path),
+        "source_rows": source_rows,
+    }
+
+
+def write_benchmark_files(
+    collector: MetricsCollector,
+    metadata: Dict[str, object],
+    out_dir: "str | Path" = "benchmarks",
+) -> Tuple[Path, Path]:
+    """Write benchmark_<timestamp>.json and append benchmark_history.csv."""
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    json_path = out / f"benchmark_{stamp}.json"
+    json_path.write_text(
+        json.dumps(
+            {"metadata": metadata, "metrics": collector.to_records()},
+            indent=2,
+            default=str,
+        ),
+        encoding="utf-8",
+    )
+    csv_path = out / "benchmark_history.csv"
+    new_file = not csv_path.exists()
+    with csv_path.open("a", encoding="utf-8", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=_CSV_FIELDS)
+        if new_file:
+            writer.writeheader()
+        ts = metadata.get("timestamp", "")
+        for rec in collector.to_records():
+            row = {k: rec[k] for k in _CSV_FIELDS if k != "timestamp"}
+            row["timestamp"] = ts
+            writer.writerow(row)
+    return json_path, csv_path
