@@ -11,12 +11,16 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import datetime
 from pathlib import Path
-from typing import IO, Any, Optional
+from typing import IO, Any, Dict, Optional, Sequence
 
 from rich.console import Console
+from rich.json import JSON
 from rich.logging import RichHandler
+from rich.rule import Rule
+from rich.text import Text
 
 logger = logging.getLogger(__name__)
 
@@ -123,3 +127,103 @@ def print_rich(renderable: Any, *, level: int = logging.INFO) -> None:
         _file_console.print(renderable)
         if _file_handle is not None:
             _file_handle.flush()
+
+
+_BACKEND_STYLE: Dict[str, str] = {
+    "postgres": "cyan",
+    "mongodb": "green",
+    "cassandra": "yellow",
+    "redis": "red",
+    "neo4j": "magenta",
+}
+
+_BACKEND_LINE = re.compile(r"^\[(\w+)\]\s*(.*)$", re.IGNORECASE)
+
+
+def banner(title: str, *, subtitle: str = "") -> None:
+    print_rich(Text(""))
+    print_rich(Rule(style="dim"))
+    print_rich(Text(f"  {title}", style="bold cyan"))
+    if subtitle:
+        print_rich(Text(f"  {subtitle}", style="dim"))
+    print_rich(Rule(style="dim"))
+
+
+def section(title: str) -> None:
+    print_rich(Text(""))
+    print_rich(Text(f"▸ {title}", style="bold blue"))
+    print_rich(Rule(style="dim"))
+
+
+def step(label: str, detail: str = "") -> None:
+    line = Text("  → ", style="cyan")
+    line.append(label, style="bold")
+    if detail:
+        line.append(f" {detail}", style="dim")
+    print_rich(line)
+
+
+def kv(key: str, value: Any) -> None:
+    line = Text(f"    {key}: ", style="dim")
+    line.append(str(value))
+    print_rich(line)
+
+
+def note(message: str) -> None:
+    print_rich(Text(f"    {message}", style="dim"))
+
+
+def success(message: str) -> None:
+    print_rich(Text(f"  ✓ {message}", style="green"))
+
+
+def warn(message: str) -> None:
+    logger.warning(message)
+
+
+def error(message: str) -> None:
+    logger.error(message)
+
+
+def empty_label() -> Text:
+    return Text("(empty)", style="dim")
+
+
+def format_json_row(obj: Any) -> Text:
+    """One record as compact, syntax-highlighted JSON text (spec §4.3)."""
+    return JSON.from_data(obj, indent=None, default=str).text
+
+
+def dump_rows(label: str, rows: Sequence[Dict[str, Any]]) -> None:
+    header = Text(f"  {label}: ")
+    header.append(str(len(rows)), style="bold yellow")
+    header.append(" row(s)")
+    print_rich(header)
+    if not rows:
+        line = Text("    ")
+        line.append_text(empty_label())
+        print_rich(line)
+        return
+    for i, row in enumerate(rows, start=1):
+        line = Text(f"    [{i}] ", style="dim")
+        line.append_text(format_json_row(row))
+        print_rich(line)
+
+
+def backend_text(line: str) -> Text:
+    """Style an importer log line ('[postgres] inserted ...') for the terminal."""
+    m = _BACKEND_LINE.match(line.strip())
+    if not m:
+        if line.startswith("  "):
+            return Text(line, style="dim")
+        return Text(line)
+    backend, rest = m.group(1).lower(), m.group(2)
+    style = _BACKEND_STYLE.get(backend, "white")
+    out = Text(f"[{backend}]", style=f"bold {style}")
+    if "dry-run" in rest or rest.startswith("would "):
+        out.append(f" {rest}", style="yellow")
+    elif "inserted" in rest or "merged" in rest or "SET " in rest:
+        out.append(f" {rest}", style="green")
+    else:
+        out.append(f" {rest}")
+    return out
