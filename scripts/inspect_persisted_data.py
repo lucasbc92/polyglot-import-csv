@@ -8,20 +8,21 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
-from polyglotimportcsv.console import (
+from polyglotimportcsv.reporting import (
     banner,
     dump_rows,
     empty_label,
     error,
     format_json_row,
-    init_session_log,
     note,
+    print_rich,
     section,
-    setup_logging,
+    setup_reporting,
     step,
     success,
     warn,
 )
+from rich.text import Text
 
 DEFAULT_CONFIG = Path("data/ecommerce/import_config.json")
 DEFAULT_SGBD_CONFIG = Path("data/ecommerce/sgbd_config.json")
@@ -154,18 +155,21 @@ def inspect_redis(cfg: Dict[str, Any]) -> None:
     for entity in entities:
         note(f"entity config: {entity}")
     if not keys:
-        print(f"    {empty_label()}")
+        line = Text("    ")
+        line.append_text(empty_label())
+        print_rich(line)
         return
     for key in keys:
         kind = r.type(key)
         if kind == "string":
             value = r.get(key)
+            line = Text(f"    key={key!r}  value=")
             try:
                 parsed = json.loads(value)
-                value_repr = format_json_row(parsed)
+                line.append_text(format_json_row(parsed))
             except (TypeError, json.JSONDecodeError):
-                value_repr = value
-            print(f"    key={key!r}  value={value_repr}")
+                line.append(str(value))
+            print_rich(line)
         else:
             warn(f"key={key!r} type={kind} (not displayed)")
 
@@ -415,7 +419,6 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    setup_logging()
     parser = argparse.ArgumentParser(
         description="Clean or inspect Docker databases using import_config.json."
     )
@@ -428,13 +431,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     _add_common_args(clean_p)
 
     args = parser.parse_args(argv)
+    log_path = setup_reporting()
     config_path = args.config.resolve()
     if not config_path.is_file():
         error(f"Config not found: {config_path}")
         return 1
     sgbd_path = args.sgbd_config.resolve() if args.sgbd_config else None
 
-    log_path = init_session_log(prefix=f"inspect_{args.command}")
     if log_path is not None:
         note(f"log file: {log_path}")
 

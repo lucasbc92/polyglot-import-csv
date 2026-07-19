@@ -9,6 +9,7 @@ from typing import Any, Dict, List
 import pandas as pd
 from neo4j import GraphDatabase
 
+from polyglotimportcsv import metrics
 from polyglotimportcsv.business_exception import ImportExecutionError
 from polyglotimportcsv.entity_utils import (
     flat_leaf_columns,
@@ -18,6 +19,7 @@ from polyglotimportcsv.entity_utils import (
 from polyglotimportcsv.filter_engine import apply_filters, expand_each
 from polyglotimportcsv.mapping_resolver import BoundEntity
 from polyglotimportcsv.materialize import cell_scalar
+from polyglotimportcsv.reporting import entity_progress
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +44,9 @@ def run_neo4j_import(
         lines.append("[neo4j] dry-run: would MERGE nodes and relationships.")
         for ename, be in entities.items():
             non_each = [f for f in (be.cfg.get("filters") or []) if f.get("operator") != "each"]
-            dff = apply_filters(be.df, non_each, be.kinds)
+            with metrics.timed_phase("neo4j", ename, "filter") as t:
+                dff = apply_filters(be.df, non_each, be.kinds)
+                t.rows = len(dff)
             for part_name, part_df in expand_each(dff, be.cfg.get("filters") or [], ename):
                 lines.append(f"  label {part_name}: {len(part_df)} row(s)")
         for rname, rspec in (relationships or {}).items():
@@ -81,21 +85,39 @@ def run_neo4j_import(
             key_src = resolve_csv_column(key_field, key_spec, list(be.df.columns))
             label = _sanitize_label(ename)
             non_each = [f for f in (be.cfg.get("filters") or []) if f.get("operator") != "each"]
-            dff = apply_filters(be.df, non_each, be.kinds)
+            with metrics.timed_phase("neo4j", ename, "filter") as t:
+                dff = apply_filters(be.df, non_each, be.kinds)
+                t.rows = len(dff)
             for part_name, part_df in expand_each(dff, be.cfg.get("filters") or [], ename):
                 plabel = _sanitize_label(part_name)
+                q = f"MERGE (n:{plabel} {{{key_name}: $k}}) SET n += $props"
+                logger.debug("[neo4j] Cypher: %s (%d row(s))", q, len(part_df))
+                if part_df.empty:
+                    logger.warning("[neo4j] label %s has 0 row(s) after filters", part_name)
                 seen = set()
                 merged = 0
-                for _, row in part_df.iterrows():
-                    props = props_from_row(row, be.cfg)
-                    kid = props.get(key_name)
-                    if kid is None or kid in seen:
-                        continue
-                    seen.add(kid)
-                    rest = {k: v for k, v in props.items() if k != key_name}
-                    q = f"MERGE (n:{plabel} {{{key_name}: $k}}) SET n += $props"
-                    session.run(q, k=kid, props=rest)
-                    merged += 1
+                skipped = 0
+                with metrics.timed_phase("neo4j", part_name, "write") as tw:
+                    with entity_progress(f"neo4j · {part_name}", len(part_df)) as advance:
+                        for _, row in part_df.iterrows():
+                            props = props_from_row(row, be.cfg)
+                            kid = props.get(key_name)
+                            if kid is None or kid in seen:
+                                if kid is not None:
+                                    skipped += 1
+                                advance(1)
+                                continue
+                            seen.add(kid)
+                            rest = {k: v for k, v in props.items() if k != key_name}
+                            session.run(q, k=kid, props=rest)
+                            merged += 1
+                            advance(1)
+                    tw.rows = merged
+                if skipped:
+                    logger.warning(
+                        "[neo4j] %s: %d duplicate key value(s) skipped (first MERGE wins)",
+                        part_name, skipped,
+                    )
                 lines.append(f"[neo4j] merged {merged} node(s) :{plabel}")
 
         for rname, rspec in (relationships or {}).items():
@@ -111,41 +133,42 @@ def run_neo4j_import(
             from_src = resolve_csv_column(fk_from[0], fk_from[1], list(from_be.df.columns))
             to_src = resolve_csv_column(fk_to[0], fk_to[1], list(from_be.df.columns))
             rel_cols = rspec.get("columns") or {}
-            merge_key_cols = [
-                (fk, target_field_name(fk, spec))
+            mk_names = [
+                target_field_name(fk, spec)
                 for fk, spec in rel_cols.items()
                 if spec.get("is_key")
             ]
+            mk_clause = ", ".join(f"{k}: $mk_{k}" for k in mk_names)
+            mk_block = f" {{{mk_clause}}}" if mk_clause else ""
+            q = (
+                f"MATCH (a:{from_label} {{{from_key}: $a_id}}), "
+                f"(b:{to_label} {{{to_key}: $b_id}}) "
+                f"MERGE (a)-[r:{rel_type}{mk_block}]->(b) SET r += $rprops"
+            )
+            logger.debug("[neo4j] Cypher: %s", q)
             f1 = [x for x in (from_be.cfg.get("filters") or []) if x.get("operator") != "each"]
             dff = apply_filters(from_be.df, f1, from_be.kinds)
             count = 0
-            for _, row in dff.iterrows():
-                a_id = cell_scalar(row[from_src] if from_src in row.index else None)
-                b_id = cell_scalar(row[to_src] if to_src in row.index else None)
-                if a_id is None or b_id is None:
-                    continue
-                rel_props: Dict[str, Any] = {}
-                csv_columns = list(row.index)
-                for field_key, spec in rel_cols.items():
-                    name = target_field_name(field_key, spec)
-                    src = resolve_csv_column(field_key, spec, csv_columns)
-                    rel_props[name] = cell_scalar(row[src] if src in row.index else None)
-                merge_keys = {db_name: rel_props[db_name] for _, db_name in merge_key_cols}
-                rest_props = {k: v for k, v in rel_props.items() if k not in merge_keys}
-                if merge_keys:
-                    mk_clause = ", ".join(f"{k}: $mk_{k}" for k in merge_keys)
-                    mk_params = {f"mk_{k}": v for k, v in merge_keys.items()}
-                else:
-                    mk_clause = ""
-                    mk_params = {}
-                mk_block = f" {{{mk_clause}}}" if mk_clause else ""
-                q = (
-                    f"MATCH (a:{from_label} {{{from_key}: $a_id}}), "
-                    f"(b:{to_label} {{{to_key}: $b_id}}) "
-                    f"MERGE (a)-[r:{rel_type}{mk_block}]->(b) SET r += $rprops"
-                )
-                session.run(q, a_id=a_id, b_id=b_id, rprops=rest_props, **mk_params)
-                count += 1
+            with metrics.timed_phase("neo4j", f"rel:{rel_type}", "write") as tw:
+                with entity_progress(f"neo4j · :{rel_type}", len(dff)) as advance:
+                    for _, row in dff.iterrows():
+                        a_id = cell_scalar(row[from_src] if from_src in row.index else None)
+                        b_id = cell_scalar(row[to_src] if to_src in row.index else None)
+                        if a_id is None or b_id is None:
+                            advance(1)
+                            continue
+                        rel_props: Dict[str, Any] = {}
+                        csv_columns = list(row.index)
+                        for field_key, spec in rel_cols.items():
+                            name = target_field_name(field_key, spec)
+                            src = resolve_csv_column(field_key, spec, csv_columns)
+                            rel_props[name] = cell_scalar(row[src] if src in row.index else None)
+                        mk_params = {f"mk_{k}": rel_props[k] for k in mk_names}
+                        rest_props = {k: v for k, v in rel_props.items() if k not in mk_names}
+                        session.run(q, a_id=a_id, b_id=b_id, rprops=rest_props, **mk_params)
+                        count += 1
+                        advance(1)
+                tw.rows = count
             lines.append(f"[neo4j] merged {count} relationship(s) :{rel_type}")
 
     driver.close()

@@ -9,6 +9,7 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
+from polyglotimportcsv import metrics
 from polyglotimportcsv.business_exception import ImportExecutionError
 from polyglotimportcsv.entity_utils import (
     flat_leaf_columns,
@@ -17,6 +18,7 @@ from polyglotimportcsv.entity_utils import (
 )
 from polyglotimportcsv.filter_engine import apply_filters, expand_each
 from polyglotimportcsv.mapping_resolver import BoundEntity
+from polyglotimportcsv.reporting import entity_progress
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +84,9 @@ def run_cassandra_import(
         lines.append("[cassandra] dry-run: would create tables and insert rows.")
         for ename, be in entities.items():
             non_each = [f for f in (be.cfg.get("filters") or []) if f.get("operator") != "each"]
-            dff = apply_filters(be.df, non_each, be.kinds)
+            with metrics.timed_phase("cassandra", ename, "filter") as t:
+                dff = apply_filters(be.df, non_each, be.kinds)
+                t.rows = len(dff)
             for part_name, part_df in expand_each(dff, be.cfg.get("filters") or [], ename):
                 lines.append(f"  table {part_name}: {len(part_df)} row(s)")
         return lines
@@ -111,12 +115,12 @@ def run_cassandra_import(
     except Exception as e:
         raise ImportExecutionError(f"Cassandra connection failed: {e}") from e
 
-    session.execute(
-        f"""
-        CREATE KEYSPACE IF NOT EXISTS {keyspace}
-        WITH replication = {{'class': 'SimpleStrategy', 'replication_factor': 1}};
-        """
+    keyspace_ddl = (
+        f"CREATE KEYSPACE IF NOT EXISTS {keyspace} "
+        "WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};"
     )
+    logger.debug("[cassandra] DDL: %s", keyspace_ddl)
+    session.execute(keyspace_ddl)
     session.set_keyspace(keyspace)
 
     for ename, be in entities.items():
@@ -144,32 +148,42 @@ def run_cassandra_import(
         }
 
         non_each = [f for f in (be.cfg.get("filters") or []) if f.get("operator") != "each"]
-        dff = apply_filters(be.df, non_each, be.kinds)
+        with metrics.timed_phase("cassandra", ename, "filter") as t:
+            dff = apply_filters(be.df, non_each, be.kinds)
+            t.rows = len(dff)
         for table, part_df in expand_each(dff, be.cfg.get("filters") or [], ename):
             if create_schema:
                 col_defs = []
                 for src in ordered_src:
                     col_defs.append(f'"{pmap[src]}" {cql_by_src[src]}')
                 ddl = f'CREATE TABLE IF NOT EXISTS "{table}" (' + ", ".join(col_defs) + f", {pk_clause});"
+                logger.debug("[cassandra] DDL: %s", ddl)
                 session.execute(ddl)
 
             cols_cql = ", ".join(f'"{c}"' for c in ordered_db)
             placeholders = ", ".join(["?"] * len(ordered_db))
             cql = f'INSERT INTO "{table}" ({cols_cql}) VALUES ({placeholders})'
+            logger.debug("[cassandra] CQL: %s (%d row(s))", cql, len(part_df))
             prep = session.prepare(cql)
+            if part_df.empty:
+                logger.warning("[cassandra] table %s has 0 row(s) after filters", table)
             count = 0
-            for _, row in part_df.iterrows():
-                values = []
-                for src in ordered_src:
-                    val = row.get(src)
-                    if pd.isna(val):
-                        values.append(None)
-                    elif cql_by_src[src] == "text":
-                        values.append(str(val))
-                    else:
-                        values.append(val)
-                session.execute(prep, values)
-                count += 1
+            with metrics.timed_phase("cassandra", table, "write") as tw:
+                with entity_progress(f"cassandra · {table}", len(part_df)) as advance:
+                    for _, row in part_df.iterrows():
+                        values = []
+                        for src in ordered_src:
+                            val = row.get(src)
+                            if pd.isna(val):
+                                values.append(None)
+                            elif cql_by_src[src] == "text":
+                                values.append(str(val))
+                            else:
+                                values.append(val)
+                        session.execute(prep, values)
+                        count += 1
+                        advance(1)
+                tw.rows = count
             lines.append(f"[cassandra] inserted {count} row(s) into {keyspace}.{table}")
 
     cluster.shutdown()

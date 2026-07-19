@@ -17,6 +17,7 @@ dependencies = [
     "pyasyncore; python_version >= '3.12'",
     "redis",
     "neo4j",
+    "rich",
 ]
 
 [project.optional-dependencies]

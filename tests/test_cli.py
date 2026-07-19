@@ -37,3 +37,60 @@ def test_cli_rejects_malformed_source(tmp_path):
     result = runner.invoke(main, ["--config", str(cfg), "--source", "nopath"])
     assert result.exit_code == 2
     assert "NAME=PATH" in result.output
+
+
+import logging
+
+
+def test_cli_log_level_controls_terminal_verbosity(tmp_path, monkeypatch):
+    def fake_run_import(config_path, **kwargs):
+        logging.getLogger("polyglotimportcsv.fake").debug("dbg-marker")
+        return []
+
+    monkeypatch.setattr("polyglotimportcsv.cli.run_import", fake_run_import)
+    cfg = tmp_path / "cfg.json"
+    cfg.write_text("{}", encoding="utf-8")
+    runner = CliRunner()
+
+    result = runner.invoke(main, ["--config", str(cfg), "--log-level", "debug"])
+    assert result.exit_code == 0, result.output
+    assert "dbg-marker" in result.output
+
+    result = runner.invoke(main, ["--config", str(cfg)])
+    assert result.exit_code == 0, result.output
+    assert "dbg-marker" not in result.output
+
+
+def test_cli_show_data_tristate(tmp_path, monkeypatch):
+    captured = {}
+
+    def fake_run_import(config_path, **kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr("polyglotimportcsv.cli.run_import", fake_run_import)
+    cfg = tmp_path / "cfg.json"
+    cfg.write_text("{}", encoding="utf-8")
+    runner = CliRunner()
+
+    assert runner.invoke(main, ["--config", str(cfg)]).exit_code == 0
+    assert captured["show_data"] is None
+    assert runner.invoke(main, ["--config", str(cfg), "--show-data"]).exit_code == 0
+    assert captured["show_data"] is True
+    assert runner.invoke(main, ["--config", str(cfg), "--no-data"]).exit_code == 0
+    assert captured["show_data"] is False
+
+
+def test_cli_benchmark_flag_passes_through(tmp_path, monkeypatch):
+    captured = {}
+
+    def fake_run_import(config_path, **kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr("polyglotimportcsv.cli.run_import", fake_run_import)
+    cfg = tmp_path / "cfg.json"
+    cfg.write_text("{}", encoding="utf-8")
+    result = CliRunner().invoke(main, ["--config", str(cfg), "--benchmark"])
+    assert result.exit_code == 0, result.output
+    assert captured["benchmark"] is True

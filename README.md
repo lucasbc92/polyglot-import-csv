@@ -57,6 +57,9 @@ Requires Docker for import/clean/inspect. Use `--fresh-start` for a true first-t
 Options:
 
 - `--only postgres,redis` — run only listed backends.
+- `--log-level DEBUG|INFO|WARNING|ERROR` — terminal verbosity (default `INFO`); the session log file under `logs/` always records `DEBUG`.
+- `--show-data` / `--no-data` — force or suppress the per-entity record dump (default: entities with up to 50 rows are dumped).
+- `--benchmark` — write per-phase metrics to `benchmarks/benchmark_<timestamp>.json` and append `benchmarks/benchmark_history.csv` (implies `--no-data`).
 - `--no-create-schema` — skip DDL where applicable.
 
 ### Architecture
@@ -150,6 +153,9 @@ Requer Docker para importar/limpar/inspecionar. Use `--fresh-start` para simular
 Opções úteis:
 
 - `--only postgres,redis` — executa só os backends listados.
+- `--log-level DEBUG|INFO|WARNING|ERROR` — verbosidade do terminal (padrão `INFO`); o arquivo de log de sessão em `logs/` sempre grava `DEBUG`.
+- `--show-data` / `--no-data` — força ou suprime a exibição dos registros por entidade (padrão: entidades com até 50 linhas são exibidas).
+- `--benchmark` — grava métricas por fase em `benchmarks/benchmark_<timestamp>.json` e acrescenta `benchmarks/benchmark_history.csv` (implica `--no-data`).
 - `--no-create-schema` — não emite DDL de criação (quando aplicável).
 
 ### Arquitetura

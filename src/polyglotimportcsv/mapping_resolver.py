@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -12,6 +13,8 @@ from polyglotimportcsv.casting import KIND_TO_DB_TYPE, cast_frame
 from polyglotimportcsv.column_selector import select_columns
 from polyglotimportcsv.csv_reader import infer_column_kinds
 from polyglotimportcsv.sources import SOURCE_COLUMN, SourceData
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -131,6 +134,13 @@ def resolve_backend_entities(
         src = bind_entity_source(ename, ecfg, sources)
         cfg = dict(ecfg)
         cfg["columns"] = expand_entity_columns(ename, ecfg, src)
+        manual_cols = set(ecfg.get("columns") or {})
+        for col, spec in cfg["columns"].items():
+            origin = "manual" if col in manual_cols else "inferred"
+            logger.debug(
+                "entity %s (source %s): column %r -> db_type=%s [%s]",
+                ename, src.name, col, spec.get("db_type"), origin,
+            )
         cfg.pop("source", None)
         cfg.pop("csv_columns", None)
         cfg.pop("auto_map", None)
