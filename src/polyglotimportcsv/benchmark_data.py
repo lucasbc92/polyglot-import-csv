@@ -216,4 +216,13 @@ def generate_dataset(
             for fh in handles.values():
                 fh.close()
 
+    if mode in ("combined", "both"):
+        path = out / JOIN_FILE
+        with path.open("w", encoding="utf-8", newline="") as fh:
+            writer = csv.writer(fh, lineterminator="\n")
+            writer.writerow(JOIN_COLUMNS)
+            for src, row in iter_source_rows(seed, rows):
+                writer.writerow([src] + [row.get(c, "") for c in JOIN_COLUMNS[1:]])
+        written["combined"] = path
+
     return written

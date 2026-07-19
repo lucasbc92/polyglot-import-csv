@@ -106,3 +106,47 @@ def test_multi_foreign_keys_resolve_across_files(tmp_path):
     assert set(col("ecommerce_purchase.csv", "product_id")) <= stock_pids
     assert set(col("ecommerce_select_product.csv", "selected_product_id")) <= stock_pids
     assert set(col("ecommerce_add_to_cart.csv", "cart_product_id")) <= stock_pids
+
+
+def test_combined_header_matches_real_join(tmp_path):
+    written = bd.generate_dataset(tmp_path, rows=15, seed=42, mode="combined")
+    assert set(written) == {"combined"}
+    gen_header = _header(tmp_path / bd.JOIN_FILE)
+    real_header = _header(REAL / bd.JOIN_FILE)
+    assert gen_header == real_header
+    assert tuple(gen_header) == bd.JOIN_COLUMNS
+
+
+def test_combined_action_counts(tmp_path):
+    bd.generate_dataset(tmp_path, rows=15, seed=42, mode="combined")
+    with open(tmp_path / bd.JOIN_FILE, newline="", encoding="utf-8") as fh:
+        actions = Counter(row["action"] for row in _csv.DictReader(fh))
+    assert actions == {"stock": 15, "purchase": 45, "select_product": 30, "add_to_cart": 30}
+
+
+def test_both_writes_five_files(tmp_path):
+    written = bd.generate_dataset(tmp_path, rows=12, seed=42, mode="both")
+    assert set(written) == {"stock", "purchase", "select_product", "add_to_cart", "combined"}
+    for fname in list(bd.SOURCE_FILES.values()) + [bd.JOIN_FILE]:
+        assert (tmp_path / fname).is_file()
+
+
+def test_combined_equals_multi_data(tmp_path):
+    """A combined row's populated cells match the corresponding multi row."""
+    bd.generate_dataset(tmp_path, rows=10, seed=42, mode="both")
+    with open(tmp_path / bd.JOIN_FILE, newline="", encoding="utf-8") as fh:
+        join = list(_csv.DictReader(fh))
+    stock_join = [r for r in join if r["action"] == "stock"]
+    with open(tmp_path / "ecommerce_stock.csv", newline="", encoding="utf-8") as fh:
+        stock = list(_csv.DictReader(fh))
+    assert len(stock_join) == len(stock)
+    for jrow, srow in zip(stock_join, stock):
+        for col in bd.STOCK_COLUMNS:
+            assert jrow[col] == srow[col], col
+
+
+def test_combined_byte_identical_for_same_seed(tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    bd.generate_dataset(a, rows=20, seed=42, mode="combined")
+    bd.generate_dataset(b, rows=20, seed=42, mode="combined")
+    assert (a / bd.JOIN_FILE).read_bytes() == (b / bd.JOIN_FILE).read_bytes()
