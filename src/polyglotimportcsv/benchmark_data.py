@@ -183,3 +183,37 @@ def iter_source_rows(seed: int, rows: int) -> Iterator[Tuple[str, Dict[str, obje
             "cart_product_id": master.randint(1, n),
             "cart_quantity": master.randint(1, 5),
         }
+
+
+def generate_dataset(
+    out_dir: "str | Path", rows: int, seed: int = 42, mode: str = "both"
+) -> Dict[str, Path]:
+    """Write the synthetic dataset. ``mode`` is ``multi``, ``combined``, or ``both``.
+
+    Returns a mapping of written keys (source names and/or ``"combined"``) to Paths.
+    """
+    if mode not in ("multi", "combined", "both"):
+        raise ValueError(f"unknown mode: {mode!r}")
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    written: Dict[str, Path] = {}
+
+    if mode in ("multi", "both"):
+        handles = {}
+        writers = {}
+        for src, fname in SOURCE_FILES.items():
+            path = out / fname
+            fh = path.open("w", encoding="utf-8", newline="")
+            handles[src] = fh
+            writer = csv.writer(fh, lineterminator="\n")
+            writer.writerow(SOURCE_COLUMNS[src])
+            writers[src] = writer
+            written[src] = path
+        try:
+            for src, row in iter_source_rows(seed, rows):
+                writers[src].writerow([row.get(c, "") for c in SOURCE_COLUMNS[src]])
+        finally:
+            for fh in handles.values():
+                fh.close()
+
+    return written
