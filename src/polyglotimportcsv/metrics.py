@@ -7,8 +7,6 @@ to their frozen signature. Phases: read, filter, map, write.
 
 from __future__ import annotations
 
-import csv
-import json
 import platform
 import sys
 import time
@@ -17,6 +15,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple
+
+from polyglotimportcsv.benchmark_io import write_json_and_csv
 
 PHASES = ("read", "filter", "map", "write")
 
@@ -124,27 +124,8 @@ def write_benchmark_files(
     out_dir: "str | Path" = "benchmarks",
 ) -> Tuple[Path, Path]:
     """Write benchmark_<timestamp>.json and append benchmark_history.csv."""
-    out = Path(out_dir)
-    out.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    json_path = out / f"benchmark_{stamp}.json"
-    json_path.write_text(
-        json.dumps(
-            {"metadata": metadata, "metrics": collector.to_records()},
-            indent=2,
-            default=str,
-        ),
-        encoding="utf-8",
+    return write_json_and_csv(
+        out_dir, metadata, collector.to_records(),
+        json_prefix="benchmark", csv_name="benchmark_history.csv",
+        csv_fields=_CSV_FIELDS, payload_key="metrics",
     )
-    csv_path = out / "benchmark_history.csv"
-    new_file = not csv_path.exists()
-    with csv_path.open("a", encoding="utf-8", newline="") as fh:
-        writer = csv.DictWriter(fh, fieldnames=_CSV_FIELDS)
-        if new_file:
-            writer.writeheader()
-        ts = metadata.get("timestamp", "")
-        for rec in collector.to_records():
-            row = {k: rec[k] for k in _CSV_FIELDS if k != "timestamp"}
-            row["timestamp"] = ts
-            writer.writerow(row)
-    return json_path, csv_path
