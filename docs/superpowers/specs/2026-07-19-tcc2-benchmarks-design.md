@@ -181,8 +181,9 @@ repetições — reaproveitando `metrics.environment_metadata` como ponto de par
 
 ## 4. Dataset de referência versionado
 
-- `data/benchmark/`: gerado com semente fixa (`42`) e **N=200 produtos (~1,6k linhas
-  totais)**, **ambos os modos**, commitado no repositório.
+- `data/benchmark/`: gerado com semente fixa (`42`) e **N=125 produtos (1k linhas
+  totais: 125 stock + 375 purchase + 250 select + 250 cart)**, **ambos os modos**,
+  commitado no repositório.
 - Usos: teste de **equivalência de modos** (dry-run multi vs combinado → contagens por
   entidade idênticas, resultado citável), smoke do gerador e testes rápidos/CI sem
   bancos.
@@ -206,7 +207,7 @@ Unitários (sem bancos, entram na suíte de CI):
 - **Mediana do runner**: a função de agregação, alimentada por coletores stub (sem DB),
   devolve a mediana correta por `(backend, entity, phase)`.
 - **Smoke do gerador**: dry-run de `run_import` sobre o dataset versionado gerado
-  (1,6k linhas) executa sem erro.
+  (1k linhas) executa sem erro.
 
 Fora do CI (rodados à mão, exigem bancos vivos e são lentos): as execuções reais de
 `run_benchmarks.py`. Consistente com os testes de importer atuais, que são dry-run.
