@@ -59,6 +59,12 @@ def run_matrix(
     """Run sizes x modes x repetitions, cleaning before each import. Returns labeled runs."""
     config_dir = Path(config_dir)
     data_dir = Path(data_dir)
+    modes = list(modes)
+    unknown = [m for m in modes if m not in _MODE_CONFIG]
+    if unknown:
+        raise ValueError(
+            f"unknown mode(s): {', '.join(unknown)}. Valid: {', '.join(_MODE_CONFIG)}"
+        )
     requested = list(only) if only else None
     labeled: List[Dict[str, object]] = []
 
