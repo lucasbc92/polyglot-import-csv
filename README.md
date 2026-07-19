@@ -93,7 +93,7 @@ source "/path/to/polyglot-import-csv/scripts/run_example.completion.bash"
 
 After that, `./run_example.sh --` + TAB suggests flags (`--fresh-start`, `--clean`, `--inspect`, …); `--config` / `--log-file` suggest paths under `data/ecommerce/` and `logs/`.
 
-## Benchmarks
+### Benchmarks
 
 Generate a deterministic synthetic e-commerce dataset (N = number of products;
 sources scale N / 3N / 2N / 2N; the same `--seed` reproduces byte-identical files):
@@ -210,7 +210,7 @@ source "/caminho/para/polyglot-import-csv/scripts/run_example.completion.bash"
 
 Depois, `./run_example.sh --` + TAB sugere flags (`--fresh-start`, `--clean`, `--inspect`, …); `--config` / `--log-file` sugerem caminhos em `data/ecommerce/` e `logs/`.
 
-## Benchmarks
+### Benchmarks
 
 Gere um dataset e-commerce sintético determinístico (N = número de produtos; as
 fontes escalam N / 3N / 2N / 2N; a mesma `--seed` reproduz arquivos byte-idênticos):
