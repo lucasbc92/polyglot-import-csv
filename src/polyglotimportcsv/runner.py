@@ -65,6 +65,7 @@ def run_import(
     banner("Polyglot Import CSV", subtitle=f"mode: {mode}")
 
     collector = collector if collector is not None else metrics.MetricsCollector()
+    prev_collector = metrics.current()
     metrics.set_current(collector)
     try:
         return _run(
@@ -80,7 +81,7 @@ def run_import(
             benchmark=benchmark,
         )
     finally:
-        metrics.set_current(None)
+        metrics.set_current(prev_collector)
 
 
 def _run(
