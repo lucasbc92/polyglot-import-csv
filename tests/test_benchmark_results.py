@@ -56,3 +56,27 @@ def test_csv_appends(tmp_path):
     _, csv_path = br.write_consolidated(results, meta, out_dir=tmp_path)
     lines = csv_path.read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 3  # header + two runs
+
+
+def test_group_order_preserved():
+    # Deliberate non-alphabetical order: redis before postgres, orders before
+    # products, write before read. median_results must preserve first-seen
+    # group order (via the `order` list), not fall back to dict/set iteration.
+    run = {
+        "size": 1000, "mode": "multi", "repetition": 0,
+        "records": [
+            {"backend": "redis", "entity": "orders", "phase": "write",
+             "rows": 50, "seconds": 0.1, "rows_per_second": 500.0},
+            {"backend": "postgres", "entity": "products", "phase": "write",
+             "rows": 100, "seconds": 0.2, "rows_per_second": 500.0},
+            {"backend": "redis", "entity": "customers", "phase": "read",
+             "rows": 20, "seconds": 0.05, "rows_per_second": 400.0},
+        ],
+    }
+    results = br.median_results([run])
+    order = [(r["backend"], r["entity"], r["phase"]) for r in results]
+    assert order == [
+        ("redis", "orders", "write"),
+        ("postgres", "products", "write"),
+        ("redis", "customers", "read"),
+    ]

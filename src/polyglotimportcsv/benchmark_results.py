@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import csv
-import json
 import statistics
-from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple
+
+from polyglotimportcsv.benchmark_io import write_json_and_csv
 
 _RESULT_FIELDS = (
     "timestamp", "size", "mode", "backend", "entity", "phase",
@@ -51,23 +50,8 @@ def write_consolidated(
     out_dir: "str | Path" = "benchmarks",
 ) -> Tuple[Path, Path]:
     """Write ``benchmark_run_<timestamp>.json`` and append ``benchmark_results.csv``."""
-    out = Path(out_dir)
-    out.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    json_path = out / f"benchmark_run_{stamp}.json"
-    json_path.write_text(
-        json.dumps({"metadata": metadata, "results": results}, indent=2, default=str),
-        encoding="utf-8",
+    return write_json_and_csv(
+        out_dir, metadata, results,
+        json_prefix="benchmark_run", csv_name="benchmark_results.csv",
+        csv_fields=_RESULT_FIELDS, payload_key="results",
     )
-    csv_path = out / "benchmark_results.csv"
-    new_file = not csv_path.exists()
-    ts = metadata.get("timestamp", "")
-    with csv_path.open("a", encoding="utf-8", newline="") as fh:
-        writer = csv.DictWriter(fh, fieldnames=_RESULT_FIELDS)
-        if new_file:
-            writer.writeheader()
-        for rec in results:
-            row = {k: rec[k] for k in _RESULT_FIELDS if k != "timestamp"}
-            row["timestamp"] = ts
-            writer.writerow(row)
-    return json_path, csv_path
