@@ -1,0 +1,46 @@
+"""The committed reference dataset drives dry-run smoke + mode-equivalence."""
+
+from pathlib import Path
+
+from polyglotimportcsv import benchmark_data as bd
+from polyglotimportcsv.metrics import MetricsCollector
+from polyglotimportcsv.runner import run_import
+
+ROOT = Path(__file__).resolve().parents[1]
+BENCH = ROOT / "data" / "benchmark"
+ECOM = ROOT / "data" / "ecommerce"
+
+
+def test_reference_dataset_committed_and_1k():
+    def n(fname):
+        with open(BENCH / fname, encoding="utf-8") as fh:
+            return sum(1 for _ in fh) - 1
+    assert n("ecommerce_stock.csv") == 125
+    assert n("ecommerce_purchase.csv") == 375
+    assert n("ecommerce_select_product.csv") == 250
+    assert n("ecommerce_add_to_cart.csv") == 250
+    assert n("ecommerce_join.csv") == 1000  # 125 + 375 + 250 + 250
+
+
+def _filter_rows(config, overrides):
+    c = MetricsCollector()
+    run_import(config, dry_run=True, collector=c, source_overrides=overrides)
+    return {(m.entity): m.rows for m in c.entries() if m.phase == "filter"}
+
+
+def test_dry_run_smoke_on_reference():
+    overrides = {src: str(BENCH / fname) for src, fname in bd.SOURCE_FILES.items()}
+    lines = run_import(ECOM / "import_config.json", dry_run=True, source_overrides=overrides)
+    assert lines  # produced output, no exception
+
+
+def test_mode_equivalence_entity_counts():
+    multi = _filter_rows(
+        ECOM / "import_config.json",
+        {src: str(BENCH / fname) for src, fname in bd.SOURCE_FILES.items()},
+    )
+    combined = _filter_rows(
+        ECOM / "import_config_combined.json",
+        {"ecommerce": str(BENCH / bd.JOIN_FILE)},
+    )
+    assert multi == combined

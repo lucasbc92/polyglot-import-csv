@@ -8,6 +8,10 @@ logs/*
 # Benchmark outputs (--benchmark); consolidated results are cited in the report
 benchmarks/
 
+# Large benchmark datasets generated on demand (the small reference under
+# data/benchmark/ IS committed; only generated/ is ignored)
+data/benchmark/generated/
+
 # Large local datasets not tracked in git
 2018-census-totals-by-topic-national-highlights-csv/
 
