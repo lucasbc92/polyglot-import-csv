@@ -93,6 +93,28 @@ source "/path/to/polyglot-import-csv/scripts/run_example.completion.bash"
 
 After that, `./run_example.sh --` + TAB suggests flags (`--fresh-start`, `--clean`, `--inspect`, …); `--config` / `--log-file` suggest paths under `data/ecommerce/` and `logs/`.
 
+## Benchmarks
+
+Generate a deterministic synthetic e-commerce dataset (N = number of products;
+sources scale N / 3N / 2N / 2N; the same `--seed` reproduces byte-identical files):
+
+    python scripts/generate_benchmark_data.py --rows 100000 --seed 42 \
+      --out data/benchmark/generated/100000 --mode both
+
+A small 1 000-row reference dataset is committed under `data/benchmark/` (both
+input modes) for quick tests and CI.
+
+Run the benchmark matrix (sizes × modes × repetitions) over **live** databases —
+bring them up first (`docker compose up --wait` or `./run_example.sh`). Each
+import is preceded by a clean, so every measurement is a cold load:
+
+    python scripts/run_benchmarks.py --sizes 1000,10000,100000 \
+      --modes multi,combined --repetitions 3
+
+Results land in `benchmarks/`: a `benchmark_run_<timestamp>.json` plus an
+append-only `benchmark_results.csv` (`size,mode,backend,entity,phase,rows,
+median_seconds,rows_per_second`) for the report graphs.
+
 ### License
 
 MIT — see [LICENSE](LICENSE).
@@ -187,6 +209,28 @@ source "/caminho/para/polyglot-import-csv/scripts/run_example.completion.bash"
 ```
 
 Depois, `./run_example.sh --` + TAB sugere flags (`--fresh-start`, `--clean`, `--inspect`, …); `--config` / `--log-file` sugerem caminhos em `data/ecommerce/` e `logs/`.
+
+## Benchmarks
+
+Gere um dataset e-commerce sintético determinístico (N = número de produtos; as
+fontes escalam N / 3N / 2N / 2N; a mesma `--seed` reproduz arquivos byte-idênticos):
+
+    python scripts/generate_benchmark_data.py --rows 100000 --seed 42 \
+      --out data/benchmark/generated/100000 --mode both
+
+Um dataset de referência pequeno (1 000 linhas) está versionado em
+`data/benchmark/` (ambos os modos) para testes rápidos e CI.
+
+Rode a matriz de benchmark (tamanhos × modos × repetições) sobre bancos **vivos** —
+suba-os antes (`docker compose up --wait` ou `./run_example.sh`). Cada importação é
+precedida de uma limpeza, então cada medição é uma carga a frio:
+
+    python scripts/run_benchmarks.py --sizes 1000,10000,100000 \
+      --modes multi,combined --repetitions 3
+
+Os resultados vão para `benchmarks/`: um `benchmark_run_<timestamp>.json` e um
+`benchmark_results.csv` append-only (`size,mode,backend,entity,phase,rows,
+median_seconds,rows_per_second`) para os gráficos do relatório.
 
 ### Licença
 
