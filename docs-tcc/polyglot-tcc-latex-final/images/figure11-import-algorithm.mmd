@@ -1,0 +1,24 @@
+flowchart TD
+    START(["CLI: 2 configs JSON\n(+ opções)"]) --> LC["load_config()\n+ JSON Schema + merge"]
+    LC --> LS["load_sources()\nlê CSV(s), infere tipos\n(fatia origem no modo combinado)"]
+    LS --> BK{"para cada\nSGBD"}
+    BK -->|fim| END(["Fim: relatório\nde contagens"])
+    BK --> BIND["mapping_resolver:\nvincula entidade -> fonte\n(nome / união / por nome)\nexpande columns + converte tipos"]
+    BIND --> VAL["validate_backend_entities()\nvalidação cruzada (camada 3)"]
+    VAL --> ENT{"para cada\nentidade"}
+    ENT -->|fim| BK
+    ENT --> FILT["apply_filters / expand_each\n(seleção, quando houver)"]
+    FILT --> MAT{"materializar"}
+    MAT --> T1["flatten_entity_dataframe\n(PostgreSQL / Cassandra)"]
+    MAT --> T2["mongo_document_from_row\n(MongoDB)"]
+    MAT --> T3["redis_payload_from_row\n(Redis)"]
+    MAT --> T4["props / relationships\n(Neo4j)"]
+    T1 --> WR["conectar + DDL + gravar\n(suprimido em --dry-run)"]
+    T2 --> WR
+    T3 --> WR
+    T4 --> WR
+    WR --> ENT
+
+    style START fill:#dbeafe,stroke:#2563eb,color:#1e293b
+    style END fill:#dcfce7,stroke:#16a34a,color:#1e293b
+    style WR fill:#fef3c7,stroke:#d97706,color:#1e293b
