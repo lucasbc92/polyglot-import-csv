@@ -1,7 +1,7 @@
 flowchart LR
-    A["📄 import_config.json\n(mapeamento: entidades,\nrelacionamentos e colunas)"] --> P
+    A["📄 import_config.json\n(fontes + mapeamento:\nentidades, colunas,\nrelacionamentos)"] --> P
     B["📄 sgbd_config.json\n(conexão: SGBDs disponíveis\ne como alcançá-los)"] --> P
-    C["📋 dados.csv\n(dados a importar)"] --> P
+    C["📋 CSV(s) de dados\n(um por assunto ou\num combinado)"] --> P
 
     P["Polyglot Import CSV\n(comando CLI:\nvalida e importa)"]
 
