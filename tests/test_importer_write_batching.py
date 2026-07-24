@@ -171,3 +171,81 @@ def test_cassandra_optimized_raises_when_driver_unavailable(monkeypatch):
         assert False, "expected ImportExecutionError"
     except ImportExecutionError:
         pass
+
+
+# ---------- Neo4j ----------
+
+class _FakeNeoSession:
+    def __init__(self, recorder):
+        self.recorder = recorder
+
+    def run(self, q, **params):
+        self.recorder["run"].append((q, params))
+        return []
+
+    def execute_write(self, fn, *a, **k):
+        return fn(_FakeTx(self.recorder), *a, **k)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+class _FakeTx:
+    def __init__(self, recorder):
+        self.recorder = recorder
+
+    def run(self, q, **params):
+        self.recorder["tx_run"].append((q, params))
+        return []
+
+
+class _FakeDriver:
+    def __init__(self, recorder):
+        self.recorder = recorder
+
+    def verify_connectivity(self):
+        pass
+
+    def session(self, database=None):
+        return _FakeNeoSession(self.recorder)
+
+    def close(self):
+        pass
+
+
+def _neo_entities(n):
+    user = _be("User", {"columns": {"user_id": {"is_key": True}}},
+               {"user_id": [f"u{i}" for i in range(n)]})
+    return {"User": user}
+
+
+def test_neo4j_optimized_batches_nodes_with_unwind():
+    import polyglotimportcsv.importers.neo4j_importer as ni
+    rec = {"run": [], "tx_run": []}
+    ni.run_neo4j_import(
+        {"connection": {}}, _neo_entities(2500),
+        dry_run=False, create_schema=True, strategy="optimized",
+        driver_factory=lambda conn: _FakeDriver(rec),
+    )
+    # Nodes written in UNWIND batches inside execute_write, not one run() per row.
+    assert any("UNWIND" in q for q, _ in rec["tx_run"])
+    node_batches = [p for q, p in rec["tx_run"] if "UNWIND" in q and "MERGE (n" in q]
+    assert sum(len(p["batch"]) for p in node_batches) == 2500
+    assert len(node_batches) == 3          # ceil(2500/1000)
+    # A uniqueness constraint was created.
+    assert any("CONSTRAINT" in q and "UNIQUE" in q for q, _ in rec["run"])
+
+
+def test_neo4j_naive_runs_one_merge_per_row():
+    import polyglotimportcsv.importers.neo4j_importer as ni
+    rec = {"run": [], "tx_run": []}
+    ni.run_neo4j_import(
+        {"connection": {}}, _neo_entities(2500),
+        dry_run=False, create_schema=False, strategy="naive",
+        driver_factory=lambda conn: _FakeDriver(rec),
+    )
+    merges = [q for q, _ in rec["run"] if "MERGE (n" in q]
+    assert len(merges) == 2500
