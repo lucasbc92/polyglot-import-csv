@@ -79,20 +79,43 @@ def _cast_column_vectorized(series: pd.Series, kind: str) -> "tuple[pd.Series, i
         out = parsed.astype(object).where(~empty, None)
         return pd.Series(list(out), index=series.index, dtype=object), 0
 
-    if kind in ("integer", "float"):
-        num = pd.to_numeric(series.where(~empty), errors="coerce")
-        bad = num.isna() & ~empty
+    if kind == "integer":
+        # pd.to_numeric().isna() is a poor success oracle for int(): it is
+        # MORE permissive than Python (accepts "3.0" and "1e3", which
+        # int() rejects with ValueError). Use a vectorized regex mask that
+        # mirrors int()'s exact grammar (optional surrounding whitespace,
+        # optional sign, digits only) to identify the disagreeing minority,
+        # then fall back to text for those, matching cast_value's contract.
+        s = series.where(~empty)
+        num = pd.to_numeric(s, errors="coerce")
+        int_like = s.astype(str).str.strip().str.fullmatch(r"[+-]?\d+").fillna(False)
+        bad = (num.isna() | ~int_like) & ~empty
         fallbacks = int(bad.sum())
-        if kind == "integer":
-            vals = [
-                None if e else (o if b else int(v))
-                for e, b, v, o in zip(empty, bad, num, original)
-            ]
-        else:
-            vals = [
-                None if e else (o if b else float(v))
-                for e, b, v, o in zip(empty, bad, num, original)
-            ]
+        vals = [
+            None if e else (o if b else int(v))
+            for e, b, v, o in zip(empty, bad, num, original)
+        ]
+        return pd.Series(vals, index=series.index, dtype=object), fallbacks
+
+    if kind == "float":
+        # pd.to_numeric().isna() is a poor success oracle for float() too,
+        # but for the opposite reason: it is AMBIGUOUS. float("nan")
+        # succeeds and returns a real NaN, which is indistinguishable from
+        # a coerce failure (also NaN) once it comes back through
+        # pd.to_numeric. Detect the literal nan/inf/infinity spellings
+        # (any case, optional sign) with a vectorized regex mask and parse
+        # those directly with float() so the ambiguity never arises;
+        # everything else keeps the fast pd.to_numeric path.
+        s = series.where(~empty)
+        num = pd.to_numeric(s, errors="coerce")
+        text = s.astype(str).str.strip()
+        special = text.str.fullmatch(r"[+-]?(?:nan|inf|infinity)", case=False).fillna(False)
+        bad = num.isna() & ~empty & ~special
+        fallbacks = int(bad.sum())
+        vals = [
+            None if e else (float(o) if sp else (o if b else float(v)))
+            for e, b, v, o, sp in zip(empty, bad, num, original, special)
+        ]
         return pd.Series(vals, index=series.index, dtype=object), fallbacks
 
     if kind == "datetime":

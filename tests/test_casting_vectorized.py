@@ -1,6 +1,7 @@
 """The optimized (vectorized) cast_frame must equal the naive (per-cell) one."""
 
 import logging
+import math
 
 import pandas as pd
 
@@ -20,12 +21,32 @@ def _frame():
             "d": ["2023-11-02 03:30:00Z", "", "2024-01-01T00:00:00Z", "notadate"],
             "s": ["a", "", "c", "d"],
             "bad": ["1", "", "notanumber", "4"],
+            # pd.to_numeric() is MORE permissive than int(): it accepts
+            # decimal ("3.0") and scientific ("1e3") notation, which int()
+            # rejects with ValueError. These must stay as text and count as
+            # fallbacks, exactly like cast_value's int() does.
+            "i_edge": ["3.0", "1e3", "7", ""],
+            # pd.to_numeric() is AMBIGUOUS for "nan": float("nan") succeeds
+            # and returns a real NaN, indistinguishable from a coerce
+            # failure once it comes back as NaN. "inf" must also come back
+            # as a real float, not the original text.
+            "f_edge": ["nan", "inf", "1.5", ""],
         }
     )
 
 
 _KINDS = {"i": "integer", "f": "float", "b": "boolean",
-          "d": "datetime", "s": "string", "bad": "integer"}
+          "d": "datetime", "s": "string", "bad": "integer",
+          "i_edge": "integer", "f_edge": "float"}
+
+
+def _values_match(a, b):
+    """Equality that treats two real float NaNs as matching (float('nan')
+    != float('nan')), while still distinguishing a real NaN from the
+    string 'nan' (handled by the caller's separate type check)."""
+    if isinstance(a, float) and isinstance(b, float) and math.isnan(a) and math.isnan(b):
+        return True
+    return a == b
 
 
 def test_optimized_equals_naive_cell_by_cell():
@@ -35,9 +56,10 @@ def test_optimized_equals_naive_cell_by_cell():
     assert list(naive.columns) == list(opt.columns)
     for col in naive.columns:
         n, o = list(naive[col]), list(opt[col])
-        assert n == o, f"column {col!r}: naive={n} optimized={o}"
+        assert len(n) == len(o), f"column {col!r}: naive={n} optimized={o}"
         for a, b in zip(n, o):
             assert type(a) is type(b), f"{col!r}: {type(a)} vs {type(b)}"
+            assert _values_match(a, b), f"column {col!r}: naive={n} optimized={o}"
 
 
 def test_optimized_preserves_unparseable_as_text_and_warns(caplog):
