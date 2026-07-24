@@ -151,3 +151,23 @@ def test_cassandra_naive_executes_one_per_row():
     )
     insert_execs = [e for e in session.executes if e[1] is not None]
     assert len(insert_execs) == 2500
+
+
+def test_cassandra_optimized_raises_when_driver_unavailable(monkeypatch):
+    """If cassandra.concurrent could not be imported (module attribute is None),
+    the batched path must fail with a friendly ImportExecutionError instead of
+    a raw AttributeError/TypeError."""
+    import polyglotimportcsv.importers.cassandra_importer as ci
+    from polyglotimportcsv.business_exception import ImportExecutionError
+
+    monkeypatch.setattr(ci, "execute_concurrent_with_args", None)
+    session = _FakeSession()
+    try:
+        ci.run_cassandra_import(
+            {"connection": {}}, {"user_activity_log": _cass_entity(5)},
+            dry_run=False, create_schema=False, strategy="optimized",
+            session_factory=lambda conn: (_FakeCluster(session), session),
+        )
+        assert False, "expected ImportExecutionError"
+    except ImportExecutionError:
+        pass

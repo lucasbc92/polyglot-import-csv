@@ -9,7 +9,15 @@ from typing import Any, Callable, Dict, List, Tuple
 
 import pandas as pd
 
-from cassandra.concurrent import execute_concurrent_with_args
+try:
+    # cassandra.concurrent transitively imports cassandra.cluster, which fails to
+    # load on Python 3.12+ without a reactor backend (see the guarded lazy import
+    # in _default_cassandra_session below). Guarding this module-level import too
+    # keeps the module importable even when the driver/reactor is unavailable —
+    # required so fake-session tests can still collect this module.
+    from cassandra.concurrent import execute_concurrent_with_args
+except Exception:  # pragma: no cover - driver/reactor may be unavailable
+    execute_concurrent_with_args = None
 
 from polyglotimportcsv import metrics
 from polyglotimportcsv.business_exception import ImportExecutionError
@@ -115,6 +123,11 @@ def _write_naive(session, prepared, params_list, advance) -> int:
 
 
 def _write_batched(session, prepared, params_list, advance, concurrency: int = 64) -> int:
+    if execute_concurrent_with_args is None:
+        raise ImportExecutionError(
+            "Cassandra driver could not be loaded: cassandra.concurrent is unavailable. "
+            "Install the 'pyasyncore' package (pip install pyasyncore) on Python 3.12+; see DataStax docs."
+        )
     execute_concurrent_with_args(session, prepared, params_list, concurrency=concurrency)
     advance(len(params_list))
     return len(params_list)
@@ -204,10 +217,10 @@ def run_cassandra_import(
             prep = session.prepare(cql)
             if part_df.empty:
                 logger.warning("[cassandra] table %s has 0 row(s) after filters", table)
-            params_list = [_row_values(row, ordered_src, cql_by_src)
-                           for _, row in part_df.iterrows()]
             writer = _write_naive if strategy == "naive" else _write_batched
             with metrics.timed_phase("cassandra", table, "write") as tw:
+                params_list = [_row_values(row, ordered_src, cql_by_src)
+                               for _, row in part_df.iterrows()]
                 with entity_progress(f"cassandra · {table}", len(params_list)) as advance:
                     count = writer(session, prep, params_list, advance)
                 tw.rows = count
