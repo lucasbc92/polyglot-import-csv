@@ -32,6 +32,19 @@ def test_cast_value_scalars():
     assert cast_value("abc", "integer") == "abc"
 
 
+def test_infer_kinds_prefers_integer_over_year_like_dates():
+    # pandas parses a bare 4-digit integer as a year ("1000" -> 1000-01-01), so an
+    # ID column running past 999 crosses the datetime threshold and would be cast
+    # to timestamps. A fully numeric column is an integer, never a datetime.
+    df = pd.DataFrame({"product_id": [str(i) for i in range(1, 10001)]})
+    assert infer_column_kinds(df)["product_id"] == "integer"
+
+
+def test_infer_kinds_still_detects_real_datetimes():
+    df = pd.DataFrame({"ts": ["2023-11-13 03:41:06Z", "2023-11-04 13:45:07Z"]})
+    assert infer_column_kinds(df)["ts"] == "datetime"
+
+
 def test_infer_kinds_detects_boolean():
     df = pd.DataFrame({"flag": ["true", "FALSE", ""], "n": ["1", "2", "3"]})
     kinds = infer_column_kinds(df)

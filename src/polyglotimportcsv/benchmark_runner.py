@@ -55,8 +55,15 @@ def run_matrix(
     importer: Callable[..., List[str]],
     load_cfg: Callable[..., Dict[str, object]],
     generate: Callable[..., object] = benchmark_data.generate_dataset,
+    on_run: Optional[Callable[[List[Dict[str, object]]], None]] = None,
 ) -> List[Dict[str, object]]:
-    """Run sizes x modes x repetitions, cleaning before each import. Returns labeled runs."""
+    """Run sizes x modes x repetitions, cleaning before each import. Returns labeled runs.
+
+    ``on_run`` is called with every labeled run collected so far, right after each
+    import finishes. A full matrix over large sizes takes a long time and results
+    are only consolidated at the end, so this lets the caller checkpoint: a crash
+    on run N keeps the N-1 measurements that already succeeded.
+    """
     config_dir = Path(config_dir)
     data_dir = Path(data_dir)
     modes = list(modes)
@@ -95,4 +102,6 @@ def run_matrix(
                     "size": size, "mode": mode, "repetition": rep,
                     "records": collector.to_records(),
                 })
+                if on_run is not None:
+                    on_run(labeled)
     return labeled

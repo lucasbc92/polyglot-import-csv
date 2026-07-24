@@ -9,8 +9,10 @@ each measurement is a cold load.
 from __future__ import annotations
 
 import argparse
+import json
+import logging
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 # scripts/ is on sys.path[0] when run as `python scripts/run_benchmarks.py`.
 from inspect_persisted_data import CLEANERS
@@ -19,9 +21,12 @@ from polyglotimportcsv.benchmark_results import median_results, write_consolidat
 from polyglotimportcsv.benchmark_runner import run_matrix
 from polyglotimportcsv.config_parser import load_config
 from polyglotimportcsv.metrics import environment_metadata
+from polyglotimportcsv.reporting import kv, setup_reporting
 from polyglotimportcsv.runner import run_import
 
 _ALL_BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
+
+CHECKPOINT_NAME = "benchmark_checkpoint.json"
 
 
 def _parse_int_list(raw: str) -> List[int]:
@@ -30,6 +35,23 @@ def _parse_int_list(raw: str) -> List[int]:
 
 def _parse_str_list(raw: str) -> List[str]:
     return [x.strip() for x in raw.split(",") if x.strip()]
+
+
+def _checkpoint_writer(out_dir: Path, metadata: Dict[str, Any]):
+    """Return an ``on_run`` callback that rewrites the raw-runs checkpoint file."""
+    path = out_dir / CHECKPOINT_NAME
+
+    def write(labeled: List[Dict[str, Any]]) -> None:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        payload = {"metadata": metadata, "complete": False, "runs": labeled}
+        path.write_text(
+            json.dumps(payload, indent=2, default=str), encoding="utf-8"
+        )
+        logging.getLogger(__name__).debug(
+            "checkpoint: %d run(s) -> %s", len(labeled), path
+        )
+
+    return write
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -50,23 +72,33 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help="Where generated size datasets live (default: data/benchmark/generated).")
     parser.add_argument("--out", type=Path, default=Path("benchmarks"),
                         help="Output directory for consolidated results (default: benchmarks).")
+    parser.add_argument("--log-level", default="INFO",
+                        help="Terminal log level (default: INFO). The session log file is always DEBUG.")
     args = parser.parse_args(argv)
+
+    log_path = setup_reporting(getattr(logging, args.log_level.upper()))
+    if log_path is not None:
+        kv("Log file", log_path)
 
     sizes = _parse_int_list(args.sizes)
     modes = _parse_str_list(args.modes)
     only = _parse_str_list(args.only) or None
+
+    meta = environment_metadata(args.config_dir, {})
+    meta.update({"seed": args.seed, "sizes": sizes, "modes": modes,
+                 "repetitions": args.repetitions})
 
     labeled = run_matrix(
         sizes=sizes, modes=modes, repetitions=args.repetitions,
         sgbd_config_path=args.sgbd_config, config_dir=args.config_dir,
         data_dir=args.data_dir, seed=args.seed, only=only,
         cleaners=CLEANERS, importer=run_import, load_cfg=load_config,
+        on_run=_checkpoint_writer(args.out, meta),
     )
     results = median_results(labeled)
-    meta = environment_metadata(args.config_dir, {})
-    meta.update({"seed": args.seed, "sizes": sizes, "modes": modes,
-                 "repetitions": args.repetitions})
     json_path, csv_path = write_consolidated(results, meta, out_dir=args.out)
+    # The matrix completed and is consolidated; the partial copy is now noise.
+    (args.out / CHECKPOINT_NAME).unlink(missing_ok=True)
     print(f"benchmark JSON: {json_path}")
     print(f"benchmark CSV:  {csv_path}")
     return 0

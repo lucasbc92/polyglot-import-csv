@@ -73,6 +73,19 @@ def test_override_replaces_path(tmp_path):
     assert len(reg["stock"].df) == 1
 
 
+def test_relative_override_resolves_from_cwd_not_config_dir(tmp_path, monkeypatch):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    _write(config_dir, "stock.csv", "a\n1\n")
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    _write(work_dir, "big.csv", "a\n1\n2\n")
+
+    monkeypatch.chdir(work_dir)
+    reg = load_sources({"stock": "stock.csv"}, config_dir, overrides={"stock": "big.csv"})
+    assert len(reg["stock"].df) == 2
+
+
 def test_unknown_override_name_raises(tmp_path):
     _write(tmp_path, "stock.csv", "a\n1\n")
     with pytest.raises(SourceError, match="stok"):

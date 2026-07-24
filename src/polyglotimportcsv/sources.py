@@ -48,9 +48,15 @@ def _register(
 def _resolve_path(
     name: str, declared: str, base_dir: Path, overrides: Dict[str, str]
 ) -> Path:
-    path = Path(overrides.get(name, declared))
-    if not path.is_absolute():
-        path = base_dir / path
+    override = overrides.get(name)
+    if override is not None:
+        # Overrides are supplied at run time (--source NAME=PATH), so relative
+        # paths follow the current working directory, not the config's folder.
+        path = Path(override)
+    else:
+        path = Path(declared)
+        if not path.is_absolute():
+            path = base_dir / path
     if not path.is_file():
         raise SourceError(f"Source '{name}': CSV file not found: {path}")
     return path

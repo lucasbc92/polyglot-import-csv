@@ -1343,7 +1343,7 @@ git commit -m "feat(cli): --strategy for imports and --strategies for the benchm
 - [ ] **Step 1: Run the whole suite**
 
 Run: `python -m pytest -q`
-Expected: PASS. Known pre-existing failure to confirm is unrelated: `tests/test_duplicate_csv_column_example.py` (missing config file deleted before this work). If it still fails for that reason, leave it; if any *other* test fails, fix it in the owning task's file.
+Expected: PASS, zero failures. The branch starts from a fully green baseline (156 passed, 1 skipped), so any failure here belongs to this work — fix it in the owning task's file.
 
 - [ ] **Step 2: Document the strategy switch**
 

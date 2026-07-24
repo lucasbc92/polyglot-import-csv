@@ -65,6 +65,31 @@ def test_run_matrix_iterates_and_cleans_before_import(tmp_path):
     assert results[0]["rows"] == 100
 
 
+def test_on_run_fires_after_each_import_and_survives_a_crash(tmp_path):
+    seen: list[int] = []
+
+    def fake_importer(config_path, *, sgbd_config_path, collector, show_data,
+                      only, create_schema, source_overrides):
+        collector.record("postgres", "products", "write", rows=100, seconds=0.1)
+        if len(seen) == 2:
+            raise RuntimeError("backend blew up")
+        return []
+
+    with pytest.raises(RuntimeError, match="blew up"):
+        brun.run_matrix(
+            sizes=[10], modes=["multi"], repetitions=4,
+            sgbd_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+            seed=1, only=["postgres"], cleaners={},
+            importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
+            generate=lambda out_dir, rows, seed, mode: None,
+            on_run=lambda labeled: seen.append(len(labeled)),
+        )
+
+    # Called once per completed import, with the runs accumulated so far, so the
+    # two measurements taken before the crash are still recoverable.
+    assert seen == [1, 2]
+
+
 def test_run_matrix_builds_mode_overrides(tmp_path):
     seen = []
 

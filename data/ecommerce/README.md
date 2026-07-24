@@ -6,7 +6,6 @@
 | `ecommerce_join.csv` | Combined CSV (alternative input mode): column 0 (`action`) is the origin column; each distinct value becomes a source. |
 | `import_config.json` | v2 mapping config (multi-CSV `sources`). Default for `./run_example.sh`. |
 | `import_config_combined.json` | Same SGBD blocks, `sources` pointing at the combined CSV — demonstrates that switching input modes changes nothing in the per-SGBD mapping. |
-| `import_config_duplicate_csv_column_example.json` | Mapping one CSV column into two destination columns via `csv_column`. |
 | `sgbd_config.json` | Connection settings per SGBD. |
 
 ## Knowing each row's origin
