@@ -31,13 +31,19 @@ def _frame():
             # failure once it comes back as NaN. "inf" must also come back
             # as a real float, not the original text.
             "f_edge": ["nan", "inf", "1.5", ""],
+            # pd.to_numeric() silently promotes to lossy float64 once a
+            # value overflows int64: it neither raises nor returns NaN, so
+            # a naive isna()-based success check would accept a corrupted
+            # value. int() on the original string is exact for arbitrary
+            # precision and must be recovered here.
+            "i_big": ["99999999999999999999999", "1", "42", ""],
         }
     )
 
 
 _KINDS = {"i": "integer", "f": "float", "b": "boolean",
           "d": "datetime", "s": "string", "bad": "integer",
-          "i_edge": "integer", "f_edge": "float"}
+          "i_edge": "integer", "f_edge": "float", "i_big": "integer"}
 
 
 def _values_match(a, b):

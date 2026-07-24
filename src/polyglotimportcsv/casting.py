@@ -21,6 +21,12 @@ KIND_TO_DB_TYPE: Dict[str, str] = {
 
 _BOOL_WORDS = {"true", "false"}
 
+#: Largest integer magnitude guaranteed to round-trip exactly through
+#: float64 (2**53). Used to flag the rare out-of-range minority that
+#: pd.to_numeric silently converts to a lossy float in the integer branch
+#: of _cast_column_vectorized.
+_MAX_EXACT_FLOAT_INT = 2**53
+
 
 def is_boolean_series(non_empty: pd.Series) -> bool:
     """True when every non-empty value is 'true'/'false' (case-insensitive)."""
@@ -70,6 +76,13 @@ def _cast_column_vectorized(series: pd.Series, kind: str) -> "tuple[pd.Series, i
     exactly, though it still counts and warns on the fallback since the
     vectorized path can detect it precisely.
     """
+    # Real float NaN cells (as opposed to '' / None) are treated as empty
+    # here, yielding None. cast_value treats only '' and None as empty; a
+    # real NaN falls through to int(nan)/float(nan) and comes back as the
+    # NaN value itself (a fallback), which differs from this None. This is
+    # unreachable in production: csv_reader.read_csv uses dtype=str,
+    # keep_default_na=False, so no real NaN ever appears in a column cast
+    # here, and _union_source fills missing columns with '', not NaN.
     empty = series.isna() | (series == "")
     original = series.astype(object)
     fallbacks = 0
@@ -91,9 +104,24 @@ def _cast_column_vectorized(series: pd.Series, kind: str) -> "tuple[pd.Series, i
         int_like = s.astype(str).str.strip().str.fullmatch(r"[+-]?\d+").fillna(False)
         bad = (num.isna() | ~int_like) & ~empty
         fallbacks = int(bad.sum())
+        # pd.to_numeric silently promotes to float64 once a value overflows
+        # int64: it neither raises nor returns NaN, so num.isna() is False
+        # and int_like is True -- this looks like success but float64 can't
+        # represent every integer beyond 2**53 exactly (e.g.
+        # "99999999999999999999999" comes back as
+        # 100000000000000008388608 with no signal anything went wrong).
+        # Flag that rare out-of-range minority here and recover the exact
+        # value from the original text with int(), which is exact for
+        # arbitrary precision; the common in-range case is unaffected and
+        # still goes through the fast pd.to_numeric conversion below.
+        maybe_overflow = int_like & ~bad & (
+            (num > _MAX_EXACT_FLOAT_INT) | (num < -_MAX_EXACT_FLOAT_INT)
+        )
         vals = [
-            None if e else (o if b else int(v))
-            for e, b, v, o in zip(empty, bad, num, original)
+            None if e else (
+                o if b else (int(str(o).strip()) if mo else int(v))
+            )
+            for e, b, v, o, mo in zip(empty, bad, num, original, maybe_overflow)
         ]
         return pd.Series(vals, index=series.index, dtype=object), fallbacks
 
@@ -135,9 +163,17 @@ def _cast_column_vectorized(series: pd.Series, kind: str) -> "tuple[pd.Series, i
         py = ts.dt.to_pydatetime()
         # Unlike integer/float, cast_value's datetime branch has no
         # try/except fallback: an unparseable value always becomes None,
-        # never the original text (see cast_value above). Match that exactly
-        # so strategy="naive" and strategy="optimized" stay equivalent; we
-        # still count and warn on the fallback since we can detect it here.
+        # never the original text (see cast_value above). The resulting
+        # VALUE stays identical between strategies here. The WARNING does
+        # not: cast_value's identity check (`v is orig`) in cast_frame's
+        # naive branch can never match for datetime, since cast_value
+        # returns a new None rather than the original object on failure, so
+        # naive can never report a non-zero datetime fallback count. This
+        # branch can detect the failure precisely (ts.isna()) and does warn.
+        # This asymmetry is a deliberate, owner-approved deviation (not a
+        # bug to fix): a silently NULLed timestamp is real data loss worth
+        # surfacing, and log output does not affect the timing the
+        # benchmark measures.
         vals = [None if (e or b) else d for e, b, d in zip(empty, bad, py)]
         return pd.Series(vals, index=series.index, dtype=object), fallbacks
 
