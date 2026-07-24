@@ -30,7 +30,7 @@ def test_run_matrix_iterates_and_cleans_before_import(tmp_path):
     cleaners = {"postgres": make_cleaner("postgres")}
 
     def fake_importer(config_path, *, sgbd_config_path, collector, show_data,
-                      only, create_schema, source_overrides):
+                      only, create_schema, source_overrides, strategy):
         events.append(("import", str(config_path), tuple(sorted(source_overrides))))
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
         return []
@@ -69,7 +69,7 @@ def test_on_run_fires_after_each_import_and_survives_a_crash(tmp_path):
     seen: list[int] = []
 
     def fake_importer(config_path, *, sgbd_config_path, collector, show_data,
-                      only, create_schema, source_overrides):
+                      only, create_schema, source_overrides, strategy):
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
         if len(seen) == 2:
             raise RuntimeError("backend blew up")
@@ -94,7 +94,7 @@ def test_run_matrix_builds_mode_overrides(tmp_path):
     seen = []
 
     def fake_importer(config_path, *, sgbd_config_path, collector, show_data,
-                      only, create_schema, source_overrides):
+                      only, create_schema, source_overrides, strategy):
         seen.append((Path(config_path).name, set(source_overrides)))
         return []
 
@@ -109,3 +109,27 @@ def test_run_matrix_builds_mode_overrides(tmp_path):
     assert by_name["import_config.json"] == {
         "stock", "purchase", "select_product", "add_to_cart"}
     assert by_name["import_config_combined.json"] == {"ecommerce"}
+
+
+def test_run_matrix_iterates_strategies(tmp_path):
+    seen = []
+
+    def fake_importer(config_path, *, sgbd_config_path, collector, show_data,
+                      only, create_schema, source_overrides, strategy):
+        seen.append(strategy)
+        collector.record("postgres", "products", "write", rows=100, seconds=0.1)
+        return []
+
+    labeled = brun.run_matrix(
+        sizes=[1000], modes=["multi"], repetitions=1,
+        strategies=["naive", "optimized"],
+        sgbd_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+        seed=1, only=["postgres"], cleaners={},
+        importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
+        generate=lambda out_dir, rows, seed, mode: None,
+    )
+    assert sorted(seen) == ["naive", "optimized"]
+    assert {r["strategy"] for r in labeled} == {"naive", "optimized"}
+    from polyglotimportcsv.benchmark_results import median_results
+    res = median_results(labeled)
+    assert {r["strategy"] for r in res} == {"naive", "optimized"}

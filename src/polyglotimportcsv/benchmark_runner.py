@@ -46,6 +46,7 @@ def run_matrix(
     sizes: Iterable[int],
     modes: Iterable[str],
     repetitions: int,
+    strategies: Iterable[str] = ("optimized",),
     sgbd_config_path: "Optional[str | Path]",
     config_dir: "str | Path",
     data_dir: "str | Path",
@@ -57,7 +58,9 @@ def run_matrix(
     generate: Callable[..., object] = benchmark_data.generate_dataset,
     on_run: Optional[Callable[[List[Dict[str, object]]], None]] = None,
 ) -> List[Dict[str, object]]:
-    """Run sizes x modes x repetitions, cleaning before each import. Returns labeled runs.
+    """Run sizes x modes x strategies x repetitions, cleaning before each import.
+
+    Returns labeled runs.
 
     ``on_run`` is called with every labeled run collected so far, right after each
     import finishes. A full matrix over large sizes takes a long time and results
@@ -73,6 +76,7 @@ def run_matrix(
             f"unknown mode(s): {', '.join(unknown)}. Valid: {', '.join(_MODE_CONFIG)}"
         )
     requested = list(only) if only else None
+    strategies = list(strategies)
     labeled: List[Dict[str, object]] = []
 
     for size in sizes:
@@ -83,25 +87,27 @@ def run_matrix(
             overrides = _overrides(mode, dpath)
             merged = load_cfg(config_path, sgbd_config_path)
             selected = requested or [b for b in _ALL_BACKENDS if b in merged]
-            for rep in range(repetitions):
-                for backend in selected:
-                    block = merged.get(backend)
-                    if block is not None and backend in cleaners:
-                        cleaners[backend](block)
-                collector = MetricsCollector()
-                importer(
-                    config_path,
-                    sgbd_config_path=sgbd_config_path,
-                    collector=collector,
-                    show_data=False,
-                    only=selected,
-                    create_schema=True,
-                    source_overrides=overrides,
-                )
-                labeled.append({
-                    "size": size, "mode": mode, "repetition": rep,
-                    "records": collector.to_records(),
-                })
-                if on_run is not None:
-                    on_run(labeled)
+            for strategy in strategies:
+                for rep in range(repetitions):
+                    for backend in selected:
+                        block = merged.get(backend)
+                        if block is not None and backend in cleaners:
+                            cleaners[backend](block)
+                    collector = MetricsCollector()
+                    importer(
+                        config_path,
+                        sgbd_config_path=sgbd_config_path,
+                        collector=collector,
+                        show_data=False,
+                        only=selected,
+                        create_schema=True,
+                        source_overrides=overrides,
+                        strategy=strategy,
+                    )
+                    labeled.append({
+                        "size": size, "mode": mode, "strategy": strategy,
+                        "repetition": rep, "records": collector.to_records(),
+                    })
+                    if on_run is not None:
+                        on_run(labeled)
     return labeled

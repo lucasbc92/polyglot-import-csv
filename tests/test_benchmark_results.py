@@ -8,7 +8,7 @@ from polyglotimportcsv import benchmark_results as br
 
 def _run(size, mode, rep, seconds):
     return {
-        "size": size, "mode": mode, "repetition": rep,
+        "size": size, "mode": mode, "strategy": "optimized", "repetition": rep,
         "records": [{
             "backend": "postgres", "entity": "products", "phase": "write",
             "rows": 100, "seconds": seconds, "rows_per_second": 100 / seconds,
@@ -63,7 +63,7 @@ def test_group_order_preserved():
     # products, write before read. median_results must preserve first-seen
     # group order (via the `order` list), not fall back to dict/set iteration.
     run = {
-        "size": 1000, "mode": "multi", "repetition": 0,
+        "size": 1000, "mode": "multi", "strategy": "optimized", "repetition": 0,
         "records": [
             {"backend": "redis", "entity": "orders", "phase": "write",
              "rows": 50, "seconds": 0.1, "rows_per_second": 500.0},
