@@ -5,6 +5,8 @@ the suite is dry-run. Each fake records how the driver was called so we can
 assert batched vs row-at-a-time behavior without a live database.
 """
 
+import logging
+
 import pandas as pd
 
 from polyglotimportcsv.mapping_resolver import BoundEntity
@@ -249,3 +251,112 @@ def test_neo4j_naive_runs_one_merge_per_row():
     )
     merges = [q for q, _ in rec["run"] if "MERGE (n" in q]
     assert len(merges) == 2500
+
+
+def test_neo4j_optimized_dedupes_nodes_first_wins_and_warns(caplog):
+    """Duplicate key values must be first-wins deduped (via _dedupe_props) and
+    the skip must surface through the existing warning, unchanged by batching."""
+    import polyglotimportcsv.importers.neo4j_importer as ni
+    rec = {"run": [], "tx_run": []}
+    user = _be(
+        "User", {"columns": {"user_id": {"is_key": True}}},
+        {"user_id": ["u0", "u1", "u0", "u2", "u1"]},
+    )
+    with caplog.at_level(logging.WARNING, logger="polyglotimportcsv.importers.neo4j_importer"):
+        ni.run_neo4j_import(
+            {"connection": {}}, {"User": user},
+            dry_run=False, create_schema=False, strategy="optimized",
+            driver_factory=lambda conn: _FakeDriver(rec),
+        )
+    node_batches = [p for q, p in rec["tx_run"] if "UNWIND" in q and "MERGE (n" in q]
+    keys = sorted({row["k"] for p in node_batches for row in p["batch"]})
+    assert keys == ["u0", "u1", "u2"]                      # first-wins, 3 distinct keys
+    assert sum(len(p["batch"]) for p in node_batches) == 3
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert any(
+        "duplicate key value(s) skipped" in r.message and "2 " in r.message
+        for r in warnings
+    )
+
+
+# ---------- Neo4j relationships ----------
+
+def _neo_rel_fixture(n, bad_row=False):
+    """User -[:PURCHASED {order_number}]-> Product, with a non-key rel prop
+    (rating) so rprops is non-empty and a merge-key prop (order_number) so the
+    `mk` path is exercised. Mirrors the real config shape (see
+    data/ecommerce/import_config.json, neo4j.relationships.PURCHASED)."""
+    product_ids = [f"p{i}" for i in range(n)]
+    user_product_ids = list(product_ids)
+    if bad_row:
+        user_product_ids[0] = None  # null to-id -> row must be skipped
+    user = _be(
+        "User", {"columns": {"user_id": {"is_key": True}}},
+        {
+            "user_id": [f"u{i}" for i in range(n)],
+            "product_id": user_product_ids,
+            "order_number": [f"o{i}" for i in range(n)],
+            "rating": [i % 5 for i in range(n)],
+        },
+    )
+    product = _be(
+        "Product", {"columns": {"product_id": {"is_key": True}}},
+        {"product_id": product_ids},
+    )
+    bcfg = {
+        "relationships": {
+            "PURCHASED": {
+                "from": "User",
+                "to": "Product",
+                "type": "PURCHASED",
+                "columns": {
+                    "order_number": {"is_key": True},
+                    "rating": {},
+                },
+            }
+        }
+    }
+    return {"User": user, "Product": product}, bcfg
+
+
+def test_neo4j_optimized_batches_relationships_with_unwind():
+    import polyglotimportcsv.importers.neo4j_importer as ni
+    rec = {"run": [], "tx_run": []}
+    entities, bcfg = _neo_rel_fixture(1500, bad_row=True)
+    ni.run_neo4j_import(
+        bcfg, entities,
+        dry_run=False, create_schema=False, strategy="optimized",
+        driver_factory=lambda conn: _FakeDriver(rec),
+    )
+    rel_batches = [
+        (q, p) for q, p in rec["tx_run"]
+        if "UNWIND" in q and "MERGE (a)" in q and "]->(b)" in q
+    ]
+    assert len(rel_batches) == 2                       # ceil(1499/1000), one row skipped
+    total_rows = sum(len(p["batch"]) for _, p in rel_batches)
+    assert total_rows == 1499
+    q0, p0 = rel_batches[0]
+    assert "row.mk.order_number" in q0                  # merge-key mapped into nested row.mk
+    sample = p0["batch"][0]
+    assert set(sample.keys()) == {"a_id", "b_id", "rprops", "mk"}
+    assert set(sample["mk"].keys()) == {"order_number"}
+    assert "order_number" not in sample["rprops"]        # merge key excluded from rprops
+    assert "rating" in sample["rprops"]
+
+
+def test_neo4j_naive_relationship_skips_null_ids_and_runs_one_merge_per_row():
+    import polyglotimportcsv.importers.neo4j_importer as ni
+    rec = {"run": [], "tx_run": []}
+    entities, bcfg = _neo_rel_fixture(50, bad_row=True)
+    ni.run_neo4j_import(
+        bcfg, entities,
+        dry_run=False, create_schema=False, strategy="naive",
+        driver_factory=lambda conn: _FakeDriver(rec),
+    )
+    rel_runs = [(q, p) for q, p in rec["run"] if "MERGE (a)" in q]
+    assert len(rel_runs) == 49                          # one row skipped (null product_id)
+    q, params = rel_runs[0]
+    assert "$a_id" in q and "$b_id" in q and "]->(b)" in q
+    assert {"a_id", "b_id", "rprops"} <= set(params.keys())
+    assert any(k.startswith("mk_") for k in params.keys())
+    assert "order_number" not in params["rprops"]        # merge key excluded from rprops

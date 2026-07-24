@@ -257,18 +257,18 @@ def run_neo4j_import(
                 for fk, spec in rel_cols.items()
                 if spec.get("is_key")
             ]
-            mk_clause = ", ".join(f"{k}: $mk_{k}" for k in mk_names)
-            mk_block = f" {{{mk_clause}}}" if mk_clause else ""
-            q = (
-                f"MATCH (a:{from_label} {{{from_key}: $a_id}}), "
-                f"(b:{to_label} {{{to_key}: $b_id}}) "
-                f"MERGE (a)-[r:{rel_type}{mk_block}]->(b) SET r += $rprops"
-            )
-            logger.debug("[neo4j] Cypher: %s", q)
             f1 = [x for x in (from_be.cfg.get("filters") or []) if x.get("operator") != "each"]
             dff = apply_filters(from_be.df, f1, from_be.kinds)
             with metrics.timed_phase("neo4j", f"rel:{rel_type}", "write") as tw:
                 if strategy == "naive":
+                    mk_clause = ", ".join(f"{k}: $mk_{k}" for k in mk_names)
+                    mk_block = f" {{{mk_clause}}}" if mk_clause else ""
+                    q = (
+                        f"MATCH (a:{from_label} {{{from_key}: $a_id}}), "
+                        f"(b:{to_label} {{{to_key}: $b_id}}) "
+                        f"MERGE (a)-[r:{rel_type}{mk_block}]->(b) SET r += $rprops"
+                    )
+                    logger.debug("[neo4j] Cypher: %s", q)
                     with entity_progress(f"neo4j · :{rel_type}", len(dff)) as advance:
                         count = _merge_rels_naive(
                             session, q, dff, from_src, to_src, rel_cols, mk_names, advance
