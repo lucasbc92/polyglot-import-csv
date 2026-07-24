@@ -21,12 +21,6 @@ KIND_TO_DB_TYPE: Dict[str, str] = {
 
 _BOOL_WORDS = {"true", "false"}
 
-#: Largest integer magnitude guaranteed to round-trip exactly through
-#: float64 (2**53). Used to flag the rare out-of-range minority that
-#: pd.to_numeric silently converts to a lossy float in the integer branch
-#: of _cast_column_vectorized.
-_MAX_EXACT_FLOAT_INT = 2**53
-
 
 def is_boolean_series(non_empty: pd.Series) -> bool:
     """True when every non-empty value is 'true'/'false' (case-insensitive)."""
@@ -100,30 +94,49 @@ def _cast_column_vectorized(series: pd.Series, kind: str) -> "tuple[pd.Series, i
         # optional sign, digits only) to identify the disagreeing minority,
         # then fall back to text for those, matching cast_value's contract.
         s = series.where(~empty)
-        num = pd.to_numeric(s, errors="coerce")
         int_like = s.astype(str).str.strip().str.fullmatch(r"[+-]?\d+").fillna(False)
-        bad = (num.isna() | ~int_like) & ~empty
+        good = int_like & ~empty
+        bad = ~empty & ~good
         fallbacks = int(bad.sum())
-        # pd.to_numeric silently promotes to float64 once a value overflows
-        # int64: it neither raises nor returns NaN, so num.isna() is False
-        # and int_like is True -- this looks like success but float64 can't
-        # represent every integer beyond 2**53 exactly (e.g.
-        # "99999999999999999999999" comes back as
-        # 100000000000000008388608 with no signal anything went wrong).
-        # Flag that rare out-of-range minority here and recover the exact
-        # value from the original text with int(), which is exact for
-        # arbitrary precision; the common in-range case is unaffected and
-        # still goes through the fast pd.to_numeric conversion below.
-        maybe_overflow = int_like & ~bad & (
-            (num > _MAX_EXACT_FLOAT_INT) | (num < -_MAX_EXACT_FLOAT_INT)
-        )
-        vals = [
-            None if e else (
-                o if b else (int(str(o).strip()) if mo else int(v))
+
+        # pd.to_numeric silently promotes the ENTIRE column to float64 once
+        # a single value overflows int64: it neither raises nor returns
+        # NaN, and float64 cannot represent every integer above 2**53
+        # exactly (e.g. 9007199254740993 == 2**53 + 1 rounds to exactly
+        # 2**53, indistinguishable from a legitimately in-range value once
+        # it has already gone through the conversion). A magnitude check on
+        # the resulting float is therefore not a reliable oracle -- it
+        # tests a value that may already have been rounded away.
+        #
+        # Ask pandas' own RESULT DTYPE instead, recomputed on just the good
+        # (int-like, non-empty) values so an empty cell elsewhere in the
+        # column -- which forces its own float64 promotion via NaN padding,
+        # unrelated to any overflow -- doesn't falsely trigger this path.
+        # When pandas can represent every good value as int64 it does so
+        # exactly regardless of magnitude (up to int64 range): that is the
+        # common case and stays fully vectorized. When it falls back to
+        # float64, no value in that subset can be trusted, so every good
+        # value is recovered exactly by parsing the original text with
+        # int(), which is exact for arbitrary precision. This exact-parse
+        # path only runs for columns that actually contain an
+        # out-of-int64-range value, which is rare.
+        good_text = s[good]
+        num_good = pd.to_numeric(good_text, errors="coerce")
+        exact = pd.api.types.is_integer_dtype(num_good.dtype)
+        good_vals = (
+            num_good.astype(object)
+            if exact
+            else pd.Series(
+                [int(str(v).strip()) for v in good_text],
+                index=good_text.index,
+                dtype=object,
             )
-            for e, b, v, o, mo in zip(empty, bad, num, original, maybe_overflow)
-        ]
-        return pd.Series(vals, index=series.index, dtype=object), fallbacks
+        )
+
+        result = pd.Series([None] * len(series.index), index=series.index, dtype=object)
+        result[bad] = original[bad]
+        result[good] = good_vals
+        return result, fallbacks
 
     if kind == "float":
         # pd.to_numeric().isna() is a poor success oracle for float() too,
