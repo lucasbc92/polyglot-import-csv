@@ -51,6 +51,7 @@ def run_import(
     show_data: Optional[bool] = None,
     collector: Optional[metrics.MetricsCollector] = None,
     benchmark: bool = False,
+    strategy: str = "optimized",
 ) -> List[str]:
     """
     Load config and sources, bind entities, validate, then run configured backends.
@@ -79,6 +80,7 @@ def run_import(
             show_data=False if benchmark else show_data,
             collector=collector,
             benchmark=benchmark,
+            strategy=strategy,
         )
     finally:
         metrics.set_current(prev_collector)
@@ -96,6 +98,7 @@ def _run(
     show_data: Optional[bool],
     collector: metrics.MetricsCollector,
     benchmark: bool,
+    strategy: str,
 ) -> List[str]:
     mode = "dry-run" if dry_run else "import"
     step("Load config", str(config_path))
@@ -146,14 +149,15 @@ def _run(
         section(f"Backend · {backend}")
         bcfg = config[backend]
         with collector.timed(backend, "*", "map") as t:
-            bound = resolve_backend_entities(bcfg, sources, cast_cache)
+            bound = resolve_backend_entities(bcfg, sources, cast_cache, strategy=strategy)
             t.rows = sum(len(be.df) for be in bound.values())
         validate_backend_entities(backend, bcfg, bound)
         for ename, be in bound.items():
             if len(be.df) == 0:
                 logger.warning("entity %s/%s bound to 0 row(s)", backend, ename)
             dump_entity_frame(backend, ename, be.df, force=show_data)
-        backend_lines = fn(bcfg, bound, dry_run=dry_run, create_schema=create_schema)
+        backend_lines = fn(bcfg, bound, dry_run=dry_run,
+                           create_schema=create_schema, strategy=strategy)
         log_lines.extend(backend_lines)
         for line in backend_lines:
             _print_backend_line(line)

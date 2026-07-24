@@ -133,3 +133,20 @@ def test_manual_only_columns_returns_copy_not_original(sources):
     cols = expand_entity_columns("stock", ecfg, sources["stock"])
     cols["product_id"] = "mutated"
     assert ecfg["columns"]["product_id"] == {"is_key": True}
+
+
+def test_resolve_uses_strategy_for_casting():
+    import pandas as pd
+    from polyglotimportcsv.sources import SOURCE_COLUMN, SourceData
+    from polyglotimportcsv.mapping_resolver import resolve_backend_entities
+
+    df = pd.DataFrame({"n": ["1", "2"], SOURCE_COLUMN: ["s", "s"]})
+    sd = SourceData(name="s", df=df,
+                    kinds={"n": "integer", SOURCE_COLUMN: "string"},
+                    file_header=["n"])
+    bcfg = {"entities": {"E": {"source": "s", "columns": {"n": {}}}}}
+    cache: dict = {}
+    resolve_backend_entities(bcfg, {"s": sd}, cache, strategy="naive")
+    resolve_backend_entities(bcfg, {"s": sd}, cache, strategy="optimized")
+    # Distinct strategies must not share a cached frame.
+    assert len({k for k in cache}) == 2

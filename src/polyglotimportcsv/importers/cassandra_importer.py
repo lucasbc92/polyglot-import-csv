@@ -73,6 +73,7 @@ def run_cassandra_import(
     *,
     dry_run: bool,
     create_schema: bool,
+    strategy: str = "optimized",
 ) -> List[str]:
     lines: List[str] = []
     conn = backend_cfg.get("connection") or {}

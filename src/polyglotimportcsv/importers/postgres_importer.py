@@ -40,9 +40,11 @@ def run_postgres_import(
     *,
     dry_run: bool,
     create_schema: bool,
+    strategy: str = "optimized",
 ) -> List[str]:
     """Execute Postgres import; return log lines."""
     lines: List[str] = []
+    _ = strategy
     conn_cfg = backend_cfg.get("connection") or {}
     schema = backend_cfg.get("schema") or "public"
     relationships = backend_cfg.get("relationships") or {}

@@ -14,7 +14,7 @@ CFG = ROOT / "data" / "ecommerce" / "import_config.json"
 def test_run_import_with_stub_registry():
     calls: list[str] = []
 
-    def stub_postgres(cfg, entities, *, dry_run, create_schema):
+    def stub_postgres(cfg, entities, *, dry_run, create_schema, strategy="optimized"):
         calls.append("postgres")
         assert isinstance(entities, dict) and entities, "expected bound entities"
         return ["[postgres] stub"]
@@ -46,7 +46,7 @@ def test_run_import_dumps_bound_entities(monkeypatch):
 
     monkeypatch.setattr("polyglotimportcsv.runner.dump_entity_frame", fake_dump)
 
-    def stub(cfg, entities, *, dry_run, create_schema):
+    def stub(cfg, entities, *, dry_run, create_schema, strategy="optimized"):
         return ["[postgres] stub"]
 
     run_import(CFG, dry_run=True, only=["postgres"], importers={"postgres": stub})

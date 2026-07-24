@@ -23,10 +23,12 @@ def run_mongodb_import(
     *,
     dry_run: bool,
     create_schema: bool,
+    strategy: str = "optimized",
 ) -> List[str]:
     lines: List[str] = []
     conn = backend_cfg.get("connection") or {}
     _ = create_schema
+    _ = strategy
 
     if dry_run:
         lines.append("[mongodb] dry-run: would insert documents.")

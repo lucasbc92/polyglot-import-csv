@@ -126,6 +126,8 @@ def resolve_backend_entities(
     backend_cfg: Dict[str, Any],
     sources: Dict[str, SourceData],
     cast_cache: Optional[Dict[tuple, pd.DataFrame]] = None,
+    *,
+    strategy: str = "optimized",
 ) -> Dict[str, BoundEntity]:
     """Bind every entity of one backend and cast its frame to native values."""
     cast_cache = cast_cache if cast_cache is not None else {}
@@ -144,9 +146,9 @@ def resolve_backend_entities(
         cfg.pop("source", None)
         cfg.pop("csv_columns", None)
         cfg.pop("auto_map", None)
-        cache_key = _binding_cache_key(ecfg, ename)
+        cache_key = (strategy,) + _binding_cache_key(ecfg, ename)
         if cache_key not in cast_cache:
-            cast_cache[cache_key] = cast_frame(src.df, src.kinds)
+            cast_cache[cache_key] = cast_frame(src.df, src.kinds, strategy=strategy)
         out[ename] = BoundEntity(
             name=ename, cfg=cfg, df=cast_cache[cache_key], kinds=src.kinds
         )

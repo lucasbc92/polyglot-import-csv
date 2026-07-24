@@ -45,7 +45,7 @@ def test_run_import_benchmark_writes_files_and_suppresses_dump(tmp_path, monkeyp
         lambda b, e, df, *, force=None: forces.append(force),
     )
 
-    def stub(cfg, entities, *, dry_run, create_schema):
+    def stub(cfg, entities, *, dry_run, create_schema, strategy="optimized"):
         return ["[postgres] stub"]
 
     run_import(CFG, dry_run=True, only=["postgres"], importers={"postgres": stub}, benchmark=True)
