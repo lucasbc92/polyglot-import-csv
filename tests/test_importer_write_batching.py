@@ -81,3 +81,73 @@ def test_redis_naive_sets_one_per_row():
     )
     assert fake.set_calls == 2500
     assert fake.pipeline_execs == 0
+
+
+# ---------- Cassandra ----------
+
+class _FakeSession:
+    def __init__(self):
+        self.executes = []          # each execute() call
+        self.prepared = 0
+
+    def execute(self, stmt, params=None):
+        self.executes.append((stmt, params))
+        return []
+
+    def prepare(self, cql):
+        self.prepared += 1
+        return ("prep", cql)
+
+    def set_keyspace(self, ks):
+        pass
+
+
+class _FakeCluster:
+    def __init__(self, session):
+        self._session = session
+
+    def shutdown(self):
+        pass
+
+
+def _cass_entity(n):
+    return _be(
+        "user_activity_log",
+        {"columns": {"user_id": {"is_key": True}, "action": {}},
+         "cassandra_partition": ["user_id"]},
+        {"user_id": [f"u{i}" for i in range(n)], "action": ["x"] * n},
+    )
+
+
+def test_cassandra_optimized_uses_concurrent_not_per_row(monkeypatch):
+    import polyglotimportcsv.importers.cassandra_importer as ci
+    calls = {"concurrent": 0, "rows": 0}
+
+    def fake_concurrent(session, prepared, params, concurrency=64, **kw):
+        calls["concurrent"] += 1
+        calls["rows"] += len(list(params))
+        return []
+
+    monkeypatch.setattr(ci, "execute_concurrent_with_args", fake_concurrent)
+    session = _FakeSession()
+    ci.run_cassandra_import(
+        {"connection": {}}, {"user_activity_log": _cass_entity(2500)},
+        dry_run=False, create_schema=False, strategy="optimized",
+        session_factory=lambda conn: (_FakeCluster(session), session),
+    )
+    assert calls["concurrent"] == 1
+    assert calls["rows"] == 2500
+    # No per-row execute for INSERTs (execute() only used for DDL, skipped here)
+    assert all("INSERT" not in str(s) for s, _ in session.executes)
+
+
+def test_cassandra_naive_executes_one_per_row():
+    import polyglotimportcsv.importers.cassandra_importer as ci
+    session = _FakeSession()
+    ci.run_cassandra_import(
+        {"connection": {}}, {"user_activity_log": _cass_entity(2500)},
+        dry_run=False, create_schema=False, strategy="naive",
+        session_factory=lambda conn: (_FakeCluster(session), session),
+    )
+    insert_execs = [e for e in session.executes if e[1] is not None]
+    assert len(insert_execs) == 2500
