@@ -56,8 +56,9 @@ def _checkpoint_writer(out_dir: Path, metadata: Dict[str, Any]):
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Run the import benchmark matrix.")
-    parser.add_argument("--sizes", default="1000,10000,100000",
-                        help="Comma-separated N (products) sizes (default: 1000,10000,100000).")
+    parser.add_argument("--sizes", default="10000,100000",
+                        help="Comma-separated TOTAL row counts across all sources "
+                             "(default: 10000,100000). Split ~1:3:2:2 per source.")
     parser.add_argument("--modes", default="multi,combined",
                         help="Comma-separated input modes (default: multi,combined).")
     parser.add_argument("--repetitions", type=int, default=3,

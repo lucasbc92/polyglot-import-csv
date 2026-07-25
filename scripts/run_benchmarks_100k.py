@@ -43,8 +43,13 @@ MEASURED_ROWS_PER_S: Dict[str, Dict[str, float]] = {
     "neo4j": {"map": 4.0e7, "write": 93},
 }
 
-#: Rows each backend handled per phase at size=1000, from the same log. Row
-#: counts scale about linearly with size, so size/1000 scales these.
+#: Total rows the reference measurements below were taken at. Under the
+#: total-rows --sizes semantics, 8000 total rows == the old 1000-product point.
+_REFERENCE_TOTAL_ROWS = 8000
+
+#: Rows each backend handled per phase at _REFERENCE_TOTAL_ROWS total rows, from
+#: the same log. Row counts scale about linearly with size, so
+#: size/_REFERENCE_TOTAL_ROWS scales these.
 ROWS_AT_1K: Dict[str, Dict[str, int]] = {
     "postgres": {"map": 6000, "write": 5010},
     "mongodb": {"map": 1000, "write": 1000},
@@ -61,7 +66,7 @@ def estimate_seconds(backends: Sequence[str], size: int, runs: int) -> Dict[str,
     with the dataset (index maintenance, Neo4j's unindexed MERGE scans), so it
     is a floor, not a forecast.
     """
-    scale = size / 1000.0
+    scale = size / _REFERENCE_TOTAL_ROWS
     out: Dict[str, float] = {}
     for b in backends:
         rates = MEASURED_ROWS_PER_S.get(b)
@@ -90,7 +95,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         epilog="Unrecognised flags are forwarded to run_benchmarks.py unchanged.",
     )
     parser.add_argument("--size", type=int, default=100000,
-                        help="Dataset size in products (default: 100000).")
+                        help="Total dataset size in rows (default: 100000).")
     parser.add_argument("--only", default=",".join(FAST_BACKENDS),
                         help=f"Comma-separated backends (default: {','.join(FAST_BACKENDS)}). "
                              f"Slow at 100k: {', '.join(ROW_AT_A_TIME_BACKENDS)}.")

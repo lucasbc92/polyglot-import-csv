@@ -14,7 +14,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description="Generate a deterministic synthetic e-commerce dataset."
     )
-    parser.add_argument("--rows", type=int, required=True, help="Number of products (N).")
+    parser.add_argument("--rows", type=int, required=True,
+                        help="Total number of rows across all sources (split ~1:3:2:2).")
     parser.add_argument("--seed", type=int, default=42, help="Random seed (default: 42).")
     parser.add_argument("--out", type=Path, required=True, help="Output directory.")
     parser.add_argument(
