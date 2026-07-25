@@ -95,8 +95,10 @@ After that, `./run_example.sh --` + TAB suggests flags (`--fresh-start`, `--clea
 
 ### Benchmarks
 
-Generate a deterministic synthetic e-commerce dataset (N = number of products;
-sources scale N / 3N / 2N / 2N; the same `--seed` reproduces byte-identical files):
+Generate a deterministic synthetic e-commerce dataset. `--rows` is the **total
+number of rows across all sources** (split ~1:3:2:2 among stock/purchase/select/
+cart with slight seeded jitter), not the product count; the same `--seed`
+reproduces byte-identical files:
 
     python scripts/generate_benchmark_data.py --rows 100000 --seed 42 \
       --out data/benchmark/generated/100000 --mode both
@@ -219,8 +221,10 @@ Depois, `./run_example.sh --` + TAB sugere flags (`--fresh-start`, `--clean`, `-
 
 ### Benchmarks
 
-Gere um dataset e-commerce sintético determinístico (N = número de produtos; as
-fontes escalam N / 3N / 2N / 2N; a mesma `--seed` reproduz arquivos byte-idênticos):
+Gere um dataset e-commerce sintético determinístico. `--rows` é o **total de
+linhas somando todas as fontes** (dividido ~1:3:2:2 entre stock/purchase/select/
+cart com leve jitter seedado), não o número de produtos; a mesma `--seed` reproduz
+arquivos byte-idênticos:
 
     python scripts/generate_benchmark_data.py --rows 100000 --seed 42 \
       --out data/benchmark/generated/100000 --mode both

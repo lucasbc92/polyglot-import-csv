@@ -12,14 +12,19 @@ ECOM = ROOT / "data" / "ecommerce"
 
 
 def test_reference_dataset_committed_and_1k():
+    # The committed dataset is generated at --rows 1000 --seed 42 (total rows),
+    # split ~1:3:2:2 with seeded jitter. Assert against that split, not fixed
+    # numbers, so it tracks the generator.
+    split = bd._split_rows(1000, 42)
+
     def n(fname):
         with open(BENCH / fname, encoding="utf-8") as fh:
             return sum(1 for _ in fh) - 1
-    assert n("ecommerce_stock.csv") == 125
-    assert n("ecommerce_purchase.csv") == 375
-    assert n("ecommerce_select_product.csv") == 250
-    assert n("ecommerce_add_to_cart.csv") == 250
-    assert n("ecommerce_join.csv") == 1000  # 125 + 375 + 250 + 250
+    assert n("ecommerce_stock.csv") == split["stock"]
+    assert n("ecommerce_purchase.csv") == split["purchase"]
+    assert n("ecommerce_select_product.csv") == split["select_product"]
+    assert n("ecommerce_add_to_cart.csv") == split["add_to_cart"]
+    assert n("ecommerce_join.csv") == 1000  # sum of the four sources
 
 
 def _filter_rows(config, overrides):
