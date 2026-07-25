@@ -13,12 +13,27 @@ def _rows(seed, rows):
     return list(bd.iter_source_rows(seed, rows))
 
 
-def test_cardinalities_follow_ratios():
-    counts = Counter(src for src, _ in _rows(42, 10))
-    assert counts["stock"] == 10
-    assert counts["purchase"] == 30
-    assert counts["select_product"] == 20
-    assert counts["add_to_cart"] == 20
+def test_split_rows_sums_exactly_and_respects_ratio():
+    split = bd._split_rows(80_000, seed=42)
+    assert set(split) == {"stock", "purchase", "select_product", "add_to_cart"}
+    assert sum(split.values()) == 80_000                 # exact total
+    assert all(v >= 1 for v in split.values())
+    # within +/-15% of the exact 1:3:2:2 share (10% jitter + rounding slack)
+    for src, ratio in (("stock", 1), ("purchase", 3),
+                       ("select_product", 2), ("add_to_cart", 2)):
+        exact = 80_000 * ratio / 8
+        assert abs(split[src] - exact) <= 0.15 * exact, src
+
+
+def test_split_rows_deterministic_and_seed_sensitive():
+    assert bd._split_rows(80_000, 42) == bd._split_rows(80_000, 42)
+    assert bd._split_rows(80_000, 1) != bd._split_rows(80_000, 2)
+
+
+def test_cardinalities_follow_split():
+    split = bd._split_rows(80_000, 42)
+    counts = Counter(src for src, _ in _rows(42, 80_000))
+    assert dict(counts) == split
 
 
 def test_pool_sizes():

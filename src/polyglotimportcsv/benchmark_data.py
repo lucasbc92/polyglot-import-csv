@@ -77,6 +77,30 @@ _BASE = datetime(2023, 11, 1, 0, 0, 0)
 _SPAN_SECONDS = 30 * 24 * 3600
 
 
+_BASE_RATIO: Dict[str, int] = {
+    "stock": 1, "purchase": 3, "select_product": 2, "add_to_cart": 2,
+}
+_SPLIT_ORDER: Tuple[str, ...] = ("stock", "purchase", "select_product", "add_to_cart")
+
+
+def _split_rows(total_rows: int, seed: int) -> Dict[str, int]:
+    """Split ``total_rows`` across the four sources ~1:3:2:2 with seeded +/-10%
+    jitter, summing to exactly ``total_rows``. ``stock`` (the product key space)
+    is at least 1. Deterministic in ``(seed, total_rows)``."""
+    if total_rows < len(_SPLIT_ORDER):
+        raise ValueError(f"total_rows must be >= {len(_SPLIT_ORDER)}")
+    rng = random.Random(f"{seed}:split")
+    weights = {k: _BASE_RATIO[k] * (1.0 + rng.uniform(-0.10, 0.10)) for k in _SPLIT_ORDER}
+    wsum = sum(weights.values())
+    counts = {k: max(1, round(total_rows * weights[k] / wsum)) for k in _SPLIT_ORDER}
+    # Reconcile rounding drift onto the largest source (purchase) so the counts
+    # sum to exactly total_rows.
+    counts["purchase"] += total_rows - sum(counts.values())
+    if counts["purchase"] < 1:
+        raise ValueError(f"total_rows={total_rows} too small for a valid 1:3:2:2 split")
+    return counts
+
+
 def num_users(rows: int) -> int:
     return max(1, rows // 10)
 
