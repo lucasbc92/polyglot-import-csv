@@ -94,3 +94,24 @@ def test_cli_benchmark_flag_passes_through(tmp_path, monkeypatch):
     result = CliRunner().invoke(main, ["--config", str(cfg), "--benchmark"])
     assert result.exit_code == 0, result.output
     assert captured["benchmark"] is True
+
+
+def test_cli_passes_strategy(monkeypatch):
+    from click.testing import CliRunner
+    import polyglotimportcsv.cli as climod
+
+    captured = {}
+
+    def fake_run_import(config_path, **kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(climod, "run_import", fake_run_import)
+    runner = CliRunner()
+    # --dry-run so no DB; reuse a config that exists in the repo
+    res = runner.invoke(climod.main, [
+        "--config", "data/ecommerce/import_config.json",
+        "--dry-run", "--strategy", "naive",
+    ])
+    assert res.exit_code == 0, res.output
+    assert captured["strategy"] == "naive"

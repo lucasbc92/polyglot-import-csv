@@ -64,6 +64,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help="Runs per (size, mode); the median is reported (default: 3).")
     parser.add_argument("--only", default="",
                         help=f"Comma-separated backends (default: all). Choices: {', '.join(_ALL_BACKENDS)}.")
+    parser.add_argument("--strategies", default="optimized",
+                        help="Comma-separated strategies: naive,optimized (default: optimized).")
     parser.add_argument("--seed", type=int, default=42, help="Generator seed (default: 42).")
     parser.add_argument("--sgbd-config", type=Path, default=Path("data/ecommerce/sgbd_config.json"))
     parser.add_argument("--config-dir", type=Path, default=Path("data/ecommerce"),
@@ -83,13 +85,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     sizes = _parse_int_list(args.sizes)
     modes = _parse_str_list(args.modes)
     only = _parse_str_list(args.only) or None
+    strategies = _parse_str_list(args.strategies)
 
     meta = environment_metadata(args.config_dir, {})
     meta.update({"seed": args.seed, "sizes": sizes, "modes": modes,
-                 "repetitions": args.repetitions})
+                 "repetitions": args.repetitions, "strategies": strategies})
 
     labeled = run_matrix(
         sizes=sizes, modes=modes, repetitions=args.repetitions,
+        strategies=strategies,
         sgbd_config_path=args.sgbd_config, config_dir=args.config_dir,
         data_dir=args.data_dir, seed=args.seed, only=only,
         cleaners=CLEANERS, importer=run_import, load_cfg=load_config,
