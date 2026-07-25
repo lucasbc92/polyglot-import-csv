@@ -111,9 +111,16 @@ import is preceded by a clean, so every measurement is a cold load:
     python scripts/run_benchmarks.py --sizes 1000,10000,100000 \
       --modes multi,combined --repetitions 3
 
+The matrix defaults to the `optimized` strategy (vectorized casting and batched
+writes). Pass `--strategies naive,optimized` to measure both baselines in a single
+run for a before/after comparison; `naive` reproduces the original row-at-a-time
+behavior. Cassandra, Redis and Neo4j are slow only under `naive` — `optimized`
+batches their writes, so the earlier per-row round-trip cost disappears. The same
+switch exists on a single import: `python -m polyglotimportcsv --strategy naive`.
+
 Results land in `benchmarks/`: a `benchmark_run_<timestamp>.json` plus an
-append-only `benchmark_results.csv` (`size,mode,backend,entity,phase,rows,
-median_seconds,rows_per_second`) for the report graphs.
+append-only `benchmark_results.csv` (`size,mode,strategy,backend,entity,phase,
+rows,median_seconds,rows_per_second`) for the report graphs.
 
 ### License
 
@@ -228,9 +235,16 @@ precedida de uma limpeza, então cada medição é uma carga a frio:
     python scripts/run_benchmarks.py --sizes 1000,10000,100000 \
       --modes multi,combined --repetitions 3
 
+A matriz usa por padrão a estratégia `optimized` (casting vetorizado e escritas em
+lote). Use `--strategies naive,optimized` para medir as duas linhas de base numa só
+execução (comparação antes/depois); `naive` reproduz o comportamento original linha
+a linha. Cassandra, Redis e Neo4j só são lentos sob `naive` — `optimized` agrupa
+suas escritas, eliminando o custo de uma ida ao banco por linha. A mesma opção vale
+para uma importação avulsa: `python -m polyglotimportcsv --strategy naive`.
+
 Os resultados vão para `benchmarks/`: um `benchmark_run_<timestamp>.json` e um
-`benchmark_results.csv` append-only (`size,mode,backend,entity,phase,rows,
-median_seconds,rows_per_second`) para os gráficos do relatório.
+`benchmark_results.csv` append-only (`size,mode,strategy,backend,entity,phase,
+rows,median_seconds,rows_per_second`) para os gráficos do relatório.
 
 ### Licença
 
