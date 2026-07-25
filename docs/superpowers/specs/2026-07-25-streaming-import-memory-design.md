@@ -16,17 +16,17 @@ ao mesmo tempo — nada é liberado entre DBMSs.
 
 ### Medição (probe `tracemalloc`, fase load → cast, sem banco)
 
-| Tamanho | Linhas-fonte | Pico load | Pico cast (vivo) |
-|---------|--------------|-----------|------------------|
-| 1k      | 8.000        | 3,9 MB    | 12,3 MB (9,6)    |
-| 10k     | 80.000       | 36,3 MB   | 122,5 MB (96,2)  |
-| 100k*   | 800.000      | ~360 MB   | ~1,2 GB (~960)   |
+| Tamanho | Linhas-fonte | Pico load | Pico cast (vivo)   |
+|---------|--------------|-----------|--------------------|
+| 1k      | 8.000        | 3,9 MB    | 12,3 MB (9,6)      |
+| 10k     | 80.000       | 36,3 MB   | 122,5 MB (96,2)    |
+| 100k    | 800.000      | 454,5 MB  | 1350,6 MB (1089,0) |
 
-\* 100k por extrapolação linear (a escala medida é ~linear: 10× linhas → ~10×
-memória). O RSS real costuma ser 1,5–2× o valor do `tracemalloc`, então uma
-execução 100k sobre os 5 DBMSs deve **estourar ~1,5–2 GB de pico** — a "explosão"
-observada no notebook do autor. O cast custa ~3× o load porque o `cast_cache`
-mantém os frames convertidos dos 5 DBMSs vivos ao mesmo tempo.
+Escala ~linear (levemente superlinear no load). O RSS real costuma ser 1,5–2× o
+valor do `tracemalloc`, então uma execução 100k sobre os 5 DBMSs deve **estourar
+~2–2,7 GB de pico** — a "explosão" observada no notebook do autor. O cast custa ~3×
+o load porque o `cast_cache` mantém os frames convertidos dos 5 DBMSs vivos ao mesmo
+tempo. (Medições `tracemalloc` na fase load → cast, sem banco.)
 
 ## 2. Objetivo e não-objetivos
 
