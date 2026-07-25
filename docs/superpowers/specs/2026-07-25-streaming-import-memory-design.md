@@ -16,17 +16,21 @@ ao mesmo tempo — nada é liberado entre DBMSs.
 
 ### Medição (probe `tracemalloc`, fase load → cast, sem banco)
 
-| Tamanho | Linhas-fonte | Pico load | Pico cast (vivo)   |
-|---------|--------------|-----------|--------------------|
-| 1k      | 8.000        | 3,9 MB    | 12,3 MB (9,6)      |
-| 10k     | 80.000       | 36,3 MB   | 122,5 MB (96,2)    |
-| 100k    | 800.000      | 454,5 MB  | 1350,6 MB (1089,0) |
+| Total de linhas | Produtos (÷8) | Pico load | Pico cast (vivo)   |
+|-----------------|---------------|-----------|--------------------|
+| 8.000           | 1.000         | 3,9 MB    | 12,3 MB (9,6)      |
+| 80.000          | 10.000        | 36,3 MB   | 122,5 MB (96,2)    |
+| 800.000         | 100.000       | 454,5 MB  | 1350,6 MB (1089,0) |
 
-Escala ~linear (levemente superlinear no load). O RSS real costuma ser 1,5–2× o
-valor do `tracemalloc`, então uma execução 100k sobre os 5 DBMSs deve **estourar
-~2–2,7 GB de pico** — a "explosão" observada no notebook do autor. O cast custa ~3×
-o load porque o `cast_cache` mantém os frames convertidos dos 5 DBMSs vivos ao mesmo
-tempo. (Medições `tracemalloc` na fase load → cast, sem banco.)
+Escala ~linear com o total de linhas (levemente superlinear no load). O RSS real
+costuma ser 1,5–2× o valor do `tracemalloc`, então 800k linhas sobre os 5 DBMSs
+deve **estourar ~2–2,7 GB de pico** — a "explosão" observada no notebook do autor.
+O cast custa ~3× o load porque o `cast_cache` mantém os frames convertidos dos 5
+DBMSs vivos ao mesmo tempo. (Medições `tracemalloc` na fase load → cast, sem banco.)
+
+Sob a nova semântica de `--sizes` (total de linhas, §12), esses casos são
+`--sizes 8000/80000/800000`; o alvo do autor (`--sizes 10000,100000`) fica entre a
+1ª e a 2ª linha (~1.250 / ~12.500 produtos).
 
 ## 2. Objetivo e não-objetivos
 
@@ -161,6 +165,8 @@ agora.)
 ## 10. Escopo e sequência
 
 Sequência (o plano ordena):
+0. (independente do streaming, pode ir primeiro) Semântica de `--sizes` = total de
+   linhas + split proporcional com jitter no gerador (§12).
 1. `StreamReader` (multi + combinado) + testes.
 2. Protocolo `DbmsSink` + fake + orquestrador (filtro→cast→roteia→bufferiza→flush).
 3. `PostgresSink` + `MongoSink` (DBMSs padrão do benchmark e alvos reais prováveis).
@@ -172,7 +178,7 @@ Sequência (o plano ordena):
 
 - Sem novas dependências de terceiros. `chunksize` é do pandas; escrita reusa as
   APIs já presentes.
-- `READ_CHUNK` (default 10.000 linhas) = granularidade de leitura e amostra de
+- `READ_CHUNK` (default 8192 linhas) = granularidade de leitura e amostra de
   inferência; `BATCH = 1000` (mesmo constante de redis/neo4j) = granularidade de
   descarga no DBMS. Cassandra mantém concorrência 64 dentro do lote.
 - `cast_frame` no streaming usa `strategy="optimized"` (vetorizado, `format="mixed"`
@@ -181,3 +187,35 @@ Sequência (o plano ordena):
 - `execution` default = `stream` no CLI; `materialize` preserva 100% o baseline.
 - Código/identificadores/comentários em inglês; specs/planos em português.
 - Commit por tarefa, push a cada commit (política vigente).
+
+## 12. Semântica de `--sizes` = total de linhas (gerador)
+
+Mudança independente do streaming, mas necessária para medir volumes realistas.
+
+- `--sizes T` passa a significar **total de linhas** (soma das 4 fontes), não nº de
+  produtos. `--sizes 10000,100000` ⇒ ~1.250 / ~12.500 produtos.
+- O gerador deriva as contas por fonte de T: proporções-base **1:3:2:2**
+  (stock:purchase:select:cart) com **jitter ±10% seedado**, renormalizado para
+  **somar exatamente T** (o resto de arredondamento vai para a maior fonte).
+- **Invariantes:** (a) determinismo — mesmo `(seed, T)` gera arquivos
+  byte-idênticos (o jitter deriva do seed); seeds diferentes → splits diferentes.
+  (b) FKs válidas — `stock` define o espaço de chaves: `n_stock` linhas = `n_stock`
+  produtos únicos (ids 1..`n_stock`); purchase/select/cart referenciam produtos em
+  [1, `n_stock`]. `num_users`/`num_categories` passam a escalar sobre `n_stock`.
+
+**Impactos:**
+- `benchmark_data`: `iter_source_rows`/`generate_dataset` recebem `total_rows`;
+  helper resolve `(n_stock, n_purchase, n_select, n_cart)` de T com jitter seedado.
+- `run_benchmarks.py`: help do `--sizes` = "total de linhas"; defaults revisados
+  para linhas.
+- `run_benchmarks_100k.py`: `--size` e as tabelas de estimativa (`ROWS_AT_1K`,
+  `MEASURED_ROWS_PER_S`) reindexadas por total de linhas.
+- Reference dataset committed em `data/benchmark/` (hoje 1.000 produtos = 8.000
+  linhas): regenerar sob a nova semântica e atualizar o comando nos docs + testes
+  que assertam contagens.
+- Coluna `size` nos resultados = total de linhas (o baseline naive antigo tinha
+  size=produtos — anotar nos docs).
+
+**Testes:** soma exata = T; cada fonte dentro de ±10% da proporção-base;
+determinismo (mesmo seed → idêntico; seeds diferentes → splits diferentes); FKs
+válidas (ids referenciados ≤ `n_stock`).
