@@ -225,13 +225,15 @@ git commit -m "feat(stream): bind entity + infer kinds from first chunk (db_type
 
 **Interfaces:**
 - Produces:
-  - `DbmsSink` Protocol: `create_schema(entities: Dict[str, EntityBinding]) -> None`; `ensure_partition(partition_name: str, binding: EntityBinding) -> None`; `write_batch(partition_name: str, binding: EntityBinding, batch: pandas.DataFrame) -> int`; `close() -> None`.
+  - `DbmsSink` Protocol: `create_schema() -> None` (data-INDEPENDENT DBMS-level setup only — e.g. keyspace/database; may be a no-op); `ensure_partition(partition_name: str, binding: EntityBinding) -> None` (lazy per-partition/entity DDL, create-if-not-exists, called once per partition on first write); `write_batch(partition_name: str, binding: EntityBinding, batch: pandas.DataFrame) -> int`; `close() -> None`.
   - `SinkFactory = Callable[[dict], DbmsSink]` (receives the DBMS's `backend_cfg`).
   - `run_stream_import(config, base_dir, *, sink_factories: Dict[str, SinkFactory], only=None, create_schema=True, source_overrides=None, chunksize=READ_CHUNK, batch=BATCH) -> Dict[str, int]` returning `{partition_name: rows_written}` per DBMS aggregated. `BATCH = 1000`.
 
+**Binding/schema ordering (refines the spec):** entities are bound **lazily** — the first time a chunk for an entity is seen, `bind_entity_from_sample` runs (cache the binding per entity). Per-entity/partition DDL is created **lazily** via `ensure_partition` on the first flush to each partition (tracked in a `seen_partitions` set), NOT via a create_schema-with-all-bindings up front — that up-front call is impossible in a streaming pass (combined mode interleaves entities; auto_map needs a data sample). `create_schema()` (when `create_schema=True`) is only for data-independent DBMS-level setup and may be a no-op for sinks that need none.
+
 - [ ] **Step 1: Write the failing test** (fake sink records batches)
 
-Create `tests/test_stream_runner.py` with a `_FakeSink` recording `write_batch(partition, len(batch))` and a helper building a tiny 2-source config over CSVs in `tmp_path`. Assert: (a) rows written per partition equal the CSV row counts after filters; (b) each recorded batch length ≤ `batch`; (c) with `batch=1000` and 2500 rows, exactly 3 flushes for that partition (1000,1000,500); (d) `create_schema` called once with all entities; (e) `close()` called. (Full test code: mirror the `test_importer_write_batching` fake-recorder style; the reviewer will check batch-boundary correctness.)
+Create `tests/test_stream_runner.py` with a `_FakeSink` recording `create_schema()` calls, `ensure_partition(partition)` calls, and `write_batch(partition, len(batch))` calls, and a helper building a tiny 2-source multi config over CSVs in `tmp_path`. Assert: (a) rows written per partition equal the CSV row counts after filters; (b) each recorded batch length ≤ `batch`; (c) with `batch=1000` and a 2500-row source, exactly 3 write_batch flushes for that partition (1000,1000,500); (d) `create_schema()` called once (no args); (e) `ensure_partition` called exactly once per distinct partition; (f) `close()` called; (g) a `list`-typed `source:` raises `ImportExecutionError`. (Mirror the `test_importer_write_batching` fake-recorder style; the reviewer will check batch-boundary correctness.)
 
 - [ ] **Step 2: Run to verify it fails** — module missing.
 
@@ -239,9 +241,18 @@ Create `tests/test_stream_runner.py` with a `_FakeSink` recording `write_batch(p
 
 `dbms_sink.py`: the `Protocol` (runtime-checkable not required) + `SinkFactory` type alias.
 
-`stream_runner.py`: `BATCH = 1000`. For each DBMS in config (respecting `only`): `sink = sink_factories[dbms](config[dbms])`. Group `iter_entity_chunks` output by entity is not needed — instead, for each DBMS iterate its configured entities; for each entity, pull that entity's chunks from a per-entity reader (call `iter_entity_chunks` filtered to that entity's source). On the **first chunk**: `binding = bind_entity_from_sample(...)`; collect all entities' bindings, call `sink.create_schema(bindings)` once before writing (so: do a first pass that binds each entity from its first chunk, OR bind lazily and call create_schema before the first write). Then per chunk: `apply_filters` (non-each) → `cast_frame(chunk, binding.kinds)` → route to partitions via `expand_each`/`_source` → append to per-partition buffer → when `len(buffer) >= batch`, `sink.ensure_partition` (once per new partition) + `sink.write_batch(partition, binding, buffer[:batch])`, keep remainder → after all chunks, flush partial buffers → `sink.close()`. Maintain `written[partition] += n`. **Row-shaping happens inside the sink (write_batch), not here.**
+`stream_runner.py`: `BATCH = 1000`. The config maps each DBMS to `{"entities": {ename: ecfg, ...}}`; each `ecfg["source"]` names the source that entity streams from (a `str`; if it is a `list`, raise `ImportExecutionError("streaming does not support union (list) sources: <ename>")` — union-source streaming is out of scope). Build `source_to_entities: Dict[dbms] -> Dict[source_name, List[(ename, ecfg)]]`.
 
-Keep the orchestrator DBMS-agnostic: no SQL/Cypher, no dedupe (sinks own that).
+For each DBMS in config (respecting `only`):
+1. `sink = sink_factories[dbms](config[dbms])`; if `create_schema`, `sink.create_schema()`.
+2. Iterate `iter_entity_chunks(config["sources"], base_dir, overrides, chunksize)`. Each yielded `(source_name, chunk)` maps to the entities that read that source (for combined mode `source_name` is the origin value = the entity name).
+3. For each `(ename, ecfg)` fed by that chunk: **lazily bind** — if `ename` not in a `bindings` cache, `bindings[ename] = bind_entity_from_sample(ename, ecfg, chunk, source_name)`. Then `apply_filters(chunk, non_each_filters, binding.kinds)` → `cast_frame(filtered, binding.kinds)` → route rows into partitions via `expand_each(cast, filters, ename)` (each partition = `(partition_name, part_df)`) → append `part_df` to `buffers[partition_name]`.
+4. Whenever `len(buffers[partition]) >= batch`: if `partition not in seen_partitions`, `sink.ensure_partition(partition, binding)` and add to `seen_partitions`; then `sink.write_batch(partition, binding, first `batch` rows)`, keep the remainder in the buffer, `written[partition] += batch`.
+5. After all chunks: flush every non-empty buffer (ensure_partition if unseen, then write_batch) and `sink.close()`.
+
+Return `written`. **Row-shaping happens inside the sink (write_batch), not here.** Keep the orchestrator DBMS-agnostic: no SQL/Cypher, no dedupe (sinks own that).
+
+Note: buffering per partition means peak memory ≈ one read chunk + open partition buffers (< 1 chunk each until flushed) — constant in file size. Concatenate buffered `part_df`s with `pd.concat` at flush time.
 
 - [ ] **Step 4: Run tests + Step 5: Commit**
 
