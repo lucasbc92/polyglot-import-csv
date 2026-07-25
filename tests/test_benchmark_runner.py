@@ -19,6 +19,18 @@ def test_run_matrix_rejects_unknown_mode(tmp_path):
         )
 
 
+def test_run_matrix_rejects_unknown_strategy(tmp_path):
+    with pytest.raises(ValueError, match="unknown strategy"):
+        brun.run_matrix(
+            sizes=[10], modes=["multi"], repetitions=1,
+            strategies=["optimised"],  # British-spelling typo: would silently run optimized
+            sgbd_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+            seed=1, only=["postgres"], cleaners={},
+            importer=lambda *a, **k: [], load_cfg=lambda c, s: {"postgres": {}},
+            generate=lambda out_dir, rows, seed, mode: None,
+        )
+
+
 def test_run_matrix_iterates_and_cleans_before_import(tmp_path):
     events = []
 

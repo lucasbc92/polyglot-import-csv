@@ -13,6 +13,7 @@ from polyglotimportcsv import benchmark_data
 from polyglotimportcsv.metrics import MetricsCollector
 
 _ALL_BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
+_VALID_STRATEGIES = ("naive", "optimized")
 
 # mode -> (import config filename, combined source name or None)
 _MODE_CONFIG = {
@@ -77,6 +78,12 @@ def run_matrix(
         )
     requested = list(only) if only else None
     strategies = list(strategies)
+    unknown_strategies = [s for s in strategies if s not in _VALID_STRATEGIES]
+    if unknown_strategies:
+        raise ValueError(
+            f"unknown strategy(ies): {', '.join(unknown_strategies)}. "
+            f"Valid: {', '.join(_VALID_STRATEGIES)}"
+        )
     labeled: List[Dict[str, object]] = []
 
     for size in sizes:
