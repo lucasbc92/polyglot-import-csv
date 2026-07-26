@@ -60,6 +60,7 @@ Options:
 - `--log-level DEBUG|INFO|WARNING|ERROR` — terminal verbosity (default `INFO`); the session log file under `logs/` always records `DEBUG`.
 - `--show-data` / `--no-data` — force or suppress the per-entity record dump (default: entities with up to 50 rows are dumped).
 - `--benchmark` — write per-phase metrics to `benchmarks/benchmark_<timestamp>.json` and append `benchmarks/benchmark_history.csv` (implies `--no-data`).
+- `--execution stream|materialize` — write path (default `stream`). `stream` imports in bounded memory (~one read chunk, roughly constant in file size); `materialize` loads each source fully (the phase-measured baseline). `--dry-run` and `--benchmark` always use `materialize`.
 - `--no-create-schema` — skip DDL where applicable.
 
 ### Architecture
@@ -120,9 +121,16 @@ behavior. Cassandra, Redis and Neo4j are slow only under `naive` — `optimized`
 batches their writes, so the earlier per-row round-trip cost disappears. The same
 switch exists on a single import: `python -m polyglotimportcsv --strategy naive`.
 
+The matrix also has an `execution` axis (default `stream`). Pass
+`--executions materialize,stream` to compare the two write paths: `materialize`
+loads each source fully, so peak memory grows with the dataset, while `stream`
+holds ~one read chunk at a time, so peak stays roughly constant. Each run records
+`peak_memory_mb` (whole-import peak measured with `tracemalloc`). The same switch
+exists on a single import: `python -m polyglotimportcsv --execution materialize`.
+
 Results land in `benchmarks/`: a `benchmark_run_<timestamp>.json` plus an
-append-only `benchmark_results.csv` (`size,mode,strategy,backend,entity,phase,
-rows,median_seconds,rows_per_second`) for the report graphs.
+append-only `benchmark_results.csv` (`size,mode,strategy,execution,backend,entity,
+phase,rows,median_seconds,rows_per_second,peak_memory_mb`) for the report graphs.
 
 ### License
 
@@ -187,6 +195,7 @@ Opções úteis:
 - `--log-level DEBUG|INFO|WARNING|ERROR` — verbosidade do terminal (padrão `INFO`); o arquivo de log de sessão em `logs/` sempre grava `DEBUG`.
 - `--show-data` / `--no-data` — força ou suprime a exibição dos registros por entidade (padrão: entidades com até 50 linhas são exibidas).
 - `--benchmark` — grava métricas por fase em `benchmarks/benchmark_<timestamp>.json` e acrescenta `benchmarks/benchmark_history.csv` (implica `--no-data`).
+- `--execution stream|materialize` — caminho de escrita (padrão `stream`). `stream` importa com memória limitada (~um bloco de leitura, praticamente constante no tamanho do arquivo); `materialize` carrega cada origem por completo (a linha de base medida por fase). `--dry-run` e `--benchmark` usam sempre `materialize`.
 - `--no-create-schema` — não emite DDL de criação (quando aplicável).
 
 ### Arquitetura
@@ -246,9 +255,17 @@ a linha. Cassandra, Redis e Neo4j só são lentos sob `naive` — `optimized` ag
 suas escritas, eliminando o custo de uma ida ao banco por linha. A mesma opção vale
 para uma importação avulsa: `python -m polyglotimportcsv --strategy naive`.
 
+A matriz também tem um eixo `execution` (padrão `stream`). Use
+`--executions materialize,stream` para comparar os dois caminhos de escrita:
+`materialize` carrega cada origem por completo, então o pico de memória cresce com
+o dataset, enquanto `stream` mantém ~um bloco de leitura por vez, então o pico fica
+praticamente constante. Cada execução registra `peak_memory_mb` (pico da importação
+inteira medido com `tracemalloc`). A mesma opção vale para uma importação avulsa:
+`python -m polyglotimportcsv --execution materialize`.
+
 Os resultados vão para `benchmarks/`: um `benchmark_run_<timestamp>.json` e um
-`benchmark_results.csv` append-only (`size,mode,strategy,backend,entity,phase,
-rows,median_seconds,rows_per_second`) para os gráficos do relatório.
+`benchmark_results.csv` append-only (`size,mode,strategy,execution,backend,entity,
+phase,rows,median_seconds,rows_per_second,peak_memory_mb`) para os gráficos do relatório.
 
 ### Licença
 
