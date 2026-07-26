@@ -96,6 +96,7 @@ def run_import(
                 only=only,
                 source_overrides=source_overrides,
                 sink_factories=sink_factories or default_sink_factories(),
+                collector=collector,
                 strategy=strategy,
             )
         return _run(
@@ -123,6 +124,7 @@ def _run_stream(
     only: Optional[Iterable[str]],
     source_overrides: Optional[Dict[str, str]],
     sink_factories: Dict[str, SinkFactory],
+    collector: metrics.MetricsCollector,
     strategy: str,
 ) -> List[str]:
     """Bounded-memory streaming path: hand the loaded config to ``run_stream_import``."""
@@ -140,6 +142,7 @@ def _run_stream(
     else:
         note("existing schema only (--no-create-schema)")
 
+    write_start = time.perf_counter()
     written = run_stream_import(
         config,
         config_path.parent,
@@ -147,6 +150,15 @@ def _run_stream(
         only=only,
         create_schema=create_schema,
         source_overrides=source_overrides,
+    )
+    # One summary metric for the whole streaming import. Streaming is
+    # DBMS-agnostic and does not break into read/map/filter/write phases the
+    # way the materialize importers do, so record a single aggregate row; it
+    # also gives the benchmark a carrier for the per-import peak_memory_mb.
+    collector.record(
+        "(stream)", "*", "write",
+        rows=sum(written.values()),
+        seconds=time.perf_counter() - write_start,
     )
     log_lines = [f"[stream] {part}: {rows} row(s)" for part, rows in sorted(written.items())]
     for line in log_lines:

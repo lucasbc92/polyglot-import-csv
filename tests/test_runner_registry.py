@@ -63,6 +63,25 @@ def test_run_import_streams_when_execution_stream(monkeypatch):
     assert any("user_session" in L and "8" in L for L in lines)
 
 
+def test_run_import_stream_records_summary_metric(monkeypatch):
+    """The stream path records a summary metric into the collector so a
+    streaming import is observable and benchmarkable (peak-memory comparison
+    needs at least one carrier record)."""
+    from polyglotimportcsv import metrics
+
+    def fake_stream(config, base_dir, *, sink_factories, only,
+                    create_schema, source_overrides, **kw):
+        return {"user_session": 8, "shopping_cart": 5}
+
+    monkeypatch.setattr("polyglotimportcsv.runner.run_stream_import", fake_stream)
+
+    c = metrics.MetricsCollector()
+    run_import(CFG, execution="stream", only=["postgres"], collector=c)
+    recs = c.to_records()
+    assert recs, "stream import should record at least one metric"
+    assert sum(r["rows"] for r in recs) == 13
+
+
 def test_run_import_materialize_does_not_stream(monkeypatch):
     """execution='materialize' keeps the existing importer-registry path and
     never touches the streaming orchestrator."""

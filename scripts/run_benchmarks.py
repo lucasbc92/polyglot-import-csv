@@ -67,6 +67,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help=f"Comma-separated backends (default: all). Choices: {', '.join(_ALL_BACKENDS)}.")
     parser.add_argument("--strategies", default="optimized",
                         help="Comma-separated strategies: naive,optimized (default: optimized).")
+    parser.add_argument("--executions", default="stream",
+                        help="Comma-separated write paths: stream,materialize (default: stream). "
+                             "Use 'materialize,stream' to compare peak_memory_mb.")
     parser.add_argument("--seed", type=int, default=42, help="Generator seed (default: 42).")
     parser.add_argument("--sgbd-config", type=Path, default=Path("data/ecommerce/sgbd_config.json"))
     parser.add_argument("--config-dir", type=Path, default=Path("data/ecommerce"),
@@ -87,14 +90,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     modes = _parse_str_list(args.modes)
     only = _parse_str_list(args.only) or None
     strategies = _parse_str_list(args.strategies)
+    executions = _parse_str_list(args.executions)
 
     meta = environment_metadata(args.config_dir, {})
     meta.update({"seed": args.seed, "sizes": sizes, "modes": modes,
-                 "repetitions": args.repetitions, "strategies": strategies})
+                 "repetitions": args.repetitions, "strategies": strategies,
+                 "executions": executions})
 
     labeled = run_matrix(
         sizes=sizes, modes=modes, repetitions=args.repetitions,
-        strategies=strategies,
+        strategies=strategies, executions=executions,
         sgbd_config_path=args.sgbd_config, config_dir=args.config_dir,
         data_dir=args.data_dir, seed=args.seed, only=only,
         cleaners=CLEANERS, importer=run_import, load_cfg=load_config,
