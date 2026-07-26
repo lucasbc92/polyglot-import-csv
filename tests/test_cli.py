@@ -96,6 +96,49 @@ def test_cli_benchmark_flag_passes_through(tmp_path, monkeypatch):
     assert captured["benchmark"] is True
 
 
+def test_cli_execution_defaults_to_stream(monkeypatch):
+    captured = {}
+
+    def fake_run_import(config_path, **kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr("polyglotimportcsv.cli.run_import", fake_run_import)
+    from click.testing import CliRunner as _CR
+    res = _CR().invoke(main, [
+        "--config", "data/ecommerce/import_config.json", "--dry-run",
+    ])
+    assert res.exit_code == 0, res.output
+    assert captured["execution"] == "stream"
+
+
+def test_cli_passes_execution_materialize(monkeypatch):
+    captured = {}
+
+    def fake_run_import(config_path, **kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr("polyglotimportcsv.cli.run_import", fake_run_import)
+    from click.testing import CliRunner as _CR
+    res = _CR().invoke(main, [
+        "--config", "data/ecommerce/import_config.json", "--dry-run",
+        "--execution", "materialize",
+    ])
+    assert res.exit_code == 0, res.output
+    assert captured["execution"] == "materialize"
+
+
+def test_cli_rejects_unknown_execution():
+    from click.testing import CliRunner as _CR
+    res = _CR().invoke(main, [
+        "--config", "data/ecommerce/import_config.json",
+        "--execution", "nonsense",
+    ])
+    assert res.exit_code == 2
+    assert "execution" in res.output.lower()
+
+
 def test_cli_passes_strategy(monkeypatch):
     from click.testing import CliRunner
     import polyglotimportcsv.cli as climod

@@ -67,6 +67,14 @@ def _parse_source_overrides(pairs: Tuple[str, ...]) -> Dict[str, str]:
     help="Write/cast strategy. 'naive' reproduces the row-at-a-time baseline.",
 )
 @click.option(
+    "--execution",
+    default="stream",
+    show_default=True,
+    type=click.Choice(["stream", "materialize"], case_sensitive=False),
+    help="Write path. 'stream' imports in bounded memory (~one read chunk); "
+    "'materialize' reproduces the full-materialization phase baseline.",
+)
+@click.option(
     "--source",
     "source_pairs",
     multiple=True,
@@ -99,6 +107,7 @@ def main(
     create_schema: bool,
     only: str,
     strategy: str,
+    execution: str,
     source_pairs: Tuple[str, ...],
     log_level: str,
     show_data: Optional[bool],
@@ -121,6 +130,7 @@ def main(
             show_data=show_data,
             benchmark=benchmark,
             strategy=strategy,
+            execution=execution,
         )
     except BusinessException as e:
         error(str(e))

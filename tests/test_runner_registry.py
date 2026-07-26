@@ -38,6 +38,74 @@ def test_run_import_rejects_invalid_config_even_with_stub():
         run_import(bad_cfg, dry_run=True, importers={"postgres": never_called})
 
 
+def test_run_import_streams_when_execution_stream(monkeypatch):
+    """A real (non-dry) import with execution='stream' dispatches to the
+    streaming orchestrator, not the materialize importer registry."""
+    captured = {}
+
+    def fake_stream(config, base_dir, *, sink_factories, only,
+                    create_schema, source_overrides, **kw):
+        captured["only"] = list(only) if only else None
+        captured["create_schema"] = create_schema
+        return {"user_session": 8, "shopping_cart": 5}
+
+    monkeypatch.setattr("polyglotimportcsv.runner.run_stream_import", fake_stream)
+
+    def must_not_run(*a, **k):
+        raise AssertionError("materialize importer must not run when streaming")
+
+    lines = run_import(
+        CFG, execution="stream", create_schema=False,
+        only=["postgres"], importers={"postgres": must_not_run},
+    )
+    assert captured["only"] == ["postgres"]
+    assert captured["create_schema"] is False
+    assert any("user_session" in L and "8" in L for L in lines)
+
+
+def test_run_import_materialize_does_not_stream(monkeypatch):
+    """execution='materialize' keeps the existing importer-registry path and
+    never touches the streaming orchestrator."""
+    def boom(*a, **k):
+        raise AssertionError("stream must not run for execution=materialize")
+
+    monkeypatch.setattr("polyglotimportcsv.runner.run_stream_import", boom)
+
+    calls: list[str] = []
+
+    def stub(cfg, entities, *, dry_run, create_schema, strategy="optimized"):
+        calls.append("postgres")
+        return ["[postgres] stub"]
+
+    run_import(CFG, execution="materialize", create_schema=False,
+               only=["postgres"], importers={"postgres": stub})
+    assert calls == ["postgres"]
+
+
+def test_run_import_dry_run_stays_materialize_even_if_stream(monkeypatch):
+    """dry-run is a planning activity with no live connection, so it always
+    uses the materialize path regardless of the default execution."""
+    def boom(*a, **k):
+        raise AssertionError("dry-run must not stream")
+
+    monkeypatch.setattr("polyglotimportcsv.runner.run_stream_import", boom)
+
+    calls: list[str] = []
+
+    def stub(cfg, entities, *, dry_run, create_schema, strategy="optimized"):
+        calls.append("postgres")
+        return ["[postgres] stub"]
+
+    run_import(CFG, execution="stream", dry_run=True,
+               only=["postgres"], importers={"postgres": stub})
+    assert calls == ["postgres"]
+
+
+def test_run_import_rejects_unknown_execution():
+    with pytest.raises(ValueError, match="execution"):
+        run_import(CFG, execution="streamm", only=["postgres"])
+
+
 def test_run_import_dumps_bound_entities(monkeypatch):
     calls = []
 
