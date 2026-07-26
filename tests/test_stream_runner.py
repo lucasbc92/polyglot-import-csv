@@ -3,6 +3,7 @@ import pytest
 
 from polyglotimportcsv import stream_runner as sr
 from polyglotimportcsv.business_exception import ImportExecutionError
+from polyglotimportcsv.sources import SOURCE_COLUMN
 
 
 def _write_csv(path, header, rows):
@@ -21,6 +22,7 @@ class _FakeSink:
         self.schema_calls = 0
         self.ensure_calls = []  # partition names, in call order (may repeat if buggy)
         self.batches = {}  # partition -> [len(batch), ...] in flush order
+        self.frames = {}   # partition -> [DataFrame, ...] as received
         self.closed = False
 
     def create_schema(self):
@@ -31,6 +33,7 @@ class _FakeSink:
 
     def write_batch(self, partition_name, binding, batch):
         self.batches.setdefault(partition_name, []).append(len(batch))
+        self.frames.setdefault(partition_name, []).append(batch.copy())
         return len(batch)
 
     def close(self):
@@ -109,16 +112,45 @@ def test_stream_import_batches_flushes_and_partitions(tmp_path):
     assert fake.closed is True
 
 
-def test_stream_import_rejects_union_list_source(tmp_path):
-    _write_csv(tmp_path / "a.csv", ["id"], [(i,) for i in range(3)])
-    _write_csv(tmp_path / "b.csv", ["id"], [(i,) for i in range(3)])
+def test_stream_import_unions_heterogeneous_multi_sources(tmp_path):
+    # Two sources with disjoint extra columns: the streamed union must widen
+    # every chunk to the superset (missing cells filled ""), exactly as
+    # mapping_resolver._union_source does for the materialize path.
+    _write_csv(tmp_path / "a.csv", ["id", "a_col"], [(i, f"a{i}") for i in range(3)])
+    _write_csv(tmp_path / "b.csv", ["id", "b_col"], [(i, f"b{i}") for i in range(2)])
     config = {
         "sources": {"a": "a.csv", "b": "b.csv"},
-        "postgres": {"entities": {"bad": {"source": ["a", "b"]}}},
+        "postgres": {"entities": {"activity": {"source": ["a", "b"]}}},
     }
     fake = _FakeSink()
 
-    with pytest.raises(ImportExecutionError, match="union"):
+    written = sr.run_stream_import(
+        config, tmp_path, sink_factories={"postgres": lambda cfg: fake}, batch=1000
+    )
+
+    assert written == {"activity": 5}
+    combined = pd.concat(fake.frames["activity"], ignore_index=True)
+    # Superset columns in union-list order, _source last.
+    assert list(combined.columns) == ["id", "a_col", "b_col", SOURCE_COLUMN]
+    a_rows = combined[combined[SOURCE_COLUMN] == "a"]
+    b_rows = combined[combined[SOURCE_COLUMN] == "b"]
+    assert len(a_rows) == 3 and len(b_rows) == 2
+    # Missing columns filled "" for the source that lacks them.
+    assert (a_rows["b_col"] == "").all()
+    assert (b_rows["a_col"] == "").all()
+    assert set(a_rows["a_col"]) == {"a0", "a1", "a2"}
+    assert set(b_rows["b_col"]) == {"b0", "b1"}
+
+
+def test_stream_import_rejects_empty_union_list(tmp_path):
+    _write_csv(tmp_path / "a.csv", ["id"], [(i,) for i in range(3)])
+    config = {
+        "sources": {"a": "a.csv"},
+        "postgres": {"entities": {"bad": {"source": []}}},
+    }
+    fake = _FakeSink()
+
+    with pytest.raises(ImportExecutionError, match="empty"):
         sr.run_stream_import(config, tmp_path, sink_factories={"postgres": lambda cfg: fake})
 
     # fails fast: no sink was ever opened

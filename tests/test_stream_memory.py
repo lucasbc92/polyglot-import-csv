@@ -25,7 +25,7 @@ import pandas as pd
 from polyglotimportcsv import stream_runner as sr
 from polyglotimportcsv.filter_engine import apply_filters, expand_each
 from polyglotimportcsv.mapping_resolver import resolve_backend_entities
-from polyglotimportcsv.sources import load_sources
+from polyglotimportcsv.sources import SOURCE_COLUMN, load_sources
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -204,3 +204,119 @@ def test_stream_matches_materialize_rows():
         assert _compare_columns(s_df, cols) == _compare_columns(m_df, cols), (
             f"{partition}: row contents differ between stream and materialize paths"
         )
+
+
+def _ecommerce_config_and_overrides():
+    config_path = REPO_ROOT / "data" / "ecommerce" / "import_config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    base_dir = config_path.parent
+    bench_dir = REPO_ROOT / "data" / "benchmark"
+    overrides = {
+        "stock": str(bench_dir / "ecommerce_stock.csv"),
+        "purchase": str(bench_dir / "ecommerce_purchase.csv"),
+        "select_product": str(bench_dir / "ecommerce_select_product.csv"),
+        "add_to_cart": str(bench_dir / "ecommerce_add_to_cart.csv"),
+    }
+    return config, base_dir, overrides
+
+
+def test_stream_union_matches_materialize_rows():
+    """The real cassandra ``user_activity_log`` entity unions four heterogeneous
+    sources (``source: ["stock","purchase","select_product","add_to_cart"]``).
+    Streamed vs. materialized rows over the committed reference dataset must be
+    identical -- same partition, count, and mapped column values (incl. the
+    ``_source``-derived event type and the source-exclusive columns)."""
+    config, base_dir, overrides = _ecommerce_config_and_overrides()
+    dbms = "cassandra"
+
+    # --- Stream path ---
+    sink = _RecordingSink()
+    sr.run_stream_import(
+        config,
+        base_dir,
+        sink_factories={dbms: lambda cfg: sink},
+        only=[dbms],
+        source_overrides=overrides,
+        chunksize=8192,
+    )
+    stream_rows = {
+        partition: pd.concat(dfs, ignore_index=True)
+        for partition, dfs in sink.batches.items()
+    }
+
+    # --- Materialize path ---
+    sources = load_sources(config["sources"], base_dir, overrides)
+    bound = resolve_backend_entities(config[dbms], sources, {}, strategy="optimized")
+    mat_rows = {}
+    for ename, be in bound.items():
+        filters = be.cfg.get("filters") or []
+        non_each = [f for f in filters if f.get("operator") != "each"]
+        dff = apply_filters(be.df, non_each, be.kinds)
+        for part_name, part_df in expand_each(dff, filters, ename):
+            mat_rows[part_name] = part_df
+
+    assert set(stream_rows) == set(mat_rows) == {"user_activity_log"}
+
+    # The union entity's mapped source columns, including the source-exclusive
+    # ones ("" for rows from a source that lacks them) and the _source pseudo-col.
+    cols = [
+        "user_id", "timestamp", SOURCE_COLUMN, "product_id",
+        "order_number", "selected_product_id", "shopping_cart_id",
+    ]
+    s_df = stream_rows["user_activity_log"]
+    m_df = mat_rows["user_activity_log"]
+    assert len(s_df) == len(m_df) > 0
+    assert _compare_columns(s_df, cols) == _compare_columns(m_df, cols)
+
+
+def test_stream_union_peak_does_not_scale_with_rows(tmp_path):
+    """Union streaming stays bounded: sampling one first chunk per source is
+    O(sources), and per-chunk reindex never accumulates across chunks."""
+
+    def _write_union_pair(dir_path: Path, n_rows: int) -> None:
+        # Disjoint extra columns force a genuine heterogeneous superset.
+        _write_csv(
+            dir_path / "a.csv", ["id", "a_col"],
+            [(i, f"a{i}-{'x' * 12}") for i in range(n_rows)],
+        )
+        _write_csv(
+            dir_path / "b.csv", ["id", "b_col"],
+            [(i, f"b{i}-{'y' * 12}") for i in range(n_rows)],
+        )
+
+    def _measure(dir_path: Path) -> int:
+        config = {
+            "sources": {"a": "a.csv", "b": "b.csv"},
+            "redis": {
+                "entities": {
+                    "activity": {"source": ["a", "b"], "columns": {"id": {"is_key": True}}}
+                }
+            },
+        }
+        gc.collect()
+        tracemalloc.start()
+        tracemalloc.reset_peak()
+        sr.run_stream_import(
+            config, dir_path,
+            sink_factories={"redis": lambda cfg: _NullSink()},
+            only=["redis"], chunksize=_PROBE_CHUNK,
+        )
+        peak = tracemalloc.get_traced_memory()[1]
+        tracemalloc.stop()
+        return peak
+
+    small_dir = tmp_path / "small"
+    large_dir = tmp_path / "large"
+    small_dir.mkdir()
+    large_dir.mkdir()
+    _write_union_pair(small_dir, 10_000)
+    _write_union_pair(large_dir, 40_000)
+
+    peak_small = _measure(small_dir)
+    gc.collect()
+    peak_large = _measure(large_dir)
+
+    assert peak_large < 2.0 * peak_small, (
+        f"union peak memory scaled with row count: peak_small={peak_small} "
+        f"peak_large={peak_large} (ratio={peak_large / peak_small:.2f})"
+    )

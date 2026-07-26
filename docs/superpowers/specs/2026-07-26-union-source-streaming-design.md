@@ -1,6 +1,8 @@
 # Design — Union (list) sources in the streaming import path
 
-**Status:** design defined 2026-07-26, awaiting user approval before implementation.
+**Status:** IMPLEMENTED 2026-07-26 (streaming plan Task 10). User approved both
+open decisions: implement multi + combined union together ("os dois de uma vez"),
+packaged as one appended Task 10 ("task 10 anexada").
 **Context:** Plan 2 (streaming import) shipped with union sources *scoped out*
 (`run_stream_import` fail-fast: `streaming does not support union (list) sources`).
 Task 7 made `--execution stream` the default, so the flagship sample config —

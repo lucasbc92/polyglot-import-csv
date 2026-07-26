@@ -22,6 +22,34 @@ def test_multi_yields_chunks_with_source_column(tmp_path):
     assert list(first.columns)[:2] == ["id", "v"]
 
 
+def test_sample_union_sources_reads_one_chunk_per_multi_source(tmp_path):
+    # Two multi sources with disjoint extra columns; only their FIRST chunk is
+    # sampled (bounded: O(sources), not O(rows)).
+    _write_csv(tmp_path / "a.csv", ["id", "a_col"], [(i, f"a{i}") for i in range(5000)])
+    _write_csv(tmp_path / "b.csv", ["id", "b_col"], [(i, f"b{i}") for i in range(5000)])
+    cfg = {"a": "a.csv", "b": "b.csv"}
+    samples = ss.sample_union_sources(cfg, tmp_path, ["a", "b"], chunksize=1000)
+
+    assert set(samples) == {"a", "b"}
+    # Each sample is a single chunk (<= chunksize rows), carrying _source.
+    assert len(samples["a"]) == 1000
+    assert len(samples["b"]) == 1000
+    assert list(samples["a"].columns) == ["id", "a_col", SOURCE_COLUMN]
+    assert (samples["a"][SOURCE_COLUMN] == "a").all()
+    assert list(samples["b"].columns) == ["id", "b_col", SOURCE_COLUMN]
+
+
+def test_sample_union_sources_routes_combined_origins(tmp_path):
+    rows = [("stock", i, f"s{i}") for i in range(10)] + [("cart", i, f"c{i}") for i in range(5)]
+    _write_csv(tmp_path / "j.csv", ["action", "id", "v"], rows)
+    cfg = {"ecom": {"file": "j.csv"}}
+    samples = ss.sample_union_sources(cfg, tmp_path, ["stock", "cart"], chunksize=1000)
+    assert set(samples) == {"stock", "cart"}
+    assert "action" not in samples["stock"].columns
+    assert (samples["stock"][SOURCE_COLUMN] == "stock").all()
+    assert (samples["cart"][SOURCE_COLUMN] == "cart").all()
+
+
 def test_combined_routes_by_origin(tmp_path):
     rows = [("stock", i, f"s{i}") for i in range(10)] + [("cart", i, f"c{i}") for i in range(5)]
     _write_csv(tmp_path / "j.csv", ["action", "id", "v"], rows)

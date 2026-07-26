@@ -27,6 +27,21 @@ class BoundEntity:
     kinds: Dict[str, str]
 
 
+def union_data_cols(headers: List[List[str]]) -> List[str]:
+    """First-seen union of column names across ``headers``, in list order.
+
+    The single source of truth for the union superset ordering rule, shared by
+    the materialize path (``_union_source``) and the streaming sample bind
+    (``stream_binding``) so both compute an identical superset.
+    """
+    data_cols: List[str] = []
+    for header in headers:
+        for c in header:
+            if c not in data_cols:
+                data_cols.append(c)
+    return data_cols
+
+
 def _union_source(
     entity_name: str, names: List[str], sources: Dict[str, SourceData]
 ) -> SourceData:
@@ -35,11 +50,7 @@ def _union_source(
         if n not in sources:
             raise MappingError(f"Entity '{entity_name}': unknown source '{n}'.")
         parts.append(sources[n])
-    data_cols: List[str] = []
-    for p in parts:
-        for c in p.file_header:
-            if c not in data_cols:
-                data_cols.append(c)
+    data_cols = union_data_cols([p.file_header for p in parts])
     all_cols = data_cols + [SOURCE_COLUMN]
     frames = [p.df.reindex(columns=all_cols, fill_value="") for p in parts]
     df = pd.concat(frames, ignore_index=True)

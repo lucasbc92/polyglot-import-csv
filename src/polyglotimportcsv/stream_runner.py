@@ -23,8 +23,16 @@ from polyglotimportcsv.business_exception import ImportExecutionError
 from polyglotimportcsv.casting import cast_frame
 from polyglotimportcsv.dbms_sink import DbmsSink, SinkFactory
 from polyglotimportcsv.filter_engine import apply_filters, expand_each
-from polyglotimportcsv.stream_binding import EntityBinding, bind_entity_from_sample
-from polyglotimportcsv.stream_source import READ_CHUNK, iter_entity_chunks
+from polyglotimportcsv.stream_binding import (
+    EntityBinding,
+    bind_entity_from_sample,
+    bind_union_entity_from_samples,
+)
+from polyglotimportcsv.stream_source import (
+    READ_CHUNK,
+    iter_entity_chunks,
+    sample_union_sources,
+)
 from polyglotimportcsv.validation import BACKENDS
 
 #: DBMS flush granularity (same constant as redis/neo4j batched writes).
@@ -39,11 +47,13 @@ def _dbms_names(config: Dict[str, Any], only: Optional[Iterable[str]]) -> List[s
     return [b for b in names if b in only_set]
 
 
-def _validate_no_union_sources(entities: Dict[str, Any]) -> None:
+def _validate_union_sources(entities: Dict[str, Any]) -> None:
+    """Reject only *empty* union lists; non-empty ``source: [...]`` is supported."""
     for ename, ecfg in entities.items():
-        if isinstance((ecfg or {}).get("source"), list):
+        ref = (ecfg or {}).get("source")
+        if isinstance(ref, list) and not ref:
             raise ImportExecutionError(
-                f"streaming does not support union (list) sources: {ename}"
+                f"entity '{ename}': 'source' list is empty; provide at least one source name."
             )
 
 
@@ -52,11 +62,15 @@ def _matches(ename: str, ecfg: Dict[str, Any], yielded_name: str) -> bool:
 
     - its declared ``source`` equals the yielded name (multi source, or the
       source name an explicit ``source:`` points to), or
+    - the yielded name is one of the sources in a union ``source: [...]`` list, or
     - its own name equals the yielded name (combined mode routes by origin
       value, and/or an entity with no declared ``source`` defaults to a
       source named after itself, per ``mapping_resolver.bind_entity_source``).
     """
-    return ecfg.get("source") == yielded_name or ename == yielded_name
+    ref = ecfg.get("source")
+    if isinstance(ref, list):
+        return yielded_name in ref
+    return ref == yielded_name or ename == yielded_name
 
 
 def _flush_ready(
@@ -128,10 +142,11 @@ def run_stream_import(
     base_dir = Path(base_dir)
     dbms_names = _dbms_names(config, only)
 
-    # Fail fast, before opening any sink: union (list) sources are out of
-    # scope for streaming (see plan Task 3).
+    # Fail fast, before opening any sink: an empty union list has no source to
+    # read from. Non-empty union (list) sources are supported (see the
+    # union-source streaming design).
     for dbms in dbms_names:
-        _validate_no_union_sources((config[dbms].get("entities") or {}))
+        _validate_union_sources((config[dbms].get("entities") or {}))
 
     written: Dict[str, int] = {}
 
@@ -157,12 +172,31 @@ def run_stream_import(
                 if _matches(ename, ecfg, yielded_name)
             ]
             for ename, ecfg in targets:
+                is_union = isinstance(ecfg.get("source"), list)
                 if ename not in bindings:
-                    bindings[ename] = bind_entity_from_sample(ename, ecfg, chunk, yielded_name)
+                    if is_union:
+                        # Bind once from a first-chunk sample of every union
+                        # source (O(sources)); the current chunk alone lacks the
+                        # other sources' columns needed for the superset.
+                        samples = sample_union_sources(
+                            config.get("sources") or {}, base_dir,
+                            ecfg["source"], source_overrides, chunksize,
+                        )
+                        bindings[ename] = bind_union_entity_from_samples(ename, ecfg, samples)
+                    else:
+                        bindings[ename] = bind_entity_from_sample(ename, ecfg, chunk, yielded_name)
                 binding = bindings[ename]
+                # Union entities: widen each incoming chunk to the shared
+                # superset (data_cols + _source, missing filled ""), so
+                # filter/cast/expand/write see exactly what materialize's
+                # concatenated frame carries. binding.kinds keys are already
+                # ordered data_cols + [_source] (see _union_source).
+                working = chunk
+                if is_union:
+                    working = chunk.reindex(columns=list(binding.kinds.keys()), fill_value="")
                 filters = binding.cfg.get("filters") or []
                 non_each = [f for f in filters if f.get("operator") != "each"]
-                filtered = apply_filters(chunk, non_each, binding.kinds)
+                filtered = apply_filters(working, non_each, binding.kinds)
                 casted = cast_frame(filtered, binding.kinds, strategy="optimized")
                 for partition_name, part_df in expand_each(casted, filters, ename):
                     buffers.setdefault(partition_name, []).append(part_df)

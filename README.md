@@ -60,7 +60,7 @@ Options:
 - `--log-level DEBUG|INFO|WARNING|ERROR` — terminal verbosity (default `INFO`); the session log file under `logs/` always records `DEBUG`.
 - `--show-data` / `--no-data` — force or suppress the per-entity record dump (default: entities with up to 50 rows are dumped).
 - `--benchmark` — write per-phase metrics to `benchmarks/benchmark_<timestamp>.json` and append `benchmarks/benchmark_history.csv` (implies `--no-data`).
-- `--execution stream|materialize` — write path (default `stream`). `stream` imports in bounded memory (~one read chunk, roughly constant in file size); `materialize` loads each source fully (the phase-measured baseline). `--dry-run` and `--benchmark` always use `materialize`.
+- `--execution stream|materialize` — write path (default `stream`). `stream` imports in bounded memory (~one read chunk, roughly constant in file size); `materialize` loads each source fully (the phase-measured baseline). Streaming supports union (`"source": [...]`) entities: it samples one first chunk per source to build the shared superset, then widens each chunk to it. `--dry-run` and `--benchmark` always use `materialize`.
 - `--no-create-schema` — skip DDL where applicable.
 
 ### Architecture
@@ -195,7 +195,7 @@ Opções úteis:
 - `--log-level DEBUG|INFO|WARNING|ERROR` — verbosidade do terminal (padrão `INFO`); o arquivo de log de sessão em `logs/` sempre grava `DEBUG`.
 - `--show-data` / `--no-data` — força ou suprime a exibição dos registros por entidade (padrão: entidades com até 50 linhas são exibidas).
 - `--benchmark` — grava métricas por fase em `benchmarks/benchmark_<timestamp>.json` e acrescenta `benchmarks/benchmark_history.csv` (implica `--no-data`).
-- `--execution stream|materialize` — caminho de escrita (padrão `stream`). `stream` importa com memória limitada (~um bloco de leitura, praticamente constante no tamanho do arquivo); `materialize` carrega cada origem por completo (a linha de base medida por fase). `--dry-run` e `--benchmark` usam sempre `materialize`.
+- `--execution stream|materialize` — caminho de escrita (padrão `stream`). `stream` importa com memória limitada (~um bloco de leitura, praticamente constante no tamanho do arquivo); `materialize` carrega cada origem por completo (a linha de base medida por fase). O modo `stream` também aceita entidades de união (`"source": [...]`): amostra o primeiro bloco de cada origem para montar o superconjunto de colunas e então alarga cada bloco para ele. `--dry-run` e `--benchmark` usam sempre `materialize`.
 - `--no-create-schema` — não emite DDL de criação (quando aplicável).
 
 ### Arquitetura
