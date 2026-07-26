@@ -77,6 +77,69 @@ def _primary_key_clause(part_db: List[str], clust_db: List[str]) -> str:
     return "PRIMARY KEY ((" + inner + "))"
 
 
+def _cassandra_keyspace_ddl(keyspace: str) -> str:
+    """CREATE KEYSPACE DDL, shared by the materialize importer and CassandraSink."""
+    return (
+        f"CREATE KEYSPACE IF NOT EXISTS {keyspace} "
+        "WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};"
+    )
+
+
+def _cassandra_column_plan(
+    ecfg: Dict[str, Any], kinds: Dict[str, str], csv_columns: List[str]
+) -> Tuple[Dict[str, str], List[str], List[str], Dict[str, str], str]:
+    """Compute the column/PK plan for one entity's Cassandra table.
+
+    Returns ``(pmap, ordered_src, ordered_db, cql_by_src, pk_clause)``:
+    ``pmap`` maps source column -> db column name; ``ordered_src``/``ordered_db``
+    are the partition+cluster+other columns in insert order (source and db
+    names respectively); ``cql_by_src`` is the CQL type per source column;
+    ``pk_clause`` is the ``PRIMARY KEY`` clause. Shared by the materialize
+    importer (``run_cassandra_import``) and ``CassandraSink``.
+    """
+    pmap = _source_to_db_map(ecfg, csv_columns)
+    part_src = ecfg.get("cassandra_partition") or []
+    clust_src = ecfg.get("cassandra_cluster") or []
+    part_db = [pmap[c] for c in part_src]
+    clust_db = [pmap[c] for c in clust_src]
+    all_src = [
+        resolve_csv_column(fk, spec, csv_columns)
+        for fk, _, spec in flat_leaf_columns(ecfg)
+    ]
+    other_src = [s for s in all_src if s not in list(part_src) + list(clust_src)]
+    ordered_src = list(part_src) + list(clust_src) + other_src
+    ordered_db: List[str] = [pmap[s] for s in ordered_src]
+    spec_by_src = {
+        resolve_csv_column(fk, spec, csv_columns): spec
+        for fk, _, spec in flat_leaf_columns(ecfg)
+    }
+    pk_clause = _primary_key_clause(part_db, clust_db)
+    cql_by_src = {
+        src: _cassandra_type_for(spec_by_src[src], kinds.get(src, "string"))
+        for src in ordered_src
+    }
+    return pmap, ordered_src, ordered_db, cql_by_src, pk_clause
+
+
+def _cassandra_table_ddl(
+    table: str,
+    ordered_src: List[str],
+    pmap: Dict[str, str],
+    cql_by_src: Dict[str, str],
+    pk_clause: str,
+) -> str:
+    """CREATE TABLE DDL for one partition, shared by the importer and CassandraSink."""
+    col_defs = [f'"{pmap[src]}" {cql_by_src[src]}' for src in ordered_src]
+    return f'CREATE TABLE IF NOT EXISTS "{table}" (' + ", ".join(col_defs) + f", {pk_clause});"
+
+
+def _cassandra_insert_cql(table: str, ordered_db: List[str]) -> str:
+    """INSERT statement (with ``?`` placeholders) for one partition."""
+    cols_cql = ", ".join(f'"{c}"' for c in ordered_db)
+    placeholders = ", ".join(["?"] * len(ordered_db))
+    return f'INSERT INTO "{table}" ({cols_cql}) VALUES ({placeholders})'
+
+
 def _default_cassandra_session(conn: Dict[str, Any]):
     # Force the driver to bypass compiling or searching for legacy C extensions on Windows
     os.environ["CASS_DRIVER_NO_EXTENSIONS"] = "1"
@@ -165,37 +228,16 @@ def run_cassandra_import(
         raise ImportExecutionError(f"Cassandra connection failed: {e}") from e
 
     if create_schema:
-        keyspace_ddl = (
-            f"CREATE KEYSPACE IF NOT EXISTS {keyspace} "
-            "WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};"
-        )
+        keyspace_ddl = _cassandra_keyspace_ddl(keyspace)
         logger.debug("[cassandra] DDL: %s", keyspace_ddl)
         session.execute(keyspace_ddl)
     session.set_keyspace(keyspace)
 
     for ename, be in entities.items():
         csv_columns = list(be.df.columns)
-        pmap = _source_to_db_map(be.cfg, csv_columns)
-        part_src = be.cfg.get("cassandra_partition") or []
-        clust_src = be.cfg.get("cassandra_cluster") or []
-        part_db = [pmap[c] for c in part_src]
-        clust_db = [pmap[c] for c in clust_src]
-        all_src = [
-            resolve_csv_column(fk, spec, csv_columns)
-            for fk, _, spec in flat_leaf_columns(be.cfg)
-        ]
-        other_src = [s for s in all_src if s not in list(part_src) + list(clust_src)]
-        ordered_src = list(part_src) + list(clust_src) + other_src
-        ordered_db: List[str] = [pmap[s] for s in ordered_src]
-        spec_by_src = {
-            resolve_csv_column(fk, spec, csv_columns): spec
-            for fk, _, spec in flat_leaf_columns(be.cfg)
-        }
-        pk_clause = _primary_key_clause(part_db, clust_db)
-        cql_by_src = {
-            src: _cassandra_type_for(spec_by_src[src], be.kinds.get(src, "string"))
-            for src in ordered_src
-        }
+        pmap, ordered_src, ordered_db, cql_by_src, pk_clause = _cassandra_column_plan(
+            be.cfg, be.kinds, csv_columns
+        )
 
         non_each = [f for f in (be.cfg.get("filters") or []) if f.get("operator") != "each"]
         with metrics.timed_phase("cassandra", ename, "filter") as t:
@@ -203,16 +245,11 @@ def run_cassandra_import(
             t.rows = len(dff)
         for table, part_df in expand_each(dff, be.cfg.get("filters") or [], ename):
             if create_schema:
-                col_defs = []
-                for src in ordered_src:
-                    col_defs.append(f'"{pmap[src]}" {cql_by_src[src]}')
-                ddl = f'CREATE TABLE IF NOT EXISTS "{table}" (' + ", ".join(col_defs) + f", {pk_clause});"
+                ddl = _cassandra_table_ddl(table, ordered_src, pmap, cql_by_src, pk_clause)
                 logger.debug("[cassandra] DDL: %s", ddl)
                 session.execute(ddl)
 
-            cols_cql = ", ".join(f'"{c}"' for c in ordered_db)
-            placeholders = ", ".join(["?"] * len(ordered_db))
-            cql = f'INSERT INTO "{table}" ({cols_cql}) VALUES ({placeholders})'
+            cql = _cassandra_insert_cql(table, ordered_db)
             logger.debug("[cassandra] CQL: %s (%d row(s))", cql, len(part_df))
             prep = session.prepare(cql)
             if part_df.empty:

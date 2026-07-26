@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import pandas as pd
 from neo4j import GraphDatabase
@@ -37,9 +37,27 @@ def _default_neo4j_driver(conn: Dict[str, Any]):
     return driver
 
 
-def _dedupe_props(part_df, ecfg, key_name, props_from_row):
-    """First-wins dedupe by key; returns (list-of-props, skipped_count)."""
-    seen = set()
+def props_from_row(row: pd.Series, ecfg: Dict[str, Any]) -> Dict[str, Any]:
+    """Build one node's property dict from a CSV row (flat columns only)."""
+    csv_columns = list(row.index)
+    out: Dict[str, Any] = {}
+    for field_key, _, spec in flat_leaf_columns(ecfg):
+        name = target_field_name(field_key, spec)
+        src = resolve_csv_column(field_key, spec, csv_columns)
+        out[name] = cell_scalar(row[src] if src in row.index else None)
+    return out
+
+
+def _dedupe_props(part_df, ecfg, key_name, props_from_row, seen: Optional[Set[Any]] = None):
+    """First-wins dedupe by key; returns (list-of-props, skipped_count).
+
+    ``seen`` defaults to a fresh set (one call = one dedupe scope, as used by
+    the materialize importer). Pass a set kept across calls (as
+    ``Neo4jSink.write_batch`` does, keyed per partition) to make first-wins
+    hold across a whole streaming pass instead of just within one batch.
+    """
+    if seen is None:
+        seen = set()
     out, skipped = [], 0
     for _, row in part_df.iterrows():
         props = props_from_row(row, ecfg)
@@ -183,15 +201,6 @@ def run_neo4j_import(
         raise
     except Exception as e:
         raise ImportExecutionError(f"Neo4j connection failed: {e}") from e
-
-    def props_from_row(row: pd.Series, ecfg: Dict[str, Any]) -> Dict[str, Any]:
-        csv_columns = list(row.index)
-        out: Dict[str, Any] = {}
-        for field_key, _, spec in flat_leaf_columns(ecfg):
-            name = target_field_name(field_key, spec)
-            src = resolve_csv_column(field_key, spec, csv_columns)
-            out[name] = cell_scalar(row[src] if src in row.index else None)
-        return out
 
     with driver.session(database=database) as session:
         if create_schema:
