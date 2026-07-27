@@ -189,11 +189,54 @@ def test_close_skips_fk_ddl_when_no_relationships_declared():
     assert conn.closed is True
 
 
-def test_create_schema_is_a_noop():
+def test_create_schema_is_a_noop_without_relationships():
     conn = _FakeConn()
     sink = PostgresSink({"schema": "public"}, connection_factory=lambda c: conn)
     sink.create_schema()
     assert conn.cur.executed == []
+
+
+def test_create_schema_drops_stale_fks_so_the_load_is_constraint_free():
+    # close() adds the FKs, and TRUNCATE-based cleaning keeps them, so a re-run
+    # would load into constrained tables. Streaming writes children before
+    # parents, so any surviving FK aborts the import.
+    relationships = {"product_category": _CONFIG["postgres"]["relationships"]["product_category"]}
+    conn = _FakeConn()
+    sink = PostgresSink(
+        {"schema": "public", "relationships": relationships},
+        connection_factory=lambda c: conn,
+    )
+
+    sink.create_schema()
+
+    dropped = [s for s in conn.cur.executed if "DROP CONSTRAINT" in s]
+    assert len(dropped) == 1
+    stmt = dropped[0]
+    assert '"products_categories_product_category_fk"' in stmt
+    assert "ALTER TABLE IF EXISTS" in stmt  # the table may not exist on a first run
+    assert "DROP CONSTRAINT IF EXISTS" in stmt
+    assert not any("ADD CONSTRAINT" in s for s in conn.cur.executed)
+
+
+def test_create_schema_then_close_round_trips_every_declared_fk():
+    relationships = _CONFIG["postgres"]["relationships"]
+    conn = _FakeConn()
+    sink = PostgresSink(
+        {"schema": "public", "relationships": relationships},
+        connection_factory=lambda c: conn,
+    )
+
+    sink.create_schema()
+    dropped_up_front = {s for s in conn.cur.executed if "DROP CONSTRAINT" in s}
+    conn.cur.executed.clear()
+    sink.ensure_partition(
+        "products", bind_entity_from_sample("products", PRODUCTS_CFG, _stock_sample(), "stock")
+    )
+    sink.close()
+
+    added = [s for s in conn.cur.executed if "ADD CONSTRAINT" in s]
+    # Every FK re-added at close() was dropped before the load began.
+    assert len(dropped_up_front) == len(added) == len(relationships)
 
 
 # ---------------------------------------------------------------------------
