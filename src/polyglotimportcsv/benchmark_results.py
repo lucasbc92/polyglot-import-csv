@@ -13,6 +13,9 @@ _RESULT_FIELDS = (
     "phase", "rows", "median_seconds", "rows_per_second", "peak_memory_mb",
 )
 
+#: Phases kept out of the consolidated report.
+EXCLUDED_PHASES = ("filter",)
+
 
 def median_results(labeled_runs: List[Dict[str, object]]) -> List[Dict[str, object]]:
     """Median ``seconds`` per ``(size, mode, strategy, execution, backend, entity, phase)``.
@@ -22,11 +25,15 @@ def median_results(labeled_runs: List[Dict[str, object]]) -> List[Dict[str, obje
     process) measurement carried on the labeled run, so each repetition
     contributes one value to the group; the median across repetitions is
     reported (``None`` if no run supplied a peak).
+
+    Records whose phase is in ``EXCLUDED_PHASES`` are dropped before grouping.
     """
     groups: Dict[Tuple, Dict[str, object]] = {}
     order: List[Tuple] = []
     for run in labeled_runs:
         for rec in run["records"]:
+            if rec["phase"] in EXCLUDED_PHASES:
+                continue
             key = (run["size"], run["mode"], run["strategy"], run["execution"],
                    rec["backend"], rec["entity"], rec["phase"])
             if key not in groups:
