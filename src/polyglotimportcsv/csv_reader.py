@@ -43,15 +43,20 @@ def infer_column_kinds(df: pd.DataFrame) -> Dict[str, str]:
         if is_boolean_series(s2):
             kinds[col] = "boolean"
             continue
+        # Numeric before datetime: pandas reads a bare 4-digit integer as a year
+        # ("1000" -> 1000-01-01), so an ID column running past 999 clears the
+        # datetime threshold below and gets cast to timestamps. A fully numeric
+        # column is a number; genuinely numeric dates (YYYYMMDD) are ambiguous
+        # and must be declared with an explicit db_type in the import config.
+        num = pd.to_numeric(s2, errors="coerce")
+        if num.notna().all():
+            kinds[col] = "integer" if (num % 1 == 0).all() else "float"
+            continue
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             parsed = pd.to_datetime(s2, errors="coerce", utc=True)
         if parsed.notna().mean() > 0.85:
             kinds[col] = "datetime"
-            continue
-        num = pd.to_numeric(s2, errors="coerce")
-        if num.notna().all():
-            kinds[col] = "integer" if (num % 1 == 0).all() else "float"
             continue
         kinds[col] = "string"
     return kinds

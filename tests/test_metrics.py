@@ -50,7 +50,7 @@ def test_timed_phase_records_into_current():
 
 
 def test_run_import_records_read_and_map_phases():
-    def stub(cfg, entities, *, dry_run, create_schema):
+    def stub(cfg, entities, *, dry_run, create_schema, strategy="optimized"):
         return ["[postgres] stub"]
 
     c = MetricsCollector()

@@ -77,6 +77,30 @@ _BASE = datetime(2023, 11, 1, 0, 0, 0)
 _SPAN_SECONDS = 30 * 24 * 3600
 
 
+_BASE_RATIO: Dict[str, int] = {
+    "stock": 1, "purchase": 3, "select_product": 2, "add_to_cart": 2,
+}
+_SPLIT_ORDER: Tuple[str, ...] = ("stock", "purchase", "select_product", "add_to_cart")
+
+
+def _split_rows(total_rows: int, seed: int) -> Dict[str, int]:
+    """Split ``total_rows`` across the four sources ~1:3:2:2 with seeded +/-10%
+    jitter, summing to exactly ``total_rows``. ``stock`` (the product key space)
+    is at least 1. Deterministic in ``(seed, total_rows)``."""
+    if total_rows < len(_SPLIT_ORDER):
+        raise ValueError(f"total_rows must be >= {len(_SPLIT_ORDER)}")
+    rng = random.Random(f"{seed}:split")
+    weights = {k: _BASE_RATIO[k] * (1.0 + rng.uniform(-0.10, 0.10)) for k in _SPLIT_ORDER}
+    wsum = sum(weights.values())
+    counts = {k: max(1, round(total_rows * weights[k] / wsum)) for k in _SPLIT_ORDER}
+    # Reconcile rounding drift onto the largest source (purchase) so the counts
+    # sum to exactly total_rows.
+    counts["purchase"] += total_rows - sum(counts.values())
+    if counts["purchase"] < 1:
+        raise ValueError(f"total_rows={total_rows} too small for a valid 1:3:2:2 split")
+    return counts
+
+
 def num_users(rows: int) -> int:
     return max(1, rows // 10)
 
@@ -129,24 +153,28 @@ def _order_date(master: random.Random) -> str:
 def iter_source_rows(seed: int, rows: int) -> Iterator[Tuple[str, Dict[str, object]]]:
     """Yield ``(source_name, row_dict)`` in fixed order for a given ``(seed, rows)``.
 
-    Order: all stock rows, then purchase, then select_product, then add_to_cart.
-    Every foreign key references the generated product/user pools.
+    ``rows`` is the TOTAL row count across the four sources; the per-source split
+    (~1:3:2:2 with seeded jitter) comes from ``_split_rows``. Order: all stock
+    rows, then purchase, then select_product, then add_to_cart. ``stock`` defines
+    the product key space; every foreign key references product ids in
+    ``[1, n_stock]`` and users from the generated pool.
     """
-    n = rows
-    nu = num_users(n)
-    nc = num_categories(n)
+    split = _split_rows(rows, seed)
+    n_stock = split["stock"]
+    nu = num_users(n_stock)
+    nc = num_categories(n_stock)
     master = random.Random(f"{seed}:stream")
 
-    for pid in range(1, n + 1):
+    for pid in range(1, n_stock + 1):
         usr = _user(seed, master.randrange(nu))
         prod = _product(seed, pid, nc)
         ts = _ts(master)
         yield "stock", {"timestamp": ts, **usr, **prod, "last_restock_date": ts}
 
-    for i in range(1, 3 * n + 1):
+    for i in range(1, split["purchase"] + 1):
         usr = _user(seed, master.randrange(nu))
         other = _user(seed, master.randrange(nu))
-        prod = _product(seed, master.randint(1, n), nc)
+        prod = _product(seed, master.randint(1, n_stock), nc)
         ts = _ts(master)
         yield "purchase", {
             "timestamp": ts, **usr,
@@ -167,20 +195,20 @@ def iter_source_rows(seed: int, rows: int) -> Iterator[Tuple[str, Dict[str, obje
             "last_restock_date": ts,
         }
 
-    for _ in range(2 * n):
+    for _ in range(split["select_product"]):
         usr = _user(seed, master.randrange(nu))
         yield "select_product", {
             "timestamp": _ts(master), **usr,
-            "selected_product_id": master.randint(1, n),
+            "selected_product_id": master.randint(1, n_stock),
             "suggested_product_count": master.randint(1, 5),
         }
 
-    for _ in range(2 * n):
+    for _ in range(split["add_to_cart"]):
         usr = _user(seed, master.randrange(nu))
         yield "add_to_cart", {
             "timestamp": _ts(master), **usr,
             "shopping_cart_id": f"user:{usr['user_id']}:cart",
-            "cart_product_id": master.randint(1, n),
+            "cart_product_id": master.randint(1, n_stock),
             "cart_quantity": master.randint(1, 5),
         }
 

@@ -316,8 +316,13 @@ def clean_cassandra(cfg: Dict[str, Any]) -> None:
             if not trows:
                 note(f"skip {keyspace}.{table} (not created yet)")
                 continue
-            session.execute(f'TRUNCATE "{table}"')
-            note(f"truncated {keyspace}.{table}")
+            # DROP, not TRUNCATE: the importer creates tables with
+            # CREATE TABLE IF NOT EXISTS, so a truncated table keeps whatever
+            # column types an older run inferred. Once inference or a mapping
+            # changes, binding a prepared statement against those stale types
+            # fails (e.g. a datetime bound to a text column).
+            session.execute(f'DROP TABLE "{table}"')
+            note(f"dropped {keyspace}.{table}")
     finally:
         cluster.shutdown()
 

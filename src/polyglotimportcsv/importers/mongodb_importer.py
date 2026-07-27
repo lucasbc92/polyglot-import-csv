@@ -23,10 +23,12 @@ def run_mongodb_import(
     *,
     dry_run: bool,
     create_schema: bool,
+    strategy: str = "optimized",
 ) -> List[str]:
     lines: List[str] = []
     conn = backend_cfg.get("connection") or {}
     _ = create_schema
+    _ = strategy
 
     if dry_run:
         lines.append("[mongodb] dry-run: would insert documents.")
@@ -54,13 +56,14 @@ def run_mongodb_import(
             dff = apply_filters(be.df, non_each, be.kinds)
             t.rows = len(dff)
         for part_name, part_df in expand_each(dff, be.cfg.get("filters") or [], ename):
-            docs = [mongo_document_from_row(row, be.cfg) for _, row in part_df.iterrows()]
-            if not docs:
-                logger.warning("[mongodb] collection %s has 0 document(s) after filters", part_name)
-                lines.append(f"[mongodb] inserted 0 document(s) into {part_name}")
-                continue
-            logger.debug("[mongodb] insert_many into %s: %d document(s)", part_name, len(docs))
             with metrics.timed_phase("mongodb", part_name, "write") as tw:
+                docs = [mongo_document_from_row(row, be.cfg) for _, row in part_df.iterrows()]
+                if not docs:
+                    logger.warning("[mongodb] collection %s has 0 document(s) after filters", part_name)
+                    lines.append(f"[mongodb] inserted 0 document(s) into {part_name}")
+                    tw.rows = 0
+                    continue
+                logger.debug("[mongodb] insert_many into %s: %d document(s)", part_name, len(docs))
                 with entity_progress(f"mongodb · {part_name}", len(docs)) as advance:
                     db[part_name].insert_many(docs)
                     advance(len(docs))

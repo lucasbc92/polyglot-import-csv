@@ -37,6 +37,15 @@ def write_json_and_csv(
     )
     csv_path = out / csv_name
     new_file = not csv_path.exists()
+    if not new_file:
+        with csv_path.open("r", encoding="utf-8", newline="") as fh:
+            existing = fh.readline().rstrip("\n\r")
+        if existing and existing != ",".join(csv_fields):
+            raise ValueError(
+                f"CSV header mismatch in {csv_path}: file has {existing!r} but "
+                f"this run writes {','.join(csv_fields)!r}. Move or rename the old "
+                "file (its columns changed)."
+            )
     ts = metadata.get("timestamp", "")
     with csv_path.open("a", encoding="utf-8", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=csv_fields)

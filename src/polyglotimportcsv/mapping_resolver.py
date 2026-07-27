@@ -27,6 +27,21 @@ class BoundEntity:
     kinds: Dict[str, str]
 
 
+def union_data_cols(headers: List[List[str]]) -> List[str]:
+    """First-seen union of column names across ``headers``, in list order.
+
+    The single source of truth for the union superset ordering rule, shared by
+    the materialize path (``_union_source``) and the streaming sample bind
+    (``stream_binding``) so both compute an identical superset.
+    """
+    data_cols: List[str] = []
+    for header in headers:
+        for c in header:
+            if c not in data_cols:
+                data_cols.append(c)
+    return data_cols
+
+
 def _union_source(
     entity_name: str, names: List[str], sources: Dict[str, SourceData]
 ) -> SourceData:
@@ -35,11 +50,7 @@ def _union_source(
         if n not in sources:
             raise MappingError(f"Entity '{entity_name}': unknown source '{n}'.")
         parts.append(sources[n])
-    data_cols: List[str] = []
-    for p in parts:
-        for c in p.file_header:
-            if c not in data_cols:
-                data_cols.append(c)
+    data_cols = union_data_cols([p.file_header for p in parts])
     all_cols = data_cols + [SOURCE_COLUMN]
     frames = [p.df.reindex(columns=all_cols, fill_value="") for p in parts]
     df = pd.concat(frames, ignore_index=True)
@@ -126,6 +137,8 @@ def resolve_backend_entities(
     backend_cfg: Dict[str, Any],
     sources: Dict[str, SourceData],
     cast_cache: Optional[Dict[tuple, pd.DataFrame]] = None,
+    *,
+    strategy: str = "optimized",
 ) -> Dict[str, BoundEntity]:
     """Bind every entity of one backend and cast its frame to native values."""
     cast_cache = cast_cache if cast_cache is not None else {}
@@ -144,9 +157,9 @@ def resolve_backend_entities(
         cfg.pop("source", None)
         cfg.pop("csv_columns", None)
         cfg.pop("auto_map", None)
-        cache_key = _binding_cache_key(ecfg, ename)
+        cache_key = (strategy,) + _binding_cache_key(ecfg, ename)
         if cache_key not in cast_cache:
-            cast_cache[cache_key] = cast_frame(src.df, src.kinds)
+            cast_cache[cache_key] = cast_frame(src.df, src.kinds, strategy=strategy)
         out[ename] = BoundEntity(
             name=ename, cfg=cfg, df=cast_cache[cache_key], kinds=src.kinds
         )
