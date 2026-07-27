@@ -605,6 +605,26 @@ def _user_sample(ids):
     )
 
 
+NEO4J_PRODUCT_CFG = NEO4J_CFG["entities"]["Product"]
+PURCHASED_RSPEC = NEO4J_CFG["relationships"]["PURCHASED"]
+
+
+def _purchase_rel_chunk():
+    # The 'from' (User) source is 'purchase', which carries user_id, product_id
+    # (the two endpoint FKs) plus the edge props order_number/quantity/price/rating.
+    return pd.DataFrame(
+        {
+            "user_id": ["u1", "u2"],
+            "product_id": ["p1", "p2"],
+            "order_number": ["o1", "o2"],
+            "quantity": ["1", "2"],
+            "price": ["10", "20"],
+            "rating": ["5", "4"],
+            SOURCE_COLUMN: ["purchase", "purchase"],
+        }
+    )
+
+
 def test_neo4j_ensure_partition_creates_uniqueness_constraint():
     rec = {"run": [], "tx_run": []}
     driver = _FakeNeoDriver(rec)
@@ -712,3 +732,56 @@ def test_neo4j_close_closes_driver():
     sink.close()
 
     assert driver.closed is True
+
+
+def test_neo4j_write_relationships_unwind_merges_edges():
+    rec = {"run": [], "tx_run": []}
+    driver = _FakeNeoDriver(rec)
+    sink = Neo4jSink({"connection": {}}, driver_factory=lambda c: driver)
+
+    from_binding = bind_entity_from_sample("User", NEO4J_USER_CFG, _user_sample(["u1", "u2"]), "purchase")
+    to_binding = bind_entity_from_sample(
+        "Product", NEO4J_PRODUCT_CFG,
+        pd.DataFrame({"product_id": ["p1", "p2"], "product_name": ["a", "b"],
+                      "product_brand": ["x", "y"], SOURCE_COLUMN: ["stock", "stock"]}),
+        "stock",
+    )
+
+    count = sink.write_relationships("PURCHASED", PURCHASED_RSPEC, from_binding, to_binding, _purchase_rel_chunk())
+
+    assert count == 2
+    rel_batches = [p for q, p in rec["tx_run"] if "UNWIND" in q and "MERGE (a)" in q]
+    assert len(rel_batches) == 1
+    payload = rel_batches[0]["batch"]
+    assert {r["a_id"] for r in payload} == {"u1", "u2"}
+    assert {r["b_id"] for r in payload} == {"p1", "p2"}
+    # order_number is the edge's is_key -> travels in the mk block, not rprops
+    assert all("order_number" in r["mk"] for r in payload)
+
+
+def test_neo4j_write_relationships_skips_null_endpoints():
+    rec = {"run": [], "tx_run": []}
+    driver = _FakeNeoDriver(rec)
+    sink = Neo4jSink({"connection": {}}, driver_factory=lambda c: driver)
+
+    from_binding = bind_entity_from_sample("User", NEO4J_USER_CFG, _user_sample(["u1"]), "purchase")
+    to_binding = bind_entity_from_sample(
+        "Product", NEO4J_PRODUCT_CFG,
+        pd.DataFrame({"product_id": ["p1"], "product_name": ["a"],
+                      "product_brand": ["x"], SOURCE_COLUMN: ["stock"]}),
+        "stock",
+    )
+    # A genuinely null endpoint key (None, as an all-NaN cast column would yield)
+    # is dropped by _rel_rows_for_batch. An empty string, by contrast, survives
+    # here and is skipped later by Cypher MATCH (not exercised by the fake
+    # driver) -- both match the materialize path, which uses the same helper.
+    chunk = pd.DataFrame(
+        {"user_id": ["u1", None], "product_id": ["p1", "p2"], "order_number": ["o1", "o2"],
+         "quantity": ["1", "2"], "price": ["10", "20"], "rating": ["5", "4"],
+         SOURCE_COLUMN: ["purchase", "purchase"]}
+    )
+
+    count = sink.write_relationships("PURCHASED", PURCHASED_RSPEC, from_binding, to_binding, chunk)
+
+    # The row with a null user_id (a_id None) is dropped; only 1 edge shaped.
+    assert count == 1

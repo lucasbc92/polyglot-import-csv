@@ -22,11 +22,13 @@ from typing import Any, Dict, Set
 import pandas as pd
 
 from polyglotimportcsv.business_exception import ImportExecutionError
-from polyglotimportcsv.entity_utils import flat_leaf_columns, target_field_name
+from polyglotimportcsv.entity_utils import flat_leaf_columns, resolve_csv_column, target_field_name
 from polyglotimportcsv.importers.neo4j_importer import (
     _default_neo4j_driver,
     _dedupe_props,
     _merge_nodes_batched,
+    _merge_rels_batched,
+    _rel_rows_for_batch,
     _sanitize_label,
     props_from_row,
 )
@@ -89,6 +91,42 @@ class Neo4jSink:
             return 0
         label = _sanitize_label(partition_name)
         return _merge_nodes_batched(self._session, label, key_name, props_list, lambda n: None)
+
+    def write_relationships(
+        self,
+        rname: str,
+        rspec: Dict[str, Any],
+        from_binding: EntityBinding,
+        to_binding: EntityBinding,
+        batch: pd.DataFrame,
+    ) -> int:
+        """MERGE one chunk of edges; endpoints must already exist (pass 2).
+
+        ``batch`` is the ``from`` entity's cast chunk, which carries both
+        foreign keys plus edge props. Rows with a missing endpoint key are
+        dropped (by ``_rel_rows_for_batch``) and, if a node is nonetheless
+        absent, Cypher ``MATCH`` silently creates no edge -- matching the
+        materialize path.
+        """
+        from_label = _sanitize_label(rspec["from"])
+        to_label = _sanitize_label(rspec["to"])
+        rel_type = _sanitize_label(rspec.get("type") or rname)
+        from_key_col = [(fk, sp) for fk, _, sp in flat_leaf_columns(from_binding.cfg) if sp.get("is_key")][0]
+        to_key_col = [(fk, sp) for fk, _, sp in flat_leaf_columns(to_binding.cfg) if sp.get("is_key")][0]
+        from_key = target_field_name(*from_key_col)
+        to_key = target_field_name(*to_key_col)
+        cols = list(batch.columns)
+        from_src = resolve_csv_column(from_key_col[0], from_key_col[1], cols)
+        to_src = resolve_csv_column(to_key_col[0], to_key_col[1], cols)
+        rel_cols = rspec.get("columns") or {}
+        mk_names = [target_field_name(fk, spec) for fk, spec in rel_cols.items() if spec.get("is_key")]
+        rows = _rel_rows_for_batch(batch, from_src, to_src, rel_cols, mk_names)
+        if not rows:
+            return 0
+        return _merge_rels_batched(
+            self._session, from_label, from_key, to_label, to_key,
+            rel_type, mk_names, rows, advance=lambda n: None,
+        )
 
     def close(self) -> None:
         self._driver.close()
