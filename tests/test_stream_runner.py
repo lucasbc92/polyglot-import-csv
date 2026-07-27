@@ -24,6 +24,8 @@ class _FakeSink:
         self.batches = {}  # partition -> [len(batch), ...] in flush order
         self.frames = {}   # partition -> [DataFrame, ...] as received
         self.closed = False
+        self.calls = []          # ordered log of ("node", partition) / ("rel", rname)
+        self.rel_rows = {}       # rname -> total rows received
 
     def create_schema(self):
         self.schema_calls += 1
@@ -32,8 +34,14 @@ class _FakeSink:
         self.ensure_calls.append(partition_name)
 
     def write_batch(self, partition_name, binding, batch):
+        self.calls.append(("node", partition_name))
         self.batches.setdefault(partition_name, []).append(len(batch))
         self.frames.setdefault(partition_name, []).append(batch.copy())
+        return len(batch)
+
+    def write_relationships(self, rname, rspec, from_binding, to_binding, batch):
+        self.calls.append(("rel", rname))
+        self.rel_rows[rname] = self.rel_rows.get(rname, 0) + len(batch)
         return len(batch)
 
     def close(self):
@@ -156,3 +164,43 @@ def test_stream_import_rejects_empty_union_list(tmp_path):
     # fails fast: no sink was ever opened
     assert fake.schema_calls == 0
     assert fake.closed is False
+
+
+def test_stream_import_writes_relationships_after_all_nodes(tmp_path):
+    # Two node entities from two sources + one relationship whose 'from' is User
+    # (source 'people', carrying both FKs person_id and thing_id).
+    _write_csv(tmp_path / "people.csv", ["person_id", "thing_id", "weight"],
+               [(f"u{i}", f"t{i}", i) for i in range(3)])
+    _write_csv(tmp_path / "things.csv", ["thing_id", "label"],
+               [(f"t{i}", f"L{i}") for i in range(3)])
+    config = {
+        "sources": {"people": "people.csv", "things": "things.csv"},
+        "neo4j": {
+            "entities": {
+                "User": {"source": "people", "columns": {"person_id": {"is_key": True}}},
+                "Thing": {"source": "things", "columns": {"thing_id": {"is_key": True}}},
+            },
+            "relationships": {
+                "LIKES": {"from": "User", "to": "Thing", "type": "LIKES",
+                          "columns": {"weight": {}}},
+            },
+        },
+    }
+    fake = _FakeSink()
+
+    written = sr.run_stream_import(
+        config, tmp_path, sink_factories={"neo4j": lambda cfg: fake}, batch=1000
+    )
+
+    # (a) edges recorded and counted under the rel_type key
+    assert fake.rel_rows == {"LIKES": 3}
+    assert written[":LIKES"] == 3
+    assert written["User"] == 3 and written["Thing"] == 3
+
+    # (b) every node write happens before the first relationship write
+    first_rel = next(i for i, c in enumerate(fake.calls) if c[0] == "rel")
+    assert all(c[0] == "node" for c in fake.calls[:first_rel])
+
+    # (c) the relationship pass drives from the User source, resolving both
+    #     endpoints' FKs from that one frame
+    assert fake.closed is True

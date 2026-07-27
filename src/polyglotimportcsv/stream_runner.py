@@ -145,6 +145,38 @@ def _process_chunk(
     return casted, filters
 
 
+def _relationship_from_source_decls(
+    relationships: Dict[str, Any],
+    entities: Dict[str, Any],
+    sources_cfg: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Sources feeding any relationship's `from` entity (scalable re-read: one
+    read per needed source, not per relationship).
+
+    A `from` entity's source is its `source` (str), its own name if `source` is
+    absent, or every element of a `list` (union) source. If any needed element
+    is a combined-CSV origin (not a str key in `sources_cfg`), include every
+    combined (dict) declaration so its origins are produced.
+    """
+    needed_keys: set = set()
+    needs_combined = False
+    str_keys = {k for k, v in sources_cfg.items() if isinstance(v, str)}
+    for rspec in (relationships or {}).values():
+        from_e = rspec.get("from")
+        ecfg = entities.get(from_e) or {}
+        ref = ecfg.get("source")
+        refs = ref if isinstance(ref, list) else [ref if ref is not None else from_e]
+        for r in refs:
+            if r in str_keys:
+                needed_keys.add(r)
+            else:
+                needs_combined = True
+    out = {k: v for k, v in sources_cfg.items() if k in needed_keys}
+    if needs_combined:
+        out.update({k: v for k, v in sources_cfg.items() if isinstance(v, dict)})
+    return out
+
+
 def run_stream_import(
     config: Dict[str, Any],
     base_dir: "str | Path",
@@ -223,6 +255,36 @@ def run_stream_import(
                 partition_name, buffers, partition_binding,
                 seen_partitions, written, sink,
             )
+
+        write_rels = getattr(sink, "write_relationships", None)
+        relationships = bcfg.get("relationships") or {}
+        if write_rels is not None and relationships:
+            rel_sources = _relationship_from_source_decls(
+                relationships, entities, config.get("sources") or {}
+            )
+            # from-entity -> its relationships (drive each from source once)
+            from_rels: Dict[str, List[tuple]] = {}
+            for rname, rspec in relationships.items():
+                from_rels.setdefault(rspec.get("from"), []).append((rname, rspec))
+            for yielded_name, chunk in iter_entity_chunks(
+                rel_sources, base_dir, source_overrides, chunksize
+            ):
+                for from_e, rlist in from_rels.items():
+                    ecfg = entities.get(from_e)
+                    if ecfg is None or not _matches(from_e, ecfg, yielded_name):
+                        continue
+                    from_binding = bindings.get(from_e)
+                    if from_binding is None:
+                        continue  # from source had zero rows -> zero nodes -> zero edges
+                    casted, _ = _process_chunk(chunk, ecfg, from_binding)
+                    for rname, rspec in rlist:
+                        to_binding = bindings.get(rspec.get("to"))
+                        if to_binding is None:
+                            continue  # to entity unbound -> no target nodes -> no edges
+                        rel_type = rspec.get("type") or rname
+                        n = write_rels(rname, rspec, from_binding, to_binding, casted)
+                        key = f":{rel_type}"
+                        written[key] = written.get(key, 0) + n
 
         sink.close()
 
