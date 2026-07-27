@@ -3,7 +3,10 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from polyglotimportcsv import metrics
+from polyglotimportcsv.benchmark_io import write_json_and_csv
 from polyglotimportcsv.metrics import MetricsCollector
 from polyglotimportcsv.runner import run_import
 
@@ -45,7 +48,7 @@ def test_run_import_benchmark_writes_files_and_suppresses_dump(tmp_path, monkeyp
         lambda b, e, df, *, force=None: forces.append(force),
     )
 
-    def stub(cfg, entities, *, dry_run, create_schema):
+    def stub(cfg, entities, *, dry_run, create_schema, strategy="optimized"):
         return ["[postgres] stub"]
 
     run_import(CFG, dry_run=True, only=["postgres"], importers={"postgres": stub}, benchmark=True)
@@ -53,3 +56,16 @@ def test_run_import_benchmark_writes_files_and_suppresses_dump(tmp_path, monkeyp
     out = tmp_path / "benchmarks"
     assert list(out.glob("benchmark_*.json"))
     assert (out / "benchmark_history.csv").is_file()
+
+
+def test_append_to_mismatched_header_raises(tmp_path):
+    csv_path = tmp_path / "r.csv"
+    csv_path.write_text("timestamp,size,mode\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="header"):
+        write_json_and_csv(
+            tmp_path, {"timestamp": "t"},
+            [{"size": 1, "mode": "multi", "extra": "x"}],
+            json_prefix="j", csv_name="r.csv",
+            csv_fields=("timestamp", "size", "mode", "extra"),
+            payload_key="results",
+        )

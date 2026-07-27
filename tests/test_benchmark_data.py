@@ -13,12 +13,27 @@ def _rows(seed, rows):
     return list(bd.iter_source_rows(seed, rows))
 
 
-def test_cardinalities_follow_ratios():
-    counts = Counter(src for src, _ in _rows(42, 10))
-    assert counts["stock"] == 10
-    assert counts["purchase"] == 30
-    assert counts["select_product"] == 20
-    assert counts["add_to_cart"] == 20
+def test_split_rows_sums_exactly_and_respects_ratio():
+    split = bd._split_rows(80_000, seed=42)
+    assert set(split) == {"stock", "purchase", "select_product", "add_to_cart"}
+    assert sum(split.values()) == 80_000                 # exact total
+    assert all(v >= 1 for v in split.values())
+    # within +/-15% of the exact 1:3:2:2 share (10% jitter + rounding slack)
+    for src, ratio in (("stock", 1), ("purchase", 3),
+                       ("select_product", 2), ("add_to_cart", 2)):
+        exact = 80_000 * ratio / 8
+        assert abs(split[src] - exact) <= 0.15 * exact, src
+
+
+def test_split_rows_deterministic_and_seed_sensitive():
+    assert bd._split_rows(80_000, 42) == bd._split_rows(80_000, 42)
+    assert bd._split_rows(80_000, 1) != bd._split_rows(80_000, 2)
+
+
+def test_cardinalities_follow_split():
+    split = bd._split_rows(80_000, 42)
+    counts = Counter(src for src, _ in _rows(42, 80_000))
+    assert dict(counts) == split
 
 
 def test_pool_sizes():
@@ -37,12 +52,14 @@ def test_different_seed_differs():
 
 
 def test_referential_integrity():
-    seed, n = 42, 40
-    rows = _rows(seed, n)
+    seed, total = 42, 8_000
+    split = bd._split_rows(total, seed)
+    n_stock = split["stock"]
+    rows = _rows(seed, total)
     stock_pids = {r["product_id"] for src, r in rows if src == "stock"}
-    assert stock_pids == set(range(1, n + 1))
-    user_pool = {bd._user(seed, i)["user_id"] for i in range(bd.num_users(n))}
-    ncat = bd.num_categories(n)
+    assert stock_pids == set(range(1, n_stock + 1))
+    user_pool = {bd._user(seed, i)["user_id"] for i in range(bd.num_users(n_stock))}
+    ncat = bd.num_categories(n_stock)
     for src, r in rows:
         assert r["user_id"] in user_pool
         if src == "purchase":
@@ -55,8 +72,9 @@ def test_referential_integrity():
 
 
 def test_stock_product_id_is_sequential():
-    pids = [r["product_id"] for src, r in _rows(42, 12) if src == "stock"]
-    assert pids == list(range(1, 13))
+    n_stock = bd._split_rows(8_000, 42)["stock"]
+    pids = [r["product_id"] for src, r in _rows(42, 8_000) if src == "stock"]
+    assert pids == list(range(1, n_stock + 1))
 
 
 def _header(path):
@@ -75,16 +93,18 @@ def test_multi_writes_four_files_with_real_headers(tmp_path):
 
 
 def test_multi_row_counts(tmp_path):
-    bd.generate_dataset(tmp_path, rows=15, seed=42, mode="multi")
+    total = 8_000
+    split = bd._split_rows(total, 42)
+    bd.generate_dataset(tmp_path, rows=total, seed=42, mode="multi")
 
     def n(fname):
         with open(tmp_path / fname, encoding="utf-8") as fh:
             return sum(1 for _ in fh) - 1  # minus header
 
-    assert n("ecommerce_stock.csv") == 15
-    assert n("ecommerce_purchase.csv") == 45
-    assert n("ecommerce_select_product.csv") == 30
-    assert n("ecommerce_add_to_cart.csv") == 30
+    assert n("ecommerce_stock.csv") == split["stock"]
+    assert n("ecommerce_purchase.csv") == split["purchase"]
+    assert n("ecommerce_select_product.csv") == split["select_product"]
+    assert n("ecommerce_add_to_cart.csv") == split["add_to_cart"]
 
 
 def test_multi_byte_identical_for_same_seed(tmp_path):
@@ -118,10 +138,12 @@ def test_combined_header_matches_real_join(tmp_path):
 
 
 def test_combined_action_counts(tmp_path):
-    bd.generate_dataset(tmp_path, rows=15, seed=42, mode="combined")
+    total = 8_000
+    split = bd._split_rows(total, 42)
+    bd.generate_dataset(tmp_path, rows=total, seed=42, mode="combined")
     with open(tmp_path / bd.JOIN_FILE, newline="", encoding="utf-8") as fh:
         actions = Counter(row["action"] for row in _csv.DictReader(fh))
-    assert actions == {"stock": 15, "purchase": 45, "select_product": 30, "add_to_cart": 30}
+    assert dict(actions) == split
 
 
 def test_both_writes_five_files(tmp_path):

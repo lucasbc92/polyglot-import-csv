@@ -22,6 +22,7 @@ class BackendImporterFn(Protocol):
         *,
         dry_run: bool,
         create_schema: bool,
+        strategy: str = "optimized",
     ) -> List[str]:
         ...
 

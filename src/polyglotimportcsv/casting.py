@@ -58,32 +58,172 @@ def cast_value(val: Any, kind: str) -> Any:
     return val
 
 
-def cast_frame(df: pd.DataFrame, kinds: Dict[str, str]) -> pd.DataFrame:
+def _cast_column_vectorized(series: pd.Series, kind: str) -> "tuple[pd.Series, int]":
+    """Vectorized cast of one column to native values; return (result, fallbacks).
+
+    Empty cells ('' and None) become None in every kind (masked before the
+    converter runs, so NaT/NaN/eq('true') never leak through). For integer
+    and float, values the converter can't parse are returned unchanged as
+    their original text and counted as fallbacks, matching cast_value's
+    try/except contract. For datetime, cast_value has no such fallback (an
+    unparseable value always becomes None, never text); this mirrors that
+    exactly, though it still counts and warns on the fallback since the
+    vectorized path can detect it precisely.
+    """
+    # Real float NaN cells (as opposed to '' / None) are treated as empty
+    # here, yielding None. cast_value treats only '' and None as empty; a
+    # real NaN falls through to int(nan)/float(nan) and comes back as the
+    # NaN value itself (a fallback), which differs from this None. This is
+    # unreachable in production: csv_reader.read_csv uses dtype=str,
+    # keep_default_na=False, so no real NaN ever appears in a column cast
+    # here, and _union_source fills missing columns with '', not NaN.
+    empty = series.isna() | (series == "")
+    original = series.astype(object)
+    fallbacks = 0
+
+    if kind == "boolean":
+        parsed = series.astype(str).str.strip().str.lower().eq("true")
+        out = parsed.astype(object).where(~empty, None)
+        return pd.Series(list(out), index=series.index, dtype=object), 0
+
+    if kind == "integer":
+        # pd.to_numeric().isna() is a poor success oracle for int(): it is
+        # MORE permissive than Python (accepts "3.0" and "1e3", which
+        # int() rejects with ValueError). Use a vectorized regex mask that
+        # mirrors int()'s exact grammar (optional surrounding whitespace,
+        # optional sign, digits only) to identify the disagreeing minority,
+        # then fall back to text for those, matching cast_value's contract.
+        s = series.where(~empty)
+        int_like = s.astype(str).str.strip().str.fullmatch(r"[+-]?\d+").fillna(False)
+        good = int_like & ~empty
+        bad = ~empty & ~good
+        fallbacks = int(bad.sum())
+
+        # pd.to_numeric silently promotes the ENTIRE column to float64 once
+        # a single value overflows int64: it neither raises nor returns
+        # NaN, and float64 cannot represent every integer above 2**53
+        # exactly (e.g. 9007199254740993 == 2**53 + 1 rounds to exactly
+        # 2**53, indistinguishable from a legitimately in-range value once
+        # it has already gone through the conversion). A magnitude check on
+        # the resulting float is therefore not a reliable oracle -- it
+        # tests a value that may already have been rounded away.
+        #
+        # Ask pandas' own RESULT DTYPE instead, recomputed on just the good
+        # (int-like, non-empty) values so an empty cell elsewhere in the
+        # column -- which forces its own float64 promotion via NaN padding,
+        # unrelated to any overflow -- doesn't falsely trigger this path.
+        # When pandas can represent every good value as int64 it does so
+        # exactly regardless of magnitude (up to int64 range): that is the
+        # common case and stays fully vectorized. When it falls back to
+        # float64, no value in that subset can be trusted, so every good
+        # value is recovered exactly by parsing the original text with
+        # int(), which is exact for arbitrary precision. This exact-parse
+        # path only runs for columns that actually contain an
+        # out-of-int64-range value, which is rare.
+        good_text = s[good]
+        num_good = pd.to_numeric(good_text, errors="coerce")
+        exact = pd.api.types.is_integer_dtype(num_good.dtype)
+        good_vals = (
+            num_good.astype(object)
+            if exact
+            else pd.Series(
+                [int(str(v).strip()) for v in good_text],
+                index=good_text.index,
+                dtype=object,
+            )
+        )
+
+        result = pd.Series([None] * len(series.index), index=series.index, dtype=object)
+        result[bad] = original[bad]
+        result[good] = good_vals
+        return result, fallbacks
+
+    if kind == "float":
+        # pd.to_numeric().isna() is a poor success oracle for float() too,
+        # but for the opposite reason: it is AMBIGUOUS. float("nan")
+        # succeeds and returns a real NaN, which is indistinguishable from
+        # a coerce failure (also NaN) once it comes back through
+        # pd.to_numeric. Detect the literal nan/inf/infinity spellings
+        # (any case, optional sign) with a vectorized regex mask and parse
+        # those directly with float() so the ambiguity never arises;
+        # everything else keeps the fast pd.to_numeric path.
+        s = series.where(~empty)
+        num = pd.to_numeric(s, errors="coerce")
+        text = s.astype(str).str.strip()
+        special = text.str.fullmatch(r"[+-]?(?:nan|inf|infinity)", case=False).fillna(False)
+        bad = num.isna() & ~empty & ~special
+        fallbacks = int(bad.sum())
+        vals = [
+            None if e else (float(o) if sp else (o if b else float(v)))
+            for e, b, v, o, sp in zip(empty, bad, num, original, special)
+        ]
+        return pd.Series(vals, index=series.index, dtype=object), fallbacks
+
+    if kind == "datetime":
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            # format="mixed" is REQUIRED for equivalence with the per-cell path.
+            # Without it pandas infers ONE format from the first element and
+            # coerces every value in another format to NaT: a column holding
+            # "2023-11-02 03:30:00Z" and "2024-01-01T00:00:00Z" (space vs T)
+            # loses the second format entirely, while per-cell to_datetime
+            # parses both. Verified against pandas in this environment.
+            ts = pd.to_datetime(series.where(~empty), errors="coerce",
+                                utc=True, format="mixed")
+        bad = ts.isna() & ~empty
+        fallbacks = int(bad.sum())
+        py = ts.dt.to_pydatetime()
+        # Unlike integer/float, cast_value's datetime branch has no
+        # try/except fallback: an unparseable value always becomes None,
+        # never the original text (see cast_value above). The resulting
+        # VALUE stays identical between strategies here. The WARNING does
+        # not: cast_value's identity check (`v is orig`) in cast_frame's
+        # naive branch can never match for datetime, since cast_value
+        # returns a new None rather than the original object on failure, so
+        # naive can never report a non-zero datetime fallback count. This
+        # branch can detect the failure precisely (ts.isna()) and does warn.
+        # This asymmetry is a deliberate, owner-approved deviation (not a
+        # bug to fix): a silently NULLed timestamp is real data loss worth
+        # surfacing, and log output does not affect the timing the
+        # benchmark measures.
+        vals = [None if (e or b) else d for e, b, d in zip(empty, bad, py)]
+        return pd.Series(vals, index=series.index, dtype=object), fallbacks
+
+    return original, 0
+
+
+def cast_frame(df: pd.DataFrame, kinds: Dict[str, str], *, strategy: str = "optimized") -> pd.DataFrame:
     """Return a copy with typed columns converted to native values.
 
-    Only integer/float/boolean/datetime columns are converted (empty cells
-    become None); string columns keep their raw values, including ''.
+    ``strategy='naive'`` casts cell by cell (the original path);
+    ``strategy='optimized'`` casts per column with pandas. Both yield identical
+    values and element types. Only integer/float/boolean/datetime columns are
+    converted (empty cells become None); string columns keep raw values.
     """
     out = df.copy()
     for col in out.columns:
         kind = kinds.get(col, "string")
-        if kind in ("integer", "float", "boolean", "datetime"):
-            # Build the object column directly from a list of already-cast
-            # native Python values, rather than via Series.map(). map()
-            # lets pandas infer a dtype for the intermediate result (e.g.
-            # float64 for a mix of int and None), which silently upcasts
-            # ints to floats (1 -> 1.0) before astype(object) ever runs.
+        if kind not in ("integer", "float", "boolean", "datetime"):
+            continue
+        if strategy == "optimized":
+            result, fallbacks = _cast_column_vectorized(out[col], kind)
+            out[col] = result
+        else:
             values = [cast_value(v, kind) for v in out[col]]
             fallbacks = sum(
                 1
                 for orig, v in zip(out[col], values)
                 if v is orig and orig is not None and orig != ""
             )
-            if fallbacks:
-                logger.warning(
-                    "column %r: %d value(s) could not be cast to %s and stayed text",
-                    col, fallbacks, kind,
-                )
-            logger.debug("column %r cast to %s (%d value(s))", col, kind, len(values))
             out[col] = pd.Series(values, index=out.index, dtype=object)
+        if fallbacks:
+            # Datetime failures become None (cast_value has no text fallback
+            # for datetime, see above); integer/float failures stay as text.
+            outcome = "became None" if kind == "datetime" else "stayed text"
+            logger.warning(
+                "column %r: %d value(s) could not be cast to %s and %s",
+                col, fallbacks, kind, outcome,
+            )
+        logger.debug("column %r cast to %s (%d value(s))", col, kind, len(out[col]))
     return out

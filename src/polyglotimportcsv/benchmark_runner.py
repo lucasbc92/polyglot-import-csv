@@ -6,6 +6,7 @@ The script layer wires the real ``CLEANERS`` (from scripts/inspect_persisted_dat
 
 from __future__ import annotations
 
+import tracemalloc
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional
 
@@ -13,6 +14,10 @@ from polyglotimportcsv import benchmark_data
 from polyglotimportcsv.metrics import MetricsCollector
 
 _ALL_BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
+_VALID_STRATEGIES = ("naive", "optimized")
+_VALID_EXECUTIONS = ("stream", "materialize")
+
+_BYTES_PER_MB = 1024 * 1024
 
 # mode -> (import config filename, combined source name or None)
 _MODE_CONFIG = {
@@ -46,6 +51,8 @@ def run_matrix(
     sizes: Iterable[int],
     modes: Iterable[str],
     repetitions: int,
+    strategies: Iterable[str] = ("optimized",),
+    executions: Iterable[str] = ("stream",),
     sgbd_config_path: "Optional[str | Path]",
     config_dir: "str | Path",
     data_dir: "str | Path",
@@ -57,7 +64,9 @@ def run_matrix(
     generate: Callable[..., object] = benchmark_data.generate_dataset,
     on_run: Optional[Callable[[List[Dict[str, object]]], None]] = None,
 ) -> List[Dict[str, object]]:
-    """Run sizes x modes x repetitions, cleaning before each import. Returns labeled runs.
+    """Run sizes x modes x strategies x executions x repetitions, cleaning before each import.
+
+    Returns labeled runs.
 
     ``on_run`` is called with every labeled run collected so far, right after each
     import finishes. A full matrix over large sizes takes a long time and results
@@ -73,6 +82,20 @@ def run_matrix(
             f"unknown mode(s): {', '.join(unknown)}. Valid: {', '.join(_MODE_CONFIG)}"
         )
     requested = list(only) if only else None
+    strategies = list(strategies)
+    unknown_strategies = [s for s in strategies if s not in _VALID_STRATEGIES]
+    if unknown_strategies:
+        raise ValueError(
+            f"unknown strategy(ies): {', '.join(unknown_strategies)}. "
+            f"Valid: {', '.join(_VALID_STRATEGIES)}"
+        )
+    executions = list(executions)
+    unknown_executions = [e for e in executions if e not in _VALID_EXECUTIONS]
+    if unknown_executions:
+        raise ValueError(
+            f"unknown execution(s): {', '.join(unknown_executions)}. "
+            f"Valid: {', '.join(_VALID_EXECUTIONS)}"
+        )
     labeled: List[Dict[str, object]] = []
 
     for size in sizes:
@@ -83,25 +106,38 @@ def run_matrix(
             overrides = _overrides(mode, dpath)
             merged = load_cfg(config_path, sgbd_config_path)
             selected = requested or [b for b in _ALL_BACKENDS if b in merged]
-            for rep in range(repetitions):
-                for backend in selected:
-                    block = merged.get(backend)
-                    if block is not None and backend in cleaners:
-                        cleaners[backend](block)
-                collector = MetricsCollector()
-                importer(
-                    config_path,
-                    sgbd_config_path=sgbd_config_path,
-                    collector=collector,
-                    show_data=False,
-                    only=selected,
-                    create_schema=True,
-                    source_overrides=overrides,
-                )
-                labeled.append({
-                    "size": size, "mode": mode, "repetition": rep,
-                    "records": collector.to_records(),
-                })
-                if on_run is not None:
-                    on_run(labeled)
+            for strategy in strategies:
+                for execution in executions:
+                    for rep in range(repetitions):
+                        for backend in selected:
+                            block = merged.get(backend)
+                            if block is not None and backend in cleaners:
+                                cleaners[backend](block)
+                        collector = MetricsCollector()
+                        # Measure whole-import peak memory. Streaming's headline
+                        # metric is a bounded peak (~one read chunk) versus the
+                        # materialize path's peak that grows with dataset size.
+                        tracemalloc.start()
+                        tracemalloc.reset_peak()
+                        importer(
+                            config_path,
+                            sgbd_config_path=sgbd_config_path,
+                            collector=collector,
+                            show_data=False,
+                            only=selected,
+                            create_schema=True,
+                            source_overrides=overrides,
+                            strategy=strategy,
+                            execution=execution,
+                        )
+                        peak_bytes = tracemalloc.get_traced_memory()[1]
+                        tracemalloc.stop()
+                        labeled.append({
+                            "size": size, "mode": mode, "strategy": strategy,
+                            "execution": execution, "repetition": rep,
+                            "peak_memory_mb": peak_bytes / _BYTES_PER_MB,
+                            "records": collector.to_records(),
+                        })
+                        if on_run is not None:
+                            on_run(labeled)
     return labeled

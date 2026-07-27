@@ -24,6 +24,22 @@ logger = logging.getLogger(__name__)
 _DEFAULT_INSERT_ORDER = ("categories", "products", "inventory")
 
 
+def build_insert_sql(schema: str, table: str, cols: List[str], pks: List[str]) -> "sql.Composed":
+    """Build the ``INSERT ... VALUES %s [ON CONFLICT (pks) DO NOTHING]`` statement.
+
+    Shared by the materialize importer (``run_postgres_import``) and
+    ``PostgresSink.write_batch`` so both paths issue byte-identical SQL.
+    """
+    fq = sql.SQL("{}.{}").format(sql.Identifier(schema), sql.Identifier(table))
+    col_sql = sql.SQL(", ").join(map(sql.Identifier, cols))
+    base = sql.SQL("INSERT INTO {} ({}) VALUES %s").format(fq, col_sql)
+    if pks:
+        return base + sql.SQL(" ON CONFLICT ({}) DO NOTHING").format(
+            sql.SQL(", ").join(map(sql.Identifier, pks))
+        )
+    return base
+
+
 def _connect(conn: Dict[str, Any]):
     return psycopg2.connect(
         host=conn.get("host", "127.0.0.1"),
@@ -40,9 +56,11 @@ def run_postgres_import(
     *,
     dry_run: bool,
     create_schema: bool,
+    strategy: str = "optimized",
 ) -> List[str]:
     """Execute Postgres import; return log lines."""
     lines: List[str] = []
+    _ = strategy
     conn_cfg = backend_cfg.get("connection") or {}
     schema = backend_cfg.get("schema") or "public"
     relationships = backend_cfg.get("relationships") or {}
@@ -98,20 +116,12 @@ def run_postgres_import(
                     )
                     continue
                 cols = list(mat.columns)
-                fq = sql.SQL("{}.{}").format(sql.Identifier(schema), sql.Identifier(part_name))
-                col_sql = sql.SQL(", ").join(map(sql.Identifier, cols))
                 pks = [
                     target_field_name(fk, spec)
                     for fk, _, spec in flat_leaf_columns(be.cfg)
                     if spec.get("is_key")
                 ]
-                base = sql.SQL("INSERT INTO {} ({}) VALUES %s").format(fq, col_sql)
-                if pks:
-                    full = base + sql.SQL(" ON CONFLICT ({}) DO NOTHING").format(
-                        sql.SQL(", ").join(map(sql.Identifier, pks))
-                    )
-                else:
-                    full = base
+                full = build_insert_sql(schema, part_name, cols, pks)
                 tuples = [tuple(row) for row in mat.itertuples(index=False, name=None)]
                 logger.debug(
                     "[postgres] SQL: %s (%d row(s), page_size=500)",

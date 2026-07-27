@@ -60,6 +60,7 @@ Options:
 - `--log-level DEBUG|INFO|WARNING|ERROR` — terminal verbosity (default `INFO`); the session log file under `logs/` always records `DEBUG`.
 - `--show-data` / `--no-data` — force or suppress the per-entity record dump (default: entities with up to 50 rows are dumped).
 - `--benchmark` — write per-phase metrics to `benchmarks/benchmark_<timestamp>.json` and append `benchmarks/benchmark_history.csv` (implies `--no-data`).
+- `--execution stream|materialize` — write path (default `stream`). `stream` imports in bounded memory (~one read chunk, roughly constant in file size); `materialize` loads each source fully (the phase-measured baseline). Streaming supports union (`"source": [...]`) entities: it samples one first chunk per source to build the shared superset, then widens each chunk to it. `--dry-run` and `--benchmark` always use `materialize`. Neo4j relationships are streamed too, in a bounded second pass over the relationship sources after all nodes are written.
 - `--no-create-schema` — skip DDL where applicable.
 
 ### Architecture
@@ -95,8 +96,10 @@ After that, `./run_example.sh --` + TAB suggests flags (`--fresh-start`, `--clea
 
 ### Benchmarks
 
-Generate a deterministic synthetic e-commerce dataset (N = number of products;
-sources scale N / 3N / 2N / 2N; the same `--seed` reproduces byte-identical files):
+Generate a deterministic synthetic e-commerce dataset. `--rows` is the **total
+number of rows across all sources** (split ~1:3:2:2 among stock/purchase/select/
+cart with slight seeded jitter), not the product count; the same `--seed`
+reproduces byte-identical files:
 
     python scripts/generate_benchmark_data.py --rows 100000 --seed 42 \
       --out data/benchmark/generated/100000 --mode both
@@ -111,9 +114,23 @@ import is preceded by a clean, so every measurement is a cold load:
     python scripts/run_benchmarks.py --sizes 1000,10000,100000 \
       --modes multi,combined --repetitions 3
 
+The matrix defaults to the `optimized` strategy (vectorized casting and batched
+writes). Pass `--strategies naive,optimized` to measure both baselines in a single
+run for a before/after comparison; `naive` reproduces the original row-at-a-time
+behavior. Cassandra, Redis and Neo4j are slow only under `naive` — `optimized`
+batches their writes, so the earlier per-row round-trip cost disappears. The same
+switch exists on a single import: `python -m polyglotimportcsv --strategy naive`.
+
+The matrix also has an `execution` axis (default `stream`). Pass
+`--executions materialize,stream` to compare the two write paths: `materialize`
+loads each source fully, so peak memory grows with the dataset, while `stream`
+holds ~one read chunk at a time, so peak stays roughly constant. Each run records
+`peak_memory_mb` (whole-import peak measured with `tracemalloc`). The same switch
+exists on a single import: `python -m polyglotimportcsv --execution materialize`.
+
 Results land in `benchmarks/`: a `benchmark_run_<timestamp>.json` plus an
-append-only `benchmark_results.csv` (`size,mode,backend,entity,phase,rows,
-median_seconds,rows_per_second`) for the report graphs.
+append-only `benchmark_results.csv` (`size,mode,strategy,execution,backend,entity,
+phase,rows,median_seconds,rows_per_second,peak_memory_mb`) for the report graphs.
 
 ### License
 
@@ -178,6 +195,7 @@ Opções úteis:
 - `--log-level DEBUG|INFO|WARNING|ERROR` — verbosidade do terminal (padrão `INFO`); o arquivo de log de sessão em `logs/` sempre grava `DEBUG`.
 - `--show-data` / `--no-data` — força ou suprime a exibição dos registros por entidade (padrão: entidades com até 50 linhas são exibidas).
 - `--benchmark` — grava métricas por fase em `benchmarks/benchmark_<timestamp>.json` e acrescenta `benchmarks/benchmark_history.csv` (implica `--no-data`).
+- `--execution stream|materialize` — caminho de escrita (padrão `stream`). `stream` importa com memória limitada (~um bloco de leitura, praticamente constante no tamanho do arquivo); `materialize` carrega cada origem por completo (a linha de base medida por fase). O modo `stream` também aceita entidades de união (`"source": [...]`): amostra o primeiro bloco de cada origem para montar o superconjunto de colunas e então alarga cada bloco para ele. `--dry-run` e `--benchmark` usam sempre `materialize`. Os relacionamentos do Neo4j também são transmitidos, em uma segunda passagem de memória limitada sobre as origens dos relacionamentos, após a escrita de todos os nós.
 - `--no-create-schema` — não emite DDL de criação (quando aplicável).
 
 ### Arquitetura
@@ -212,8 +230,10 @@ Depois, `./run_example.sh --` + TAB sugere flags (`--fresh-start`, `--clean`, `-
 
 ### Benchmarks
 
-Gere um dataset e-commerce sintético determinístico (N = número de produtos; as
-fontes escalam N / 3N / 2N / 2N; a mesma `--seed` reproduz arquivos byte-idênticos):
+Gere um dataset e-commerce sintético determinístico. `--rows` é o **total de
+linhas somando todas as fontes** (dividido ~1:3:2:2 entre stock/purchase/select/
+cart com leve jitter seedado), não o número de produtos; a mesma `--seed` reproduz
+arquivos byte-idênticos:
 
     python scripts/generate_benchmark_data.py --rows 100000 --seed 42 \
       --out data/benchmark/generated/100000 --mode both
@@ -228,9 +248,24 @@ precedida de uma limpeza, então cada medição é uma carga a frio:
     python scripts/run_benchmarks.py --sizes 1000,10000,100000 \
       --modes multi,combined --repetitions 3
 
+A matriz usa por padrão a estratégia `optimized` (casting vetorizado e escritas em
+lote). Use `--strategies naive,optimized` para medir as duas linhas de base numa só
+execução (comparação antes/depois); `naive` reproduz o comportamento original linha
+a linha. Cassandra, Redis e Neo4j só são lentos sob `naive` — `optimized` agrupa
+suas escritas, eliminando o custo de uma ida ao banco por linha. A mesma opção vale
+para uma importação avulsa: `python -m polyglotimportcsv --strategy naive`.
+
+A matriz também tem um eixo `execution` (padrão `stream`). Use
+`--executions materialize,stream` para comparar os dois caminhos de escrita:
+`materialize` carrega cada origem por completo, então o pico de memória cresce com
+o dataset, enquanto `stream` mantém ~um bloco de leitura por vez, então o pico fica
+praticamente constante. Cada execução registra `peak_memory_mb` (pico da importação
+inteira medido com `tracemalloc`). A mesma opção vale para uma importação avulsa:
+`python -m polyglotimportcsv --execution materialize`.
+
 Os resultados vão para `benchmarks/`: um `benchmark_run_<timestamp>.json` e um
-`benchmark_results.csv` append-only (`size,mode,backend,entity,phase,rows,
-median_seconds,rows_per_second`) para os gráficos do relatório.
+`benchmark_results.csv` append-only (`size,mode,strategy,execution,backend,entity,
+phase,rows,median_seconds,rows_per_second,peak_memory_mb`) para os gráficos do relatório.
 
 ### Licença
 
