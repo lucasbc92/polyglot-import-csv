@@ -122,6 +122,29 @@ def _flush_remainder(
     buffers[partition_name] = []
 
 
+def _process_chunk(
+    chunk: pd.DataFrame,
+    ecfg: Dict[str, Any],
+    binding: EntityBinding,
+) -> "tuple[pd.DataFrame, List[Dict[str, Any]]]":
+    """Run one chunk through the shared per-entity pipeline.
+
+    Union entities are widened to the binding's superset (data_cols + _source,
+    missing filled ""); then non-`each` filters and the vectorized cast are
+    applied. Returns (cast_frame, filters) so the node loop can `expand_each`
+    on the same filters. Reused by the node loop and the relationship pass so
+    both shape rows identically.
+    """
+    working = chunk
+    if isinstance(ecfg.get("source"), list):
+        working = chunk.reindex(columns=list(binding.kinds.keys()), fill_value="")
+    filters = binding.cfg.get("filters") or []
+    non_each = [f for f in filters if f.get("operator") != "each"]
+    filtered = apply_filters(working, non_each, binding.kinds)
+    casted = cast_frame(filtered, binding.kinds, strategy="optimized")
+    return casted, filters
+
+
 def run_stream_import(
     config: Dict[str, Any],
     base_dir: "str | Path",
@@ -186,18 +209,7 @@ def run_stream_import(
                     else:
                         bindings[ename] = bind_entity_from_sample(ename, ecfg, chunk, yielded_name)
                 binding = bindings[ename]
-                # Union entities: widen each incoming chunk to the shared
-                # superset (data_cols + _source, missing filled ""), so
-                # filter/cast/expand/write see exactly what materialize's
-                # concatenated frame carries. binding.kinds keys are already
-                # ordered data_cols + [_source] (see _union_source).
-                working = chunk
-                if is_union:
-                    working = chunk.reindex(columns=list(binding.kinds.keys()), fill_value="")
-                filters = binding.cfg.get("filters") or []
-                non_each = [f for f in filters if f.get("operator") != "each"]
-                filtered = apply_filters(working, non_each, binding.kinds)
-                casted = cast_frame(filtered, binding.kinds, strategy="optimized")
+                casted, filters = _process_chunk(chunk, ecfg, binding)
                 for partition_name, part_df in expand_each(casted, filters, ename):
                     buffers.setdefault(partition_name, []).append(part_df)
                     partition_binding[partition_name] = binding
