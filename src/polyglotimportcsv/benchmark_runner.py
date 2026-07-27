@@ -26,16 +26,48 @@ _MODE_CONFIG = {
 }
 
 
-def _ensure_dataset(data_dir: Path, size: int, seed: int, mode: str, generate) -> Path:
-    """Generate the dataset for ``size`` under ``data_dir/<size>/`` if files are missing."""
-    dpath = data_dir / str(size)
+def _data_rows(path: Path) -> int:
+    """Count data rows (lines minus header). The generator never emits embedded
+    newlines, so line counting matches the CSV row count."""
+    with open(path, "rb") as fh:
+        return max(0, sum(1 for _ in fh) - 1)
+
+
+def _action_counts(path: Path) -> Dict[str, int]:
+    """Count rows per ``action`` in the combined file. ``action`` is the first
+    column, so the leading field is read without parsing the full row."""
+    counts: Dict[str, int] = {}
+    with open(path, "rb") as fh:
+        next(fh, None)  # header
+        for line in fh:
+            action = line.split(b",", 1)[0].decode("utf-8", "replace")
+            counts[action] = counts.get(action, 0) + 1
+    return counts
+
+
+def _cache_matches(dpath: Path, size: int, seed: int, mode: str) -> bool:
+    """Does the dataset cached at ``dpath`` match what ``(size, seed, mode)`` asks for?
+
+    The on-disk cache is keyed only by size, so a directory written under different
+    generator semantics (when ``--sizes`` meant products) or a different seed would
+    otherwise be reused silently and benchmark the wrong row counts.
+    """
+    split = benchmark_data._split_rows(size, seed)
     if mode == "combined":
-        needed = [benchmark_data.JOIN_FILE]
-        gen_mode = "combined"
-    else:
-        needed = list(benchmark_data.SOURCE_FILES.values())
-        gen_mode = "multi"
-    if not all((dpath / fname).is_file() for fname in needed):
+        path = dpath / benchmark_data.JOIN_FILE
+        return path.is_file() and _action_counts(path) == split
+    return all(
+        (dpath / fname).is_file() and _data_rows(dpath / fname) == split[src]
+        for src, fname in benchmark_data.SOURCE_FILES.items()
+    )
+
+
+def _ensure_dataset(data_dir: Path, size: int, seed: int, mode: str, generate) -> Path:
+    """Generate the dataset for ``size`` under ``data_dir/<size>/`` unless a cached
+    one already matches ``(size, seed)``."""
+    dpath = data_dir / str(size)
+    gen_mode = "combined" if mode == "combined" else "multi"
+    if not _cache_matches(dpath, size, seed, gen_mode):
         generate(dpath, rows=size, seed=seed, mode=gen_mode)
     return dpath
 
