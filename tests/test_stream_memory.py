@@ -320,3 +320,57 @@ def test_stream_union_peak_does_not_scale_with_rows(tmp_path):
         f"union peak memory scaled with row count: peak_small={peak_small} "
         f"peak_large={peak_large} (ratio={peak_large / peak_small:.2f})"
     )
+
+
+def test_stream_union_and_rel_purchased_matches_materialize():
+    """The real neo4j PURCHASED relationship (from 'purchase') streamed vs.
+    materialized over data/benchmark/ must yield identical edges."""
+    from polyglotimportcsv.importers.neo4j_importer import _rel_rows_for_batch
+    from polyglotimportcsv.entity_utils import (
+        flat_leaf_columns, resolve_csv_column, target_field_name,
+    )
+
+    config, base_dir, overrides = _ecommerce_config_and_overrides()
+    dbms = "neo4j"
+
+    class _RelSink(_RecordingSink):
+        def __init__(self):
+            super().__init__()
+            self.rel_frames = {}
+
+        def write_relationships(self, rname, rspec, from_binding, to_binding, batch):
+            self.rel_frames.setdefault(rname, []).append(batch.copy())
+            return len(batch)
+
+    sink = _RelSink()
+    sr.run_stream_import(
+        config, base_dir,
+        sink_factories={dbms: lambda cfg: sink},
+        only=[dbms], source_overrides=overrides, chunksize=8192,
+    )
+    stream_edges = pd.concat(sink.rel_frames["PURCHASED"], ignore_index=True)
+
+    # --- Materialize edge rows for PURCHASED ---
+    sources = load_sources(config["sources"], base_dir, overrides)
+    bound = resolve_backend_entities(config[dbms], sources, {}, strategy="optimized")
+    rspec = config[dbms]["relationships"]["PURCHASED"]
+    from_be = bound[rspec["from"]]
+    f1 = [x for x in (from_be.cfg.get("filters") or []) if x.get("operator") != "each"]
+    mat_dff = apply_filters(from_be.df, f1, from_be.kinds)
+
+    def _edge_tuples(df):
+        fk_from = [(fk, sp) for fk, _, sp in flat_leaf_columns(bound[rspec["from"]].cfg) if sp.get("is_key")][0]
+        fk_to = [(fk, sp) for fk, _, sp in flat_leaf_columns(bound[rspec["to"]].cfg) if sp.get("is_key")][0]
+        cols = list(df.columns)
+        from_src = resolve_csv_column(fk_from[0], fk_from[1], cols)
+        to_src = resolve_csv_column(fk_to[0], fk_to[1], cols)
+        rel_cols = rspec.get("columns") or {}
+        mk_names = [target_field_name(fk, sp) for fk, sp in rel_cols.items() if sp.get("is_key")]
+        rows = _rel_rows_for_batch(df, from_src, to_src, rel_cols, mk_names)
+        return sorted(
+            (str(a), str(b), tuple(sorted((k, str(v)) for k, v in {**rest, **mk}.items())))
+            for a, b, rest, mk in rows
+        )
+
+    assert _edge_tuples(stream_edges) == _edge_tuples(mat_dff)
+    assert len(_edge_tuples(stream_edges)) > 0
