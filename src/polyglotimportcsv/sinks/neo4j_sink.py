@@ -1,10 +1,9 @@
 """Neo4jSink: DbmsSink adapter for Neo4j (spec: streaming import, Task 5).
 
-NODES ONLY. Relationships need every node set to exist plus a second pass
-over the relationship source; that is out of scope for a bounded-memory
-streaming pass (see the plan's Task 5 scope note). If ``backend_cfg``
-declares relationships, a single warning is logged at construction time;
-run with ``--execution materialize`` for full graphs (nodes + relationships).
+Writes both nodes (pass 1) and relationships (pass 2, if declared). Relationships
+are written by a second pass driven by ``stream_runner`` calling ``write_relationships``.
+Relationships need every node set to exist before edge insertion, which requires
+two streaming passes over the entity/relationship sources.
 
 Reuses the same props-shaping (``props_from_row``) and batched-write helper
 (``_merge_nodes_batched`` -> UNWIND) as the materialize importer
@@ -47,7 +46,7 @@ def _single_key(cfg: Dict[str, Any], partition_name: str):
 
 
 class Neo4jSink:
-    """Streams cast batches into Neo4j nodes, one label per partition (nodes only)."""
+    """Streams cast batches into Neo4j nodes and relationships, one label/type per partition."""
 
     def __init__(self, backend_cfg: Dict[str, Any], *, driver_factory=_default_neo4j_driver):
         conn = backend_cfg.get("connection") or {}
@@ -63,10 +62,6 @@ class Neo4jSink:
         # partition_name -> set of already-merged key values (first-wins,
         # kept across write_batch calls for the sink's whole lifetime).
         self._seen: Dict[str, Set[Any]] = {}
-        if backend_cfg.get("relationships"):
-            logger.warning(
-                "[neo4j] streaming imports nodes only; relationships require --execution materialize"
-            )
 
     def create_schema(self) -> None:
         """No-op: per-label uniqueness constraints are created lazily in ensure_partition."""

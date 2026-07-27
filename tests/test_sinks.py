@@ -692,7 +692,7 @@ def test_neo4j_dedupe_first_wins_holds_across_write_batch_calls():
     assert keys == ["u0", "u1", "u2"]
 
 
-def test_neo4j_logs_nodes_only_warning_when_relationships_declared(caplog):
+def test_neo4j_no_nodes_only_warning_when_relationships_declared(caplog):
     rec = {"run": [], "tx_run": []}
     driver = _FakeNeoDriver(rec)
 
@@ -700,7 +700,7 @@ def test_neo4j_logs_nodes_only_warning_when_relationships_declared(caplog):
         Neo4jSink(NEO4J_CFG, driver_factory=lambda c: driver)
 
     warnings = [r.message for r in caplog.records if r.levelno == logging.WARNING]
-    assert any("streaming imports nodes only" in m and "materialize" in m for m in warnings)
+    assert not any("nodes only" in m for m in warnings)
 
 
 def test_neo4j_no_warning_when_no_relationships_declared(caplog):
