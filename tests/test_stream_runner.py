@@ -26,6 +26,7 @@ class _FakeSink:
         self.closed = False
         self.calls = []          # ordered log of ("node", partition) / ("rel", rname)
         self.rel_rows = {}       # rname -> total rows received
+        self.rel_frames = {}     # rname -> [DataFrame, ...] as received
 
     def create_schema(self):
         self.schema_calls += 1
@@ -42,6 +43,7 @@ class _FakeSink:
     def write_relationships(self, rname, rspec, from_binding, to_binding, batch):
         self.calls.append(("rel", rname))
         self.rel_rows[rname] = self.rel_rows.get(rname, 0) + len(batch)
+        self.rel_frames.setdefault(rname, []).append(batch.copy())
         return len(batch)
 
     def close(self):
@@ -202,5 +204,12 @@ def test_stream_import_writes_relationships_after_all_nodes(tmp_path):
     assert all(c[0] == "node" for c in fake.calls[:first_rel])
 
     # (c) the relationship pass drives from the User source, resolving both
-    #     endpoints' FKs from that one frame
+    #     endpoints' FKs (and the edge prop) from that one frame — verified by
+    #     inspecting the actual batch handed to write_relationships, not just
+    #     its length.
+    rel_df = pd.concat(fake.rel_frames["LIKES"], ignore_index=True)
+    assert {"person_id", "thing_id", "weight"} <= set(rel_df.columns)
+    assert set(rel_df["person_id"]) == {"u0", "u1", "u2"}
+    assert set(rel_df["thing_id"]) == {"t0", "t1", "t2"}
+
     assert fake.closed is True
