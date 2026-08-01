@@ -23,9 +23,18 @@ _BOOL_WORDS = {"true", "false"}
 
 
 def is_boolean_series(non_empty: pd.Series) -> bool:
-    """True when every non-empty value is 'true'/'false' (case-insensitive)."""
-    vals = {str(v).strip().lower() for v in non_empty}
-    return bool(vals) and vals <= _BOOL_WORDS
+    """True when every non-empty value is 'true'/'false' (case-insensitive).
+
+    Stops at the first value that is not a boolean word instead of building a set
+    over the whole column: this runs on every non-numeric column of every import,
+    and all but the genuinely boolean ones are decided by their first value.
+    """
+    seen = False
+    for v in non_empty:
+        if str(v).strip().lower() not in _BOOL_WORDS:
+            return False
+        seen = True
+    return seen
 
 
 def cast_value(val: Any, kind: str) -> Any:

@@ -86,6 +86,31 @@ def test_csv_appends(tmp_path):
     assert len(lines) == 3  # header + two runs
 
 
+def _rec(phase, entity="products", seconds=0.2):
+    return {"backend": "postgres", "entity": entity, "phase": phase,
+            "rows": 100, "seconds": seconds, "rows_per_second": 100 / seconds}
+
+
+def test_filter_phase_is_excluded_from_results():
+    run = _run(1000, "multi", 0, 0.2)
+    run["records"] = [_rec("filter"), _rec("write")]
+    results = br.median_results([run])
+    assert [r["phase"] for r in results] == ["write"]
+
+
+def test_excluding_filter_does_not_drop_other_phases():
+    run = _run(1000, "multi", 0, 0.2)
+    run["records"] = [_rec("read"), _rec("filter"), _rec("map"), _rec("write")]
+    results = br.median_results([run])
+    assert [r["phase"] for r in results] == ["read", "map", "write"]
+
+
+def test_a_run_of_only_filter_records_yields_no_results():
+    run = _run(1000, "multi", 0, 0.2)
+    run["records"] = [_rec("filter"), _rec("filter", entity="orders")]
+    assert br.median_results([run]) == []
+
+
 def test_group_order_preserved():
     # Deliberate non-alphabetical order: redis before postgres, orders before
     # products, write before read. median_results must preserve first-seen

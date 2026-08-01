@@ -1079,5 +1079,102 @@ métricas no terminal. Quando a \textit{flag} \texttt{-{}-benchmark} está ativa
 ferramenta grava as métricas em disco --- um arquivo JSON com carimbo de tempo e uma
 linha acrescentada a um CSV histórico, no diretório \texttt{benchmarks/} ---, acompanhadas
 de metadados do ambiente de execução (versão do Python, sistema operacional e tamanho de
-cada fonte). Essa gravação estruturada é o que viabiliza a coleta sistemática de
-resultados reproduzíveis, explorada no Capítulo~\ref{cap:avaliacao}.
+cada fonte). Além do tempo por fase, o instrumento registra o \textbf{pico de memória}
+consumido durante a execução, coletado com a biblioteca \texttt{tracemalloc}; essa medida
+é o que permite comparar, no Capítulo~\ref{cap:avaliacao}, o custo de memória dos dois
+modelos de execução apresentados na seção seguinte. Essa gravação estruturada é o que
+viabiliza a coleta sistemática de resultados reproduzíveis, explorada no
+Capítulo~\ref{cap:avaliacao}.
+
+
+\section{Modelos de Execução e Estratégias de Escrita}
+\label{sec:execucao-estrategias}
+
+A forma como a ferramenta \textbf{converte} os valores lidos e os \textbf{grava} no SGBD
+não é única: a importação é parametrizada por dois eixos independentes, expostos na CLI e
+com um valor-padrão eficiente. O primeiro, a \textbf{estratégia de escrita}
+(\texttt{-{}-strategy}), decide se a conversão de tipos e a gravação ocorrem linha a linha
+ou em lote. O segundo, o \textbf{modelo de execução} (\texttt{-{}-execution}), decide se o
+arquivo é carregado por inteiro na memória antes de ser gravado ou se é processado em
+fluxo, com consumo de memória limitado. Ambos os eixos são os fatores controlados na
+avaliação de desempenho do Capítulo~\ref{cap:avaliacao}; esta seção descreve o que cada um
+significa em termos de projeto e implementação.
+
+\subsection{Estratégias de Escrita}
+\label{sec:estrategias-escrita}
+
+A opção \texttt{-{}-strategy} admite dois valores. Na estratégia \textbf{ingênua}
+(\texttt{naive}), a ferramenta percorre os registros \textbf{um a um}: cada célula é
+convertida ao tipo nativo por uma chamada individual e cada linha é gravada no SGBD por um
+comando próprio. Esse caminho é simples e serve de \textbf{referência de comparação}, mas
+paga, por linha, o custo de uma conversão isolada e de uma ida e volta à rede (e, quando
+aplicável, de uma confirmação de transação). Na estratégia \textbf{otimizada}
+(\texttt{optimized}, o padrão), esses dois custos são amortizados. A conversão de tipos
+passa a ser \textbf{vetorizada} --- realizada uma vez por coluna, sobre todo o conjunto de
+valores, em vez de célula a célula ---, produzindo exatamente os mesmos valores e tipos que
+o caminho ingênuo. A gravação passa a ser feita em \textbf{lote}: um único comando carrega
+muitos registros de uma vez, reduzindo drasticamente o número de idas e vindas à rede.
+
+Cada SGBD implementa o lote com o recurso idiomático do seu respectivo controlador
+(\textit{driver}): no \textbf{PostgreSQL}, a inserção em lote de \texttt{execute\_values};
+no \textbf{MongoDB}, a inserção múltipla de \texttt{insert\_many}; no \textbf{Cassandra}, a
+execução concorrente de comandos preparados (com grau de concorrência 64 dentro de cada
+lote); no \textbf{Redis}, o enfileiramento de comandos em um \textit{pipeline} despachado
+de uma só vez; e no \textbf{Neo4j}, a cláusula \texttt{UNWIND} aplicada a uma lista de
+registros, seguida de \texttt{MERGE}, sobre um rótulo com restrição de unicidade. Como as
+duas estratégias produzem resultados idênticos, diferindo apenas no custo, a estratégia
+ingênua tem valor sobretudo metodológico: é a \textit{linha de base} contra a qual o ganho
+da via otimizada é medido no Capítulo~\ref{cap:avaliacao}.
+
+\subsection{Modelos de Execução: Materialização e \textit{Streaming}}
+\label{sec:modelos-execucao}
+
+A opção \texttt{-{}-execution} controla \textbf{quando} os dados ocupam a memória. No modo
+de \textbf{materialização} (\texttt{materialize}), cada fonte é carregada integralmente em
+memória --- em uma estrutura tabular (\textit{DataFrame}) --- e só então percorre as quatro
+fases de processamento (leitura, seleção, mapeamento e escrita) descritas na
+seção~\ref{sec:observabilidade}. Esse modelo torna as fases nitidamente separáveis, razão
+pela qual é ele que sustenta a decomposição por fase medida na avaliação; em contrapartida,
+o seu \textbf{pico de memória cresce com o tamanho do arquivo}, o que o inviabiliza para
+entradas maiores que a memória disponível.
+
+No modo de \textbf{fluxo} (\texttt{stream}, o padrão para importações reais), a fonte é
+lida em \textbf{blocos} de tamanho fixo (8192 linhas por bloco) e cada bloco é processado e
+gravado antes de o próximo ser lido. Assim, o pico de memória permanece próximo de
+\textbf{um único bloco} --- somado aos poucos registros ainda acumulados à espera de
+completar um lote de gravação ---, \textbf{constante em relação ao tamanho total do
+arquivo}. Isso habilita a importação de arquivos maiores que a memória da máquina, ao custo
+de um processamento mais entrelaçado: as quatro fases deixam de ser etapas sequenciais
+distintas e passam a se repetir a cada bloco.
+
+A arquitetura que viabiliza esse modo segue o padrão \textbf{portas e adaptadores}
+(\textit{ports and adapters}). Um \textbf{orquestrador} agnóstico de SGBD coordena o fluxo,
+mas não conhece nenhum banco em particular: ele não emite SQL nem Cypher e não remove
+duplicatas. Toda a especificidade de cada SGBD é isolada atrás de uma \textbf{porta} de
+escrita comum, o \texttt{DbmsSink}, para a qual cada banco fornece um \textbf{adaptador}
+(\texttt{PostgresSink}, \texttt{MongoSink}, \texttt{CassandraSink}, \texttt{RedisSink} e
+\texttt{Neo4jSink}). Cada adaptador reaproveita as mesmas rotinas de formatação de linha e
+de gravação em lote já usadas na importação por materialização, de modo que a lógica de
+cada SGBD não é duplicada entre os dois modelos de execução.
+
+O processamento de cada bloco reproduz, em pequena escala, o pipeline de importação. Ao ver
+o primeiro bloco de uma entidade, o orquestrador realiza um \textbf{vínculo tardio}: infere
+os tipos das colunas a partir daquela amostra --- prevalecendo sempre um tipo declarado
+explicitamente na configuração sobre o inferido --- e reutiliza esse vínculo para os blocos
+seguintes. A cada bloco, aplica os filtros de seleção, converte os tipos (sempre pela via
+otimizada, vetorizada) e roteia as linhas para as suas partições de destino, acumulando-as
+em áreas de espera; quando uma partição acumula registros suficientes, um lote é descarregado
+ao adaptador correspondente. Duas particularidades merecem nota: a gravação de
+\textbf{relacionamentos} no Neo4j exige um \textbf{segundo passe} sobre as fontes (as arestas
+só podem ser criadas depois que todos os nós de destino existem), realizado também em fluxo e
+com memória limitada; e o modo de fluxo suporta \textbf{fontes-união}, em que uma mesma
+entidade é alimentada por mais de um CSV.
+
+Por fim, os dois eixos se articulam com o restante da ferramenta. A estratégia ingênua só
+faz sentido no modo de materialização, que reproduz a referência linha a linha; o modo de
+fluxo emprega sempre a via otimizada. A equivalência dos dados gravados entre os dois
+modelos de execução --- mesmas partições, mesmas contagens e mesmas conversões --- é
+assegurada por testes automatizados, de modo que a escolha entre materialização e fluxo é
+uma decisão de \textbf{custo}, não de \textbf{correção}. É justamente esse custo --- tempo de
+importação e, sobretudo, pico de memória --- que a avaliação do Capítulo~\ref{cap:avaliacao}
+quantifica, varrendo sistematicamente os dois eixos aqui descritos.

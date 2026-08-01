@@ -25,6 +25,7 @@ from polyglotimportcsv.importers.cassandra_importer import (
     _write_batched,
 )
 from polyglotimportcsv.stream_binding import EntityBinding
+from polyglotimportcsv.row_view import iter_rows
 
 
 class CassandraSink:
@@ -72,7 +73,7 @@ class CassandraSink:
 
     def write_batch(self, partition_name: str, binding: EntityBinding, batch: pd.DataFrame) -> int:
         prepared, ordered_src, cql_by_src = self._tables[partition_name]
-        params_list = [_row_values(row, ordered_src, cql_by_src) for _, row in batch.iterrows()]
+        params_list = [_row_values(row, ordered_src, cql_by_src) for row in iter_rows(batch)]
         if not params_list:
             return 0
         return _write_batched(self._session, prepared, params_list, lambda n: None, concurrency=64)

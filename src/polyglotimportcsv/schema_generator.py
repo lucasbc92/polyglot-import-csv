@@ -37,6 +37,28 @@ def build_postgres_create_tables(
     return stmts
 
 
+def build_postgres_drop_foreign_keys(
+    schema: str,
+    relationships: Dict[str, Dict[str, Any]],
+) -> List[str]:
+    """ALTER TABLE ... DROP CONSTRAINT for each relationship, run before a load.
+
+    The counterpart to ``build_postgres_foreign_keys``: constraints are added
+    only once the load finished, so a load must start from unconstrained tables.
+    Both ``IF EXISTS`` clauses matter -- on a first run neither the table nor the
+    constraint is there yet.
+    """
+    stmts: List[str] = []
+    for rname, rspec in (relationships or {}).items():
+        from_t = rspec["from"]
+        con_name = f"{from_t}_{rspec['to']}_{rname}_fk".replace("-", "_")
+        stmts.append(
+            f'ALTER TABLE IF EXISTS "{schema}"."{from_t}" '
+            f'DROP CONSTRAINT IF EXISTS "{con_name}";'
+        )
+    return stmts
+
+
 def build_postgres_foreign_keys(
     schema: str,
     entities: Dict[str, Dict[str, Any]],

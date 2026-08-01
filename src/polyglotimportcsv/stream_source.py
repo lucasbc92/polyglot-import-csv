@@ -97,10 +97,16 @@ def sample_union_sources(
     ``names`` are the entries of a union ``source: [...]`` list: multi source
     names (keys of ``sources_cfg``) and/or combined-CSV origin values. Returns
     ``{name: sample_df}`` (data columns + trailing ``SOURCE_COLUMN``). Raises
-    ``ImportExecutionError`` if a requested name resolves to no source (for
-    combined origins, only origins present in the combined file's first chunk
-    are resolvable -- consistent with the streaming "kinds from first chunk"
-    contract).
+    ``ImportExecutionError`` if a requested name resolves to no source.
+
+    A combined CSV holds every origin in one file, and such files are routinely
+    grouped by origin (the benchmark generator writes all stock rows, then
+    purchase, ...), so an origin's first rows can sit far past the first chunk.
+    Its chunks are therefore scanned until every requested origin has been
+    sampled -- each origin still keeping only the one chunk-slice it first
+    appeared in, so peak memory stays O(sources x chunk), constant in total rows.
+    Scanning stops at the chunk that completes the set; only a genuinely absent
+    origin (an error) costs a full pass over the file.
     """
     base_dir = Path(base_dir)
     overrides = overrides or {}
@@ -121,27 +127,32 @@ def sample_union_sources(
             samples[name] = chunk
             continue
 
-        # Combined file: sample its first chunk and route by origin. Homogeneous
-        # columns mean any present origin gives the full column set.
+        # Combined file: route chunks by origin, keeping the first slice seen for
+        # each wanted origin, until they are all sampled (see the docstring).
         path = _resolve_path(name, decl["file"], base_dir, overrides)
-        chunk = next(iter(_read_chunks(path, chunksize)), None)
-        if chunk is None or len(chunk.columns) < 2:
-            continue
-        origin_col = chunk.columns[0]
-        origins = chunk[origin_col].astype(str)
-        data = chunk.drop(columns=[origin_col])
-        for value, group in data.groupby(origins, sort=True):
-            if str(value) not in wanted_set:
-                continue
-            sub = group.copy()
-            sub[SOURCE_COLUMN] = str(value)
-            samples[str(value)] = sub
+        for chunk in _read_chunks(path, chunksize):
+            if len(chunk.columns) < 2:
+                break
+            origin_col = chunk.columns[0]
+            origins = chunk[origin_col].astype(str)
+            data = chunk.drop(columns=[origin_col])
+            for value, group in data.groupby(origins, sort=True):
+                value = str(value)
+                if value not in wanted_set or value in samples:
+                    continue
+                sub = group.copy()
+                sub[SOURCE_COLUMN] = value
+                samples[value] = sub
+            if wanted_set <= samples.keys():
+                break
+        if wanted_set <= samples.keys():
+            break
 
     missing = [n for n in wanted if n not in samples]
     if missing:
         raise ImportExecutionError(
             "streaming union: no source provides " + ", ".join(repr(m) for m in missing)
-            + " (for combined CSVs, the origin must appear in the file's first chunk)."
+            + " (no declared source name, nor any origin value in a combined CSV, matches)."
         )
     # Return in union-list order so the superset column order is deterministic.
     return {n: samples[n] for n in wanted}

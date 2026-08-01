@@ -4,8 +4,37 @@ from pathlib import Path
 
 import pytest
 
+from polyglotimportcsv import benchmark_data as bdata
 from polyglotimportcsv import benchmark_runner as brun
 from polyglotimportcsv.benchmark_results import median_results
+
+
+def _write_csv(path: Path, columns, data_rows: int) -> None:
+    """Write a header plus ``data_rows`` filler rows — only the count matters here."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    filler = ",".join("x" for _ in columns)
+    path.write_text(
+        ",".join(columns) + "\n" + (filler + "\n") * data_rows, encoding="utf-8"
+    )
+
+
+def _write_join(path: Path, split) -> None:
+    """Write a combined file whose ``action`` column follows ``split``."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    filler = ",".join("x" for _ in bdata.JOIN_COLUMNS[1:])
+    lines = [",".join(bdata.JOIN_COLUMNS)]
+    for action, count in split.items():
+        lines.extend(f"{action},{filler}" for _ in range(count))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _recording_generate(calls):
+    def generate(out_dir, rows, seed, mode):
+        calls.append((Path(out_dir), rows, seed, mode))
+        Path(out_dir).mkdir(parents=True, exist_ok=True)
+        return {}
+
+    return generate
 
 
 def test_run_matrix_rejects_unknown_mode(tmp_path):
@@ -75,6 +104,65 @@ def test_run_matrix_iterates_and_cleans_before_import(tmp_path):
     # median aggregation consumes the labeled output
     results = median_results(labeled)
     assert results[0]["rows"] == 100
+
+
+def test_repetitions_sweep_the_whole_matrix_instead_of_repeating_one_cell(tmp_path):
+    """Each repetition is a full pass over the matrix.
+
+    Repeating a single cell three times in a row would give every cell but the
+    first only warm measurements (JVM JIT, DB buffers, page cache), so the median
+    would compare a cold first cell against warm later ones.
+    """
+    seen = []
+
+    def fake_importer(config_path, *, sgbd_config_path, collector, show_data,
+                      only, create_schema, source_overrides, strategy, execution):
+        seen.append((Path(config_path).name, execution))
+        collector.record("postgres", "products", "write", rows=100, seconds=0.1)
+        return []
+
+    labeled = brun.run_matrix(
+        sizes=[1000], modes=["multi", "combined"], repetitions=3,
+        executions=["materialize", "stream"],
+        sgbd_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+        seed=1, only=["postgres"], cleaners={},
+        importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
+        generate=lambda out_dir, rows, seed, mode: None,
+    )
+
+    one_pass = [
+        ("import_config.json", "materialize"), ("import_config.json", "stream"),
+        ("import_config_combined.json", "materialize"),
+        ("import_config_combined.json", "stream"),
+    ]
+    assert seen == one_pass * 3
+    # ...and the repetition label follows the pass, not the position in the cell.
+    assert [r["repetition"] for r in labeled] == [0] * 4 + [1] * 4 + [2] * 4
+
+
+def test_datasets_are_prepared_before_the_first_import(tmp_path):
+    """Generation is not a measurement: it must not run between timed imports."""
+    events = []
+
+    def fake_importer(config_path, *, sgbd_config_path, collector, show_data,
+                      only, create_schema, source_overrides, strategy, execution):
+        events.append("import")
+        return []
+
+    def generate(out_dir, rows, seed, mode):
+        events.append(f"generate:{rows}")
+        Path(out_dir).mkdir(parents=True, exist_ok=True)
+        return {}
+
+    brun.run_matrix(
+        sizes=[1000, 2000], modes=["multi"], repetitions=2,
+        sgbd_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+        seed=1, only=["postgres"], cleaners={},
+        importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
+        generate=generate,
+    )
+
+    assert events == ["generate:1000", "generate:2000"] + ["import"] * 4
 
 
 def test_on_run_fires_after_each_import_and_survives_a_crash(tmp_path):
@@ -203,3 +291,89 @@ def test_run_matrix_records_peak_memory(tmp_path):
     # Peak flows through consolidation onto the result row.
     res = median_results(labeled)
     assert res[0]["peak_memory_mb"] == peak
+
+
+def test_ensure_dataset_reuses_a_cache_matching_the_split(tmp_path):
+    split = bdata._split_rows(1000, 42)
+    for src, fname in bdata.SOURCE_FILES.items():
+        _write_csv(tmp_path / "1000" / fname, bdata.SOURCE_COLUMNS[src], split[src])
+
+    calls = []
+    brun._ensure_dataset(tmp_path, 1000, 42, "multi", _recording_generate(calls))
+
+    assert calls == []  # counts agree with the split -> no regeneration
+
+
+def test_ensure_dataset_regenerates_a_stale_multi_cache(tmp_path):
+    # Old semantics: --sizes 1000 meant 1000 products -> 8000 total rows.
+    stale = {"stock": 1000, "purchase": 3000, "select_product": 2000, "add_to_cart": 2000}
+    for src, fname in bdata.SOURCE_FILES.items():
+        _write_csv(tmp_path / "1000" / fname, bdata.SOURCE_COLUMNS[src], stale[src])
+
+    calls = []
+    brun._ensure_dataset(tmp_path, 1000, 42, "multi", _recording_generate(calls))
+
+    assert calls == [(tmp_path / "1000", 1000, 42, "multi")]
+
+
+def test_ensure_dataset_regenerates_a_stale_combined_cache(tmp_path):
+    # Old semantics: --sizes 1000 meant 1000 products -> an 8000-row join file.
+    stale = {"stock": 1000, "purchase": 3000, "select_product": 2000, "add_to_cart": 2000}
+    _write_join(tmp_path / "1000" / bdata.JOIN_FILE, stale)
+
+    calls = []
+    brun._ensure_dataset(tmp_path, 1000, 42, "combined", _recording_generate(calls))
+
+    assert calls == [(tmp_path / "1000", 1000, 42, "combined")]
+
+
+def test_ensure_dataset_reuses_a_combined_cache_matching_the_split(tmp_path):
+    _write_join(tmp_path / "1000" / bdata.JOIN_FILE, bdata._split_rows(1000, 42))
+
+    calls = []
+    brun._ensure_dataset(tmp_path, 1000, 42, "combined", _recording_generate(calls))
+
+    assert calls == []
+
+
+def test_ensure_dataset_regenerates_a_combined_cache_with_the_wrong_action_mix(tmp_path):
+    # The join total is `size` under every seed, so the total alone cannot tell a
+    # seed-42 cache from a seed-7 one — the per-action mix has to be checked too.
+    split42 = bdata._split_rows(1000, 42)
+    _write_join(tmp_path / "1000" / bdata.JOIN_FILE, split42)
+
+    assert bdata._split_rows(1000, 7) != split42  # guard: the seeds really differ
+    calls = []
+    brun._ensure_dataset(tmp_path, 1000, 7, "combined", _recording_generate(calls))
+
+    assert calls == [(tmp_path / "1000", 1000, 7, "combined")]
+
+
+@pytest.mark.parametrize("mode", ["multi", "combined"])
+def test_ensure_dataset_accepts_what_the_real_generator_writes(tmp_path, mode):
+    # If the freshness check disagreed with the generator, every run would
+    # regenerate the dataset instead of reusing the cache.
+    calls = []
+
+    def generate(out_dir, rows, seed, mode):
+        calls.append(mode)
+        return bdata.generate_dataset(out_dir, rows, seed=seed, mode=mode)
+
+    brun._ensure_dataset(tmp_path, 1000, 42, mode, generate)
+    brun._ensure_dataset(tmp_path, 1000, 42, mode, generate)
+
+    assert calls == [mode]  # generated once, reused the second time
+
+
+def test_ensure_dataset_regenerates_when_the_seed_changes_the_split(tmp_path):
+    # A cache written with seed 42 must not be reused for a different seed whose
+    # split differs, or the run silently benchmarks the wrong per-source shape.
+    split42 = bdata._split_rows(1000, 42)
+    for src, fname in bdata.SOURCE_FILES.items():
+        _write_csv(tmp_path / "1000" / fname, bdata.SOURCE_COLUMNS[src], split42[src])
+
+    assert bdata._split_rows(1000, 7) != split42  # guard: the seeds really differ
+    calls = []
+    brun._ensure_dataset(tmp_path, 1000, 7, "multi", _recording_generate(calls))
+
+    assert calls == [(tmp_path / "1000", 1000, 7, "multi")]

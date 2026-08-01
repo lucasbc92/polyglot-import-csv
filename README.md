@@ -131,6 +131,7 @@ exists on a single import: `python -m polyglotimportcsv --execution materialize`
 Results land in `benchmarks/`: a `benchmark_run_<timestamp>.json` plus an
 append-only `benchmark_results.csv` (`size,mode,strategy,execution,backend,entity,
 phase,rows,median_seconds,rows_per_second,peak_memory_mb`) for the report graphs.
+The `filter` phase is left out of both (`benchmark_results.EXCLUDED_PHASES`).
 
 ### License
 
@@ -266,6 +267,7 @@ inteira medido com `tracemalloc`). A mesma opção vale para uma importação av
 Os resultados vão para `benchmarks/`: um `benchmark_run_<timestamp>.json` e um
 `benchmark_results.csv` append-only (`size,mode,strategy,execution,backend,entity,
 phase,rows,median_seconds,rows_per_second,peak_memory_mb`) para os gráficos do relatório.
+A fase `filter` fica de fora dos dois (`benchmark_results.EXCLUDED_PHASES`).
 
 ### Licença
 
