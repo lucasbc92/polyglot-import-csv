@@ -53,6 +53,19 @@ On first encounter of a union entity (source is a `list`), build its
   (`stream_source._read_chunks`, `next(...)`). Combined mode: read the first
   chunk of the combined file and route by origin (homogeneous cols, so any
   origin's sample gives the full column set).
+
+> **Correction (2026-07-31).** Combined mode cannot stop at the first chunk.
+> Homogeneous columns make *any* origin's sample sufficient for the **superset**,
+> but not for the **kinds**: an origin-only column (`order_number`, `rating`,
+> `selected_product_id`, …) is empty in every other origin's rows, so kinds
+> inferred without that origin's rows diverge from materialize. Combined CSVs are
+> also routinely grouped by origin — the benchmark generator writes all `stock`
+> rows, then `purchase`, … — so once the leading block exceeds `READ_CHUNK`
+> (~70k total rows here) the later origins are absent from chunk 1 and the bind
+> raised `no source provides …`. `sample_union_sources` now scans the combined
+> file's chunks until every requested origin is sampled, keeping only the one
+> chunk-slice each origin first appeared in: peak stays O(sources × chunk), and
+> the scan stops at the chunk that completes the set.
 - Build `data_cols` = first-seen union across those samples' columns (same order
   rule as `_union_source`).
 - Reindex each sample to `data_cols + [_source]` (fill `""`), `pd.concat`,

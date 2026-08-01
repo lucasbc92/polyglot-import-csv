@@ -1,5 +1,7 @@
 import pandas as pd
+import pytest
 from polyglotimportcsv import stream_source as ss
+from polyglotimportcsv.business_exception import ImportExecutionError
 from polyglotimportcsv.sources import SOURCE_COLUMN
 
 
@@ -48,6 +50,61 @@ def test_sample_union_sources_routes_combined_origins(tmp_path):
     assert "action" not in samples["stock"].columns
     assert (samples["stock"][SOURCE_COLUMN] == "stock").all()
     assert (samples["cart"][SOURCE_COLUMN] == "cart").all()
+
+
+def test_sample_union_sources_finds_origin_starting_after_the_first_chunk(tmp_path):
+    # Combined CSVs are commonly grouped by origin (the benchmark generator emits
+    # all stock rows, then purchase, then select_product, then add_to_cart). Once
+    # the leading block is larger than one chunk, later origins are absent from the
+    # first chunk, so sampling has to keep scanning to reach them.
+    rows = ([("stock", i, f"s{i}") for i in range(2500)]
+            + [("cart", i, f"c{i}") for i in range(5)])
+    _write_csv(tmp_path / "j.csv", ["action", "id", "v"], rows)
+    cfg = {"ecom": {"file": "j.csv"}}
+    samples = ss.sample_union_sources(cfg, tmp_path, ["stock", "cart"], chunksize=1000)
+
+    assert set(samples) == {"stock", "cart"}
+    # Each origin still keeps at most one chunk-slice: bounded in total rows.
+    assert len(samples["stock"]) == 1000
+    assert len(samples["cart"]) == 5
+    assert "action" not in samples["cart"].columns
+    assert (samples["cart"][SOURCE_COLUMN] == "cart").all()
+
+
+def test_sample_union_sources_stops_scanning_once_every_origin_is_sampled(tmp_path):
+    # The scan is an eager read at bind time: it must stop at the chunk that
+    # completes the sample set, not walk the rest of the file.
+    rows = ([("stock", i, f"s{i}") for i in range(10)]
+            + [("cart", i, f"c{i}") for i in range(10)]
+            + [("tail", i, f"t{i}") for i in range(5000)])
+    _write_csv(tmp_path / "j.csv", ["action", "id", "v"], rows)
+    cfg = {"ecom": {"file": "j.csv"}}
+
+    reads = []
+    real_read_chunks = ss._read_chunks
+
+    def counting_read_chunks(path, chunksize):
+        for chunk in real_read_chunks(path, chunksize):
+            reads.append(len(chunk))
+            yield chunk
+
+    ss._read_chunks = counting_read_chunks
+    try:
+        samples = ss.sample_union_sources(cfg, tmp_path, ["stock", "cart"], chunksize=1000)
+    finally:
+        ss._read_chunks = real_read_chunks
+
+    assert set(samples) == {"stock", "cart"}
+    assert len(reads) == 1  # both origins live in chunk 1; the 5000 tail rows are not read
+
+
+def test_sample_union_sources_raises_when_an_origin_is_nowhere_in_the_file(tmp_path):
+    rows = [("stock", i, f"s{i}") for i in range(2500)]
+    _write_csv(tmp_path / "j.csv", ["action", "id", "v"], rows)
+    cfg = {"ecom": {"file": "j.csv"}}
+    with pytest.raises(ImportExecutionError) as exc:
+        ss.sample_union_sources(cfg, tmp_path, ["stock", "ghost"], chunksize=1000)
+    assert "'ghost'" in str(exc.value)
 
 
 def test_combined_routes_by_origin(tmp_path):
