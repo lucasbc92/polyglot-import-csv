@@ -106,6 +106,65 @@ def test_run_matrix_iterates_and_cleans_before_import(tmp_path):
     assert results[0]["rows"] == 100
 
 
+def test_repetitions_sweep_the_whole_matrix_instead_of_repeating_one_cell(tmp_path):
+    """Each repetition is a full pass over the matrix.
+
+    Repeating a single cell three times in a row would give every cell but the
+    first only warm measurements (JVM JIT, DB buffers, page cache), so the median
+    would compare a cold first cell against warm later ones.
+    """
+    seen = []
+
+    def fake_importer(config_path, *, sgbd_config_path, collector, show_data,
+                      only, create_schema, source_overrides, strategy, execution):
+        seen.append((Path(config_path).name, execution))
+        collector.record("postgres", "products", "write", rows=100, seconds=0.1)
+        return []
+
+    labeled = brun.run_matrix(
+        sizes=[1000], modes=["multi", "combined"], repetitions=3,
+        executions=["materialize", "stream"],
+        sgbd_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+        seed=1, only=["postgres"], cleaners={},
+        importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
+        generate=lambda out_dir, rows, seed, mode: None,
+    )
+
+    one_pass = [
+        ("import_config.json", "materialize"), ("import_config.json", "stream"),
+        ("import_config_combined.json", "materialize"),
+        ("import_config_combined.json", "stream"),
+    ]
+    assert seen == one_pass * 3
+    # ...and the repetition label follows the pass, not the position in the cell.
+    assert [r["repetition"] for r in labeled] == [0] * 4 + [1] * 4 + [2] * 4
+
+
+def test_datasets_are_prepared_before_the_first_import(tmp_path):
+    """Generation is not a measurement: it must not run between timed imports."""
+    events = []
+
+    def fake_importer(config_path, *, sgbd_config_path, collector, show_data,
+                      only, create_schema, source_overrides, strategy, execution):
+        events.append("import")
+        return []
+
+    def generate(out_dir, rows, seed, mode):
+        events.append(f"generate:{rows}")
+        Path(out_dir).mkdir(parents=True, exist_ok=True)
+        return {}
+
+    brun.run_matrix(
+        sizes=[1000, 2000], modes=["multi"], repetitions=2,
+        sgbd_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+        seed=1, only=["postgres"], cleaners={},
+        importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
+        generate=generate,
+    )
+
+    assert events == ["generate:1000", "generate:2000"] + ["import"] * 4
+
+
 def test_on_run_fires_after_each_import_and_survives_a_crash(tmp_path):
     seen: list[int] = []
 

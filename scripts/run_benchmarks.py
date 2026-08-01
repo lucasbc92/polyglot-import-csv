@@ -28,6 +28,36 @@ _ALL_BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
 
 CHECKPOINT_NAME = "benchmark_checkpoint.json"
 
+#: Metadata that has to agree for a checkpoint to be resumable. Runs measured
+#: under different axes describe a different matrix, and mixing them would
+#: silently corrupt the medians.
+RESUME_KEYS = ("seed", "sizes", "modes", "strategies", "executions", "repetitions",
+               "trace_memory")
+
+
+def resume_runs(path: Path, meta: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Labeled runs from an interrupted matrix at ``path``, if it matches ``meta``.
+
+    Returns an empty list when there is no checkpoint — asking to resume a matrix
+    that never ran just starts it.
+    """
+    if not Path(path).is_file():
+        return []
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    saved = payload.get("metadata") or {}
+    differing = [k for k in RESUME_KEYS if saved.get(k) != meta.get(k)]
+    if differing:
+        details = ", ".join(
+            f"{k}: checkpoint={saved.get(k)!r} requested={meta.get(k)!r}"
+            for k in differing
+        )
+        raise ValueError(
+            f"{path} was written by a different matrix and cannot be resumed "
+            f"({details}). Re-run with matching flags, or delete the checkpoint "
+            "to start over."
+        )
+    return payload.get("runs") or []
+
 
 def _parse_int_list(raw: str) -> List[int]:
     return [int(x) for x in raw.split(",") if x.strip()]
@@ -71,6 +101,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help="Comma-separated write paths: stream,materialize (default: stream). "
                              "Use 'materialize,stream' to compare peak_memory_mb.")
     parser.add_argument("--seed", type=int, default=42, help="Generator seed (default: 42).")
+    parser.add_argument("--no-trace-memory", dest="trace_memory", action="store_false",
+                        help="Do not run imports under tracemalloc. peak_memory_mb is then "
+                             "not reported, but the timings stop carrying the tracer's cost "
+                             "(measured at 8.6x on the read phase and ~6.5x on map, against "
+                             "roughly nothing on the database writes -- so it distorts the "
+                             "phases against each other, not by one factor). Use a traced run "
+                             "for memory and an untraced one for time.")
     parser.add_argument("--sgbd-config", type=Path, default=Path("data/ecommerce/sgbd_config.json"))
     parser.add_argument("--config-dir", type=Path, default=Path("data/ecommerce"),
                         help="Directory holding import_config.json / import_config_combined.json.")
@@ -80,6 +117,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help="Output directory for consolidated results (default: benchmarks).")
     parser.add_argument("--log-level", default="INFO",
                         help="Terminal log level (default: INFO). The session log file is always DEBUG.")
+    parser.add_argument("--resume", action="store_true",
+                        help=f"Continue an interrupted matrix from {CHECKPOINT_NAME} in "
+                             "--out, re-measuring only the cells it is missing. The axis "
+                             "flags must match the interrupted run.")
     args = parser.parse_args(argv)
 
     log_path = setup_reporting(getattr(logging, args.log_level.upper()))
@@ -94,17 +135,41 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     meta = environment_metadata(args.config_dir, {})
     meta.update({"seed": args.seed, "sizes": sizes, "modes": modes,
+                 "trace_memory": args.trace_memory,
                  "repetitions": args.repetitions, "strategies": strategies,
                  "executions": executions})
 
-    labeled = run_matrix(
-        sizes=sizes, modes=modes, repetitions=args.repetitions,
-        strategies=strategies, executions=executions,
-        sgbd_config_path=args.sgbd_config, config_dir=args.config_dir,
-        data_dir=args.data_dir, seed=args.seed, only=only,
-        cleaners=CLEANERS, importer=run_import, load_cfg=load_config,
-        on_run=_checkpoint_writer(args.out, meta),
-    )
+    completed: List[Dict[str, Any]] = []
+    if args.resume:
+        try:
+            completed = resume_runs(args.out / CHECKPOINT_NAME, meta)
+        except ValueError as e:
+            logging.getLogger(__name__).error("%s", e)
+            return 2
+        kv("Resuming", f"{len(completed)} run(s) already measured")
+
+    try:
+        labeled = run_matrix(
+            sizes=sizes, modes=modes, repetitions=args.repetitions,
+            strategies=strategies, executions=executions,
+            sgbd_config_path=args.sgbd_config, config_dir=args.config_dir,
+            data_dir=args.data_dir, seed=args.seed, only=only,
+            cleaners=CLEANERS, importer=run_import, load_cfg=load_config,
+            on_run=_checkpoint_writer(args.out, meta),
+            completed=completed,
+            trace_memory=args.trace_memory,
+        )
+    except Exception:
+        # A matrix over large sizes runs for tens of minutes: the failure that
+        # ends it is the most important thing in the session, so it belongs in
+        # the log file next to the runs that led to it. An escaping exception
+        # only ever reaches stderr, which the log never sees.
+        logging.getLogger(__name__).exception(
+            "benchmark matrix aborted; measured runs are kept in %s (re-run with --resume)",
+            args.out / CHECKPOINT_NAME,
+        )
+        return 1
+
     results = median_results(labeled)
     json_path, csv_path = write_consolidated(results, meta, out_dir=args.out)
     # The matrix completed and is consolidated; the partial copy is now noise.

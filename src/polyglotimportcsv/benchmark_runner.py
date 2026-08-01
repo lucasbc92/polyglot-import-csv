@@ -72,6 +72,12 @@ def _ensure_dataset(data_dir: Path, size: int, seed: int, mode: str, generate) -
     return dpath
 
 
+def _run_key(run: Dict[str, object]) -> tuple:
+    """Identity of a labeled run: which matrix cell, and which repetition of it."""
+    return (run["size"], run["mode"], run["strategy"], run["execution"],
+            run["repetition"])
+
+
 def _overrides(mode: str, dpath: Path) -> Dict[str, str]:
     if mode == "combined":
         return {"ecommerce": str(dpath / benchmark_data.JOIN_FILE)}
@@ -95,15 +101,32 @@ def run_matrix(
     load_cfg: Callable[..., Dict[str, object]],
     generate: Callable[..., object] = benchmark_data.generate_dataset,
     on_run: Optional[Callable[[List[Dict[str, object]]], None]] = None,
+    trace_memory: bool = True,
+    completed: Optional[List[Dict[str, object]]] = None,
 ) -> List[Dict[str, object]]:
-    """Run sizes x modes x strategies x executions x repetitions, cleaning before each import.
+    """Run repetitions x sizes x modes x strategies x executions, cleaning before each import.
 
-    Returns labeled runs.
+    One repetition is a full sweep of the (size, mode, strategy, execution) matrix,
+    not a burst of back-to-back runs of the same cell: warm-up then affects every
+    cell's first pass equally instead of concentrating on whichever cell happens to
+    run first. Returns labeled runs.
 
     ``on_run`` is called with every labeled run collected so far, right after each
     import finishes. A full matrix over large sizes takes a long time and results
     are only consolidated at the end, so this lets the caller checkpoint: a crash
     on run N keeps the N-1 measurements that already succeeded.
+
+    ``completed`` carries labeled runs from an interrupted matrix: those cells are
+    not measured again, and the runs are returned (and checkpointed) alongside the
+    new ones, so a resumed matrix consolidates into the same result as an
+    uninterrupted one.
+
+    ``trace_memory`` toggles the ``tracemalloc`` capture. It is what makes
+    ``peak_memory_mb`` available, but it instruments every allocation and so
+    inflates the recorded seconds by an amount that depends on how many
+    allocations the path makes. Turn it off for timing-only runs, or to measure
+    the instrumentation's own cost (scripts/benchmark_tracemalloc_ab.py); runs
+    then carry ``peak_memory_mb=None``, which consolidation already tolerates.
     """
     config_dir = Path(config_dir)
     data_dir = Path(data_dir)
@@ -128,48 +151,77 @@ def run_matrix(
             f"unknown execution(s): {', '.join(unknown_executions)}. "
             f"Valid: {', '.join(_VALID_EXECUTIONS)}"
         )
-    labeled: List[Dict[str, object]] = []
-
+    # Prepare every (size, mode) cell up front. Generating datasets and loading
+    # configs is not part of any measurement, so it stays out of the repetition
+    # passes; it also fails fast when a size cannot be prepared, instead of after
+    # the earlier sizes have already been measured.
+    cells: List[Dict[str, object]] = []
     for size in sizes:
         for mode in modes:
             cfg_name, _ = _MODE_CONFIG[mode]
             config_path = config_dir / cfg_name
             dpath = _ensure_dataset(data_dir, size, seed, mode, generate)
-            overrides = _overrides(mode, dpath)
             merged = load_cfg(config_path, sgbd_config_path)
-            selected = requested or [b for b in _ALL_BACKENDS if b in merged]
+            cells.append({
+                "size": size,
+                "mode": mode,
+                "config_path": config_path,
+                "overrides": _overrides(mode, dpath),
+                "merged": merged,
+                "selected": requested or [b for b in _ALL_BACKENDS if b in merged],
+            })
+
+    labeled: List[Dict[str, object]] = list(completed or [])
+    already_measured = {_run_key(run) for run in labeled}
+
+    # Repetitions are the OUTERMOST loop: each pass sweeps the whole matrix once.
+    # With the repetition innermost, all measurements of the first cell would land
+    # in the process/JVM/page-cache warm-up window while every later cell ran warm
+    # — a bias aligned with the axes being compared, since the first level of each
+    # axis always goes first. Sweeping instead means every cell takes its coldest
+    # sample in pass 0, so the median across passes discards it uniformly.
+    for rep in range(repetitions):
+        for cell in cells:
+            merged = cell["merged"]
+            selected = cell["selected"]
             for strategy in strategies:
                 for execution in executions:
-                    for rep in range(repetitions):
-                        for backend in selected:
-                            block = merged.get(backend)
-                            if block is not None and backend in cleaners:
-                                cleaners[backend](block)
-                        collector = MetricsCollector()
-                        # Measure whole-import peak memory. Streaming's headline
-                        # metric is a bounded peak (~one read chunk) versus the
-                        # materialize path's peak that grows with dataset size.
+                    key = (cell["size"], cell["mode"], strategy, execution, rep)
+                    if key in already_measured:
+                        continue
+                    for backend in selected:
+                        block = merged.get(backend)
+                        if block is not None and backend in cleaners:
+                            cleaners[backend](block)
+                    collector = MetricsCollector()
+                    # Measure whole-import peak memory. Streaming's headline
+                    # metric is a bounded peak (~one read chunk) versus the
+                    # materialize path's peak that grows with dataset size.
+                    if trace_memory:
                         tracemalloc.start()
                         tracemalloc.reset_peak()
-                        importer(
-                            config_path,
-                            sgbd_config_path=sgbd_config_path,
-                            collector=collector,
-                            show_data=False,
-                            only=selected,
-                            create_schema=True,
-                            source_overrides=overrides,
-                            strategy=strategy,
-                            execution=execution,
-                        )
-                        peak_bytes = tracemalloc.get_traced_memory()[1]
+                    importer(
+                        cell["config_path"],
+                        sgbd_config_path=sgbd_config_path,
+                        collector=collector,
+                        show_data=False,
+                        only=selected,
+                        create_schema=True,
+                        source_overrides=cell["overrides"],
+                        strategy=strategy,
+                        execution=execution,
+                    )
+                    peak_mb: Optional[float] = None
+                    if trace_memory:
+                        peak_mb = tracemalloc.get_traced_memory()[1] / _BYTES_PER_MB
                         tracemalloc.stop()
-                        labeled.append({
-                            "size": size, "mode": mode, "strategy": strategy,
-                            "execution": execution, "repetition": rep,
-                            "peak_memory_mb": peak_bytes / _BYTES_PER_MB,
-                            "records": collector.to_records(),
-                        })
-                        if on_run is not None:
-                            on_run(labeled)
+                    labeled.append({
+                        "size": cell["size"], "mode": cell["mode"],
+                        "strategy": strategy, "execution": execution,
+                        "repetition": rep,
+                        "peak_memory_mb": peak_mb,
+                        "records": collector.to_records(),
+                    })
+                    if on_run is not None:
+                        on_run(labeled)
     return labeled
