@@ -12,6 +12,7 @@ from polyglotimportcsv.business_exception import ImportExecutionError
 from polyglotimportcsv.mapping_resolver import BoundEntity
 from polyglotimportcsv.filter_engine import apply_filters, expand_each
 from polyglotimportcsv.materialize import mongo_document_from_row
+from polyglotimportcsv.row_view import iter_rows
 from polyglotimportcsv.reporting import entity_progress
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,7 @@ def run_mongodb_import(
             t.rows = len(dff)
         for part_name, part_df in expand_each(dff, be.cfg.get("filters") or [], ename):
             with metrics.timed_phase("mongodb", part_name, "write") as tw:
-                docs = [mongo_document_from_row(row, be.cfg) for _, row in part_df.iterrows()]
+                docs = [mongo_document_from_row(row, be.cfg) for row in iter_rows(part_df)]
                 if not docs:
                     logger.warning("[mongodb] collection %s has 0 document(s) after filters", part_name)
                     lines.append(f"[mongodb] inserted 0 document(s) into {part_name}")

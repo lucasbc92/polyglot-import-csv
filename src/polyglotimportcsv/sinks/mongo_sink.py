@@ -13,6 +13,7 @@ from pymongo import MongoClient
 
 from polyglotimportcsv.business_exception import ImportExecutionError
 from polyglotimportcsv.materialize import mongo_document_from_row
+from polyglotimportcsv.row_view import iter_rows
 from polyglotimportcsv.stream_binding import EntityBinding
 
 
@@ -43,7 +44,7 @@ class MongoSink:
         """No-op: collections are created implicitly on first insert."""
 
     def write_batch(self, partition_name: str, binding: EntityBinding, batch: pd.DataFrame) -> int:
-        docs = [mongo_document_from_row(row, binding.cfg) for _, row in batch.iterrows()]
+        docs = [mongo_document_from_row(row, binding.cfg) for row in iter_rows(batch)]
         if not docs:
             return 0
         self.db[partition_name].insert_many(docs)

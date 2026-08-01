@@ -17,7 +17,7 @@ from polyglotimportcsv.entity_utils import (
 
 
 def _row_cell(row: pd.Series, field_key: str, spec: Dict[str, Any]) -> Any:
-    src = resolve_csv_column(field_key, spec, list(row.index))
+    src = resolve_csv_column(field_key, spec, row.index)
     val = row[src] if src in row.index else None
     return cell_scalar(val)
 
@@ -76,7 +76,7 @@ def mongo_document_from_row(row: pd.Series, entity_cfg: Dict[str, Any]) -> Dict[
 
 def redis_payload_from_row(row: pd.Series, entity_cfg: Dict[str, Any]) -> tuple[str, str]:
     """Return (redis_key, redis_value_json) for a row; key column must be marked is_key."""
-    csv_columns = list(row.index)
+    csv_columns = row.index
     key_entries = [
         (fk, sp)
         for fk, _, sp in flat_leaf_columns(entity_cfg)

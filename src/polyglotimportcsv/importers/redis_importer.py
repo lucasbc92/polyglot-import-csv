@@ -13,6 +13,7 @@ from polyglotimportcsv.mapping_resolver import BoundEntity
 from polyglotimportcsv.filter_engine import apply_filters, expand_each
 from polyglotimportcsv.materialize import redis_payload_from_row
 from polyglotimportcsv.reporting import entity_progress
+from polyglotimportcsv.row_view import iter_rows
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ def _default_redis_client(conn: Dict[str, Any]):
 
 def _kv_pairs(part_df, entity_cfg) -> List[Tuple[str, str]]:
     pairs: List[Tuple[str, str]] = []
-    for _, row in part_df.iterrows():
+    for row in iter_rows(part_df):
         try:
             pairs.append(redis_payload_from_row(row, entity_cfg))
         except ValueError:

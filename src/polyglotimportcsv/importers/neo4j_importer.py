@@ -20,6 +20,7 @@ from polyglotimportcsv.filter_engine import apply_filters, expand_each
 from polyglotimportcsv.mapping_resolver import BoundEntity
 from polyglotimportcsv.materialize import cell_scalar
 from polyglotimportcsv.reporting import entity_progress
+from polyglotimportcsv.row_view import iter_rows
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ def _default_neo4j_driver(conn: Dict[str, Any]):
 
 def props_from_row(row: pd.Series, ecfg: Dict[str, Any]) -> Dict[str, Any]:
     """Build one node's property dict from a CSV row (flat columns only)."""
-    csv_columns = list(row.index)
+    csv_columns = row.index
     out: Dict[str, Any] = {}
     for field_key, _, spec in flat_leaf_columns(ecfg):
         name = target_field_name(field_key, spec)
@@ -59,7 +60,7 @@ def _dedupe_props(part_df, ecfg, key_name, props_from_row, seen: Optional[Set[An
     if seen is None:
         seen = set()
     out, skipped = [], 0
-    for _, row in part_df.iterrows():
+    for row in iter_rows(part_df):
         props = props_from_row(row, ecfg)
         kid = props.get(key_name)
         if kid is None:
@@ -102,14 +103,14 @@ def _merge_nodes_batched(session, plabel, key_name, props_list, advance, batch: 
 def _merge_rels_naive(session, q, dff, from_src, to_src, rel_cols, mk_names, advance) -> int:
     """Issue one MERGE per row, exactly as the original (pre-batching) code did."""
     count = 0
-    for _, row in dff.iterrows():
+    for row in iter_rows(dff):
         a_id = cell_scalar(row[from_src] if from_src in row.index else None)
         b_id = cell_scalar(row[to_src] if to_src in row.index else None)
         if a_id is None or b_id is None:
             advance(1)
             continue
         rel_props: Dict[str, Any] = {}
-        csv_columns = list(row.index)
+        csv_columns = row.index
         for field_key, spec in rel_cols.items():
             name = target_field_name(field_key, spec)
             src = resolve_csv_column(field_key, spec, csv_columns)
@@ -125,13 +126,13 @@ def _merge_rels_naive(session, q, dff, from_src, to_src, rel_cols, mk_names, adv
 def _rel_rows_for_batch(dff, from_src, to_src, rel_cols, mk_names):
     """Shape rows for UNWIND batching: (a_id, b_id, rest_props, mk_params)."""
     rows: List[Tuple[Any, Any, Dict[str, Any], Dict[str, Any]]] = []
-    for _, row in dff.iterrows():
+    for row in iter_rows(dff):
         a_id = cell_scalar(row[from_src] if from_src in row.index else None)
         b_id = cell_scalar(row[to_src] if to_src in row.index else None)
         if a_id is None or b_id is None:
             continue
         rel_props: Dict[str, Any] = {}
-        csv_columns = list(row.index)
+        csv_columns = row.index
         for field_key, spec in rel_cols.items():
             name = target_field_name(field_key, spec)
             src = resolve_csv_column(field_key, spec, csv_columns)
