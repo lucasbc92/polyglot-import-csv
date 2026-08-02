@@ -114,12 +114,31 @@ import is preceded by a clean, so every measurement is a cold load:
     python scripts/run_benchmarks.py --sizes 1000,10000,100000 \
       --modes multi,combined --repetitions 3
 
+A crash part-way through does not cost the runs already measured: they are written
+to `benchmarks/benchmark_checkpoint.json` after every import. Re-run with the same
+axis flags plus `--resume` to measure only the missing cells:
+
+    python scripts/run_benchmarks.py --sizes 1000,10000,100000 \
+      --modes multi,combined --repetitions 3 --resume
+
+A repetition is a full sweep of the matrix, not a burst of runs of the same cell.
+The databases stay up for the whole matrix, so the first measurements pay the
+warm-up (JVM JIT on Cassandra/Neo4j, DB buffers, OS page cache); sweeping spreads
+that cost over every cell's first pass, and the median across passes drops it.
+
 The matrix defaults to the `optimized` strategy (vectorized casting and batched
 writes). Pass `--strategies naive,optimized` to measure both baselines in a single
 run for a before/after comparison; `naive` reproduces the original row-at-a-time
 behavior. Cassandra, Redis and Neo4j are slow only under `naive` — `optimized`
 batches their writes, so the earlier per-row round-trip cost disappears. The same
 switch exists on a single import: `python -m polyglotimportcsv --strategy naive`.
+
+Cassandra absorbs those batched writes at concurrency 64, and a node busy flushing
+or compacting can stop answering for longer than the driver's 10s default request
+timeout. The session therefore uses 30s (`cassandra.connection.request_timeout` in
+`sgbd_config.json` overrides it), and rows a batch reports as failed are retried
+with backoff — retrying is safe because a Cassandra `INSERT` is an upsert on the
+primary key. Without that, one slow response ends the whole matrix.
 
 The matrix also has an `execution` axis (default `stream`). Pass
 `--executions materialize,stream` to compare the two write paths: `materialize`
@@ -128,10 +147,23 @@ holds ~one read chunk at a time, so peak stays roughly constant. Each run record
 `peak_memory_mb` (whole-import peak measured with `tracemalloc`). The same switch
 exists on a single import: `python -m polyglotimportcsv --execution materialize`.
 
+`tracemalloc` instruments every allocation, so it inflates the recorded seconds by
+an amount that depends on how many allocations a path makes — and `materialize`
+(few large pandas allocations) and `stream` (many small per-chunk ones) do not
+allocate alike, so the overhead does not simply cancel out between them. Measure it
+before trusting a timing comparison:
+
+    python scripts/benchmark_tracemalloc_ab.py --size 10000 \
+      --executions materialize,stream --repetitions 3
+
+It runs the same cell with and without tracing, interleaving the two arms pass by
+pass so both share the warm-up, and prints the overhead per execution path.
+
 Results land in `benchmarks/`: a `benchmark_run_<timestamp>.json` plus an
 append-only `benchmark_results.csv` (`size,mode,strategy,execution,backend,entity,
 phase,rows,median_seconds,rows_per_second,peak_memory_mb`) for the report graphs.
-The `filter` phase is left out of both (`benchmark_results.EXCLUDED_PHASES`).
+The `filter` phase is left out of both, and of the end-of-run terminal table
+(`metrics.EXCLUDED_PHASES`).
 
 ### License
 
@@ -249,10 +281,29 @@ precedida de uma limpeza, então cada medição é uma carga a frio:
     python scripts/run_benchmarks.py --sizes 1000,10000,100000 \
       --modes multi,combined --repetitions 3
 
+Uma queda no meio da matriz não custa as execuções já medidas: elas são gravadas em
+`benchmarks/benchmark_checkpoint.json` após cada importação. Rode de novo com os
+mesmos flags de eixo mais `--resume` para medir só as células que faltam:
+
+    python scripts/run_benchmarks.py --sizes 1000,10000,100000 \
+      --modes multi,combined --repetitions 3 --resume
+
+Uma repetição é uma varredura completa da matriz, não uma rajada de execuções da
+mesma célula. Os bancos ficam de pé durante toda a matriz, então as primeiras
+medições pagam o aquecimento (JIT da JVM em Cassandra/Neo4j, buffers dos bancos,
+page cache do SO); a varredura distribui esse custo pela primeira passada de cada
+célula, e a mediana entre as passadas o descarta.
+
 A matriz usa por padrão a estratégia `optimized` (casting vetorizado e escritas em
 lote). Use `--strategies naive,optimized` para medir as duas linhas de base numa só
 execução (comparação antes/depois); `naive` reproduz o comportamento original linha
-a linha. Cassandra, Redis e Neo4j só são lentos sob `naive` — `optimized` agrupa
+a linha. O Cassandra recebe essas escritas em lote com concorrência 64, e um nó
+ocupado com *flush* ou *compaction* pode parar de responder por mais que os 10s de
+timeout padrão do driver. A sessão usa 30s (`cassandra.connection.request_timeout`
+no `sgbd_config.json` sobrescreve), e as linhas que um lote reporta como falhas são
+reenviadas com backoff — reenviar é seguro porque um `INSERT` no Cassandra é um
+upsert pela chave primária. Sem isso, uma resposta lenta derruba a matriz inteira.
+Cassandra, Redis e Neo4j só são lentos sob `naive` — `optimized` agrupa
 suas escritas, eliminando o custo de uma ida ao banco por linha. A mesma opção vale
 para uma importação avulsa: `python -m polyglotimportcsv --strategy naive`.
 
@@ -264,10 +315,24 @@ praticamente constante. Cada execução registra `peak_memory_mb` (pico da impor
 inteira medido com `tracemalloc`). A mesma opção vale para uma importação avulsa:
 `python -m polyglotimportcsv --execution materialize`.
 
+O `tracemalloc` instrumenta cada alocação, então infla os segundos registrados em
+uma medida que depende de quantas alocações o caminho faz — e `materialize` (poucas
+alocações grandes do pandas) e `stream` (muitas pequenas, por bloco) não alocam da
+mesma forma, então o custo não se cancela entre os dois. Meça antes de confiar em
+uma comparação de tempo:
+
+    python scripts/benchmark_tracemalloc_ab.py --size 10000 \
+      --executions materialize,stream --repetitions 3
+
+O script roda a mesma célula com e sem rastreamento, intercalando os dois braços a
+cada passada (para que ambos dividam o aquecimento), e imprime o custo por caminho
+de escrita.
+
 Os resultados vão para `benchmarks/`: um `benchmark_run_<timestamp>.json` e um
 `benchmark_results.csv` append-only (`size,mode,strategy,execution,backend,entity,
 phase,rows,median_seconds,rows_per_second,peak_memory_mb`) para os gráficos do relatório.
-A fase `filter` fica de fora dos dois (`benchmark_results.EXCLUDED_PHASES`).
+A fase `filter` fica de fora dos dois e também da tabela final no terminal
+(`metrics.EXCLUDED_PHASES`).
 
 ### Licença
 
