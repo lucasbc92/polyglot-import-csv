@@ -1,25 +1,39 @@
 \chapter{Considerações Finais}
+\label{cap:conclusao}
 
-Este TCC I apresentou a fundamentação teórica da persistência poliglota, o estado da arte
-em importação e modelagem de dados heterogêneos, e a proposta da ferramenta
-\textit{Polyglot Import CSV} como utilitário de \textit{bootstrap} declarativo a partir
-de CSV.
+Este trabalho apresentou a \textit{PolyglotImportCSV}, uma ferramenta de importação
+declarativa que materializa um mesmo conjunto de dados em formato CSV em cinco SGBDs de
+paradigmas distintos --- PostgreSQL, MongoDB, Cassandra, Redis e Neo4j --- a partir de dois
+arquivos de configuração validados estaticamente. Partindo da fundamentação sobre
+persistência poliglota e do estado da arte em importação e modelagem de dados heterogêneos,
+o trabalho evoluiu da proposta a uma implementação funcional, avaliada empiricamente.
 
-As principais contribuições desta etapa são: (i) um formato de configuração JSON validado
-estaticamente por JSON Schema, separado em mapeamento e conexão, com mapeamento recursivo
-de colunas e filtros por valor; (ii) um protótipo em Python que materializa o mesmo CSV
-operacional em PostgreSQL, MongoDB, Cassandra, Redis e Neo4j; (iii) o modo
-\texttt{-{}-dry-run} para revisão prévia de contagens; e (iv) o cenário e-commerce
-reprodutível com \texttt{ecommerce\_join.csv}, \texttt{import\_config.json},
-\texttt{sgbd\_config.json} e \texttt{docker-compose.yml}.
+As principais contribuições são: (i) um formato de configuração JSON, separado em mapeamento
+e conexão e validado por JSON Schema antes de qualquer escrita, com dois modos de entrada ---
+um arquivo por entidade (multifonte) e um único CSV combinado; (ii) o mapeamento declarativo
+de colunas com conversão nativa aos tipos de cada SGBD; (iii) uma camada de observabilidade e
+um subsistema de métricas que instrumentam cada fase da importação; (iv) dois eixos de
+desempenho --- a estratégia de escrita otimizada, com vetorização e gravação em lote, e o
+modelo de execução em fluxo, de memória limitada; e (v) uma avaliação empírica com dados reais
+que quantifica o custo de importar para os cinco paradigmas e o ganho de cada eixo.
 
-As limitações reconhecidas incluem: testes automatizados predominantemente unitários (sem
-suíte de integração contínua contra Docker); processamento em memória do CSV inteiro; e
-dependência do \textit{driver} Cassandra em ambientes Python recentes. Itens como
-interface gráfica, suporte a TSV/Excel, \textit{chunked processing} e novos conectores
-permanecem no escopo do TCC II (Capítulo 5).
+A avaliação (Capítulo~\ref{cap:avaliacao}) confirmou os objetivos traçados. A estratégia
+otimizada acelerou a importação em cerca de nove vezes sobre a linha de base ingênua, e o modo
+de execução em fluxo reduziu o pico de memória em mais de doze vezes no maior volume medido,
+mantendo-o constante em relação ao tamanho do arquivo --- o que habilita a importação de
+arquivos maiores que a memória disponível. A equivalência dos dados gravados entre os dois
+modos de importação e entre os dois modelos de execução, assegurada por testes automatizados,
+permitiu tratar a escolha entre eles como uma decisão de custo, não de correção.
 
-O trabalho de conclusão de curso em dezembro de 2026 poderá aprofundar a avaliação
-experimental (desempenho, consistência entre \textit{stores}) e a interface de uso,
-consolidando a ferramenta como artefato de pesquisa e de código aberto alinhado à
-literatura sobre SGPD e modelagem poliglota de dados.
+As limitações reconhecidas dizem respeito sobretudo ao ambiente de avaliação: os experimentos
+correram em uma única máquina, com os cinco SGBDs em contêineres partilhando os mesmos
+recursos, o que penalizou em especial a escrita no Cassandra --- uma restrição do ambiente, e
+não uma propriedade da ferramenta. Além disso, a suíte de testes permanece majoritariamente
+unitária, sem integração contínua contra os SGBDs conteinerizados.
+
+Como trabalho futuro (Capítulo~\ref{cap:futuros}), destacam-se uma interface gráfica que torne
+a ferramenta acessível a usuários menos familiarizados com a linha de comando, o aprofundamento
+da avaliação em volumes maiores e em ambientes com SGBDs dedicados, e a generalização do núcleo
+de importação a novos destinos. Consolida-se, assim, a \textit{PolyglotImportCSV} como artefato
+de pesquisa e de código aberto alinhado à literatura sobre persistência poliglota e modelagem
+de dados heterogêneos.
