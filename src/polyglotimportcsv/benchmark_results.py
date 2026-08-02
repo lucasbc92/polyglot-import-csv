@@ -7,14 +7,14 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 from polyglotimportcsv.benchmark_io import write_json_and_csv
+# Re-exported: the consolidated report and the terminal table exclude the same
+# phases, and callers already import the name from here.
+from polyglotimportcsv.metrics import EXCLUDED_PHASES
 
 _RESULT_FIELDS = (
     "timestamp", "size", "mode", "strategy", "execution", "backend", "entity",
     "phase", "rows", "median_seconds", "rows_per_second", "peak_memory_mb",
 )
-
-#: Phases kept out of the consolidated report.
-EXCLUDED_PHASES = ("filter",)
 
 
 def median_results(labeled_runs: List[Dict[str, object]]) -> List[Dict[str, object]]:

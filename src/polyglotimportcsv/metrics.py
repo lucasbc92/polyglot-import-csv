@@ -20,6 +20,11 @@ from polyglotimportcsv.benchmark_io import write_json_and_csv
 
 PHASES = ("read", "filter", "map", "write")
 
+#: Phases that are measured but left out of the reports — both the end-of-run
+#: terminal table and the consolidated benchmark output. Kept here so the two
+#: report paths cannot drift apart.
+EXCLUDED_PHASES = ("filter",)
+
 
 @dataclass
 class PhaseMetric:
