@@ -1,35 +1,41 @@
 \chapter{Atividades Futuras}
 \label{cap:futuros}
 
-Como continuidade deste trabalho, as seguintes atividades estão previstas para o
-TCC~II, abrangendo tanto a avaliação da ferramenta quanto a ampliação de suas
-funcionalidades:
+Concluídas a implementação da ferramenta e a sua avaliação de desempenho, esta seção
+reúne as atividades que dão continuidade ao trabalho. Elas dividem-se entre a ampliação da
+forma de uso, o aprofundamento da avaliação e a extensão das funcionalidades de importação.
 
 \begin{itemize}
-  \item \textbf{Avaliação de desempenho} das importações com diferentes volumes de dados
-        CSV e configurações, comparando importações simples e complexas para os diferentes
-        modelos de dados destino.
+  \item \textbf{Interface gráfica \textit{desktop}.} A ferramenta é hoje operada por uma
+        interface de linha de comando (Seção~\ref{sec:visao-geral}). O próximo passo
+        desejável --- e viável ainda dentro deste ciclo de trabalho --- é uma interface
+        gráfica que monte o comando de importação de forma assistida e permita visualizar e
+        editar os dois arquivos JSON de configuração, reduzindo a barreira de entrada para
+        usuários menos familiarizados com a linha de comando.
 
-  \item \textbf{Interface gráfica \textit{desktop}} (semestre seguinte) que monte o
-        comando CLI e visualize os arquivos JSON de configuração.
+  \item \textbf{Aprofundamento da avaliação de desempenho.} A avaliação do
+        Capítulo~\ref{cap:avaliacao} cobriu volumes de até cem mil linhas em uma única
+        máquina, com os cinco SGBDs em contêineres partilhando os mesmos recursos. Três
+        extensões se destacam: medir volumes maiores, na ordem de milhões de linhas;
+        aprofundar o caminho de escrita do Cassandra --- a fase dominante do custo --- para
+        além da concorrência já empregada pela estratégia otimizada
+        (Seção~\ref{sec:estrategias-escrita}); e repetir os experimentos em um ambiente com
+        SGBDs dedicados e ajustados, isolando o desempenho da ferramenta das restrições do
+        ambiente de contêineres.
 
-  \item \textbf{Suporte a TSV/Excel} e a processamento \textit{chunked} para CSV maiores
-        que a RAM.
+  \item \textbf{Suporte a outros formatos de entrada.} Aceitar arquivos TSV e planilhas
+        Excel, além de CSV, reaproveitando o mesmo mapeamento declarativo já existente.
 
-  \item \textbf{Importação com um arquivo CSV por entidade.} Identificar a origem de
-        cada dado é um requisito essencial do processo de importação: no formato atual,
-        cada linha do CSV precisa indicar a entidade a que pertence, papel cumprido pela
-        coluna discriminadora \texttt{action} em conjunto com os \texttt{filters} da
-        configuração (Seção~\ref{sec:config-format}). Uma evolução prevista é aceitar um arquivo CSV por
-        entidade, em que o próprio arquivo designa a origem dos dados, dispensando a
-        coluna discriminadora e os filtros correspondentes; o CSV único combinado
-        permaneceria como modo alternativo de entrada.
+  \item \textbf{Operadores de filtro adicionais e políticas de coerção configuráveis.}
+        Ampliar o vocabulário de seleção de linhas e permitir que o usuário defina como
+        valores ambíguos ou malformados são convertidos aos tipos nativos de cada SGBD.
 
-  \item \textbf{Operadores de filtro adicionais} e políticas de coerção de tipos
-        configuráveis.
+  \item \textbf{Testes de integração em ambiente conteinerizado.} A suíte de testes atual é
+        majoritariamente unitária; prevê-se automatizar testes de integração contra os cinco
+        SGBDs em \texttt{docker compose}, dentro de um fluxo de integração contínua (CI).
 
-  \item \textbf{Testes de integração} contra \texttt{docker compose} em CI.
-
-  \item \textbf{Generalização} do núcleo de importação para novos conectores
-        (mensageria, \textit{data lakes}, outros SGBDs).
+  \item \textbf{Generalização do núcleo de importação.} Estender a arquitetura de portas e
+        adaptadores (Seção~\ref{sec:modelos-execucao}) a novos destinos --- sistemas de
+        mensageria, \textit{data lakes} e outros SGBDs ---, reaproveitando o orquestrador
+        agnóstico de destino sem duplicar a lógica de importação.
 \end{itemize}
