@@ -11,7 +11,10 @@ representa um evento da loja virtual, identificado pela coluna \texttt{action}
 (\texttt{stock}, \texttt{purchase}, \texttt{select\_product} ou \texttt{add\_to\_cart}),
 e preenche apenas as colunas pertinentes àquele tipo de evento --- as demais permanecem
 vazias. A Tabela~\ref{tab:csv-colunas-acao} resume quais grupos de colunas cada ação
-preenche.
+preenche. Este arquivo é a entrada do \textbf{modo combinado} de importação; no
+\textbf{modo multifonte}, os mesmos dados são fornecidos como quatro arquivos CSV separados,
+um por origem (\texttt{ecommerce\_stock.csv}, \texttt{ecommerce\_purchase.csv},
+\texttt{ecommerce\_select\_product.csv} e \texttt{ecommerce\_add\_to\_cart.csv}).
 
 \begin{table}[H]
   \caption{Grupos de colunas do \texttt{ecommerce\_join.csv} preenchidos por ação.}
