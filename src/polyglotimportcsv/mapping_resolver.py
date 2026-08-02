@@ -42,6 +42,36 @@ def union_data_cols(headers: List[List[str]]) -> List[str]:
     return data_cols
 
 
+def _merge_union_kinds(
+    parts: List[SourceData], data_cols: List[str], df: pd.DataFrame
+) -> Dict[str, str]:
+    """Kinds for a union without re-inferring what the parts already agree on.
+
+    Inference is the dominant cost of a large import, and running it again on the
+    concatenated frame repeats work already done once per source. Where the parts
+    carrying a column agree, inferring on the concatenation cannot reach a different
+    answer, so theirs stands; only genuinely disputed columns are re-inferred.
+
+    A part that lacks the column contributes the ``""`` filled in by ``reindex``,
+    and one whose values are all blank is ``empty`` — inference drops both, so
+    neither can outvote a part that actually has values.
+    """
+    kinds: Dict[str, str] = {}
+    disputed: List[str] = []
+    for col in data_cols:
+        seen = {p.kinds[col] for p in parts if col in p.kinds}
+        seen.discard("empty")
+        if not seen:
+            kinds[col] = "empty"
+        elif len(seen) == 1:
+            kinds[col] = seen.pop()
+        else:
+            disputed.append(col)
+    if disputed:
+        kinds.update(infer_column_kinds(df[disputed]))
+    return kinds
+
+
 def _union_source(
     entity_name: str, names: List[str], sources: Dict[str, SourceData]
 ) -> SourceData:
@@ -54,7 +84,7 @@ def _union_source(
     all_cols = data_cols + [SOURCE_COLUMN]
     frames = [p.df.reindex(columns=all_cols, fill_value="") for p in parts]
     df = pd.concat(frames, ignore_index=True)
-    kinds = infer_column_kinds(df[data_cols])
+    kinds = _merge_union_kinds(parts, data_cols, df)
     kinds[SOURCE_COLUMN] = "string"
     return SourceData(name="+".join(names), df=df, kinds=kinds, file_header=data_cols)
 
