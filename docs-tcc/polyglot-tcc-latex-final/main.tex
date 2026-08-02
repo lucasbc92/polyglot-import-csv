@@ -41,6 +41,12 @@
 \usepackage{afterpage}
 \usepackage{rotating}
 \usepackage[framemethod=tikz]{mdframed}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepgfplotslibrary{groupplots}
+\pgfkeys{/pgf/number format/.cd, use comma, 1000 sep={.}, 1000 sep in fractionals=false}
+\usepackage{siunitx}
+\sisetup{output-decimal-marker={,}, group-separator={.}, group-minimum-digits=4}
 
 % ---
 % Fonte padrão sans-serif
@@ -476,6 +482,7 @@
 \include{chapters/ch2fundamentacao}
 \include{chapters/ch3relacionados}
 \include{chapters/ch4proposta}
+\include{chapters/ch6avaliacao}
 \include{chapters/ch5futuros}
 % Capítulo "Considerações Finais" removido a pedido do orientador:
 % apenas o TCC II terá uma conclusão.

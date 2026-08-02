@@ -1,4 +1,5 @@
 \chapter{Introdução}
+\label{cap:introducao}
 
 \section{Visão Geral}
 
@@ -79,7 +80,9 @@ seguintes etapas:
   \item Projeto da instrução principal de importação que utiliza os arquivos de
         configuração;
   \item Implementação da solução ``Polyglot Import CSV'';
-  \item Testes da solução ``Polyglot Import CSV'' implementada.
+  \item Testes da solução ``Polyglot Import CSV'' implementada;
+  \item Avaliação de desempenho da solução para diferentes volumes e modelos de dados
+        destino.
 \end{enumerate}
 
 Na primeira etapa, foi estudado o que é a persistência poliglota, e a sua relevância no
@@ -98,9 +101,12 @@ Na quarta e quinta etapas, foram projetados os dois arquivos de configuração J
 para o mapeamento da importação (entidades, relacionamentos e colunas) e outro para a
 conexão dos SGBDs --- bem como a instrução principal de importação que os utiliza.
 
-As últimas etapas, que estão em andamento, tratam da implementação da solução proposta,
-``Polyglot Import CSV'', e dos testes da mesma com diferentes volumes de dados CSV e
-importações simples e complexas para diferentes modelos de dados destino.
+As etapas seguintes trataram da implementação da solução proposta, ``Polyglot Import
+CSV'', e dos testes da mesma com diferentes volumes de dados CSV e importações simples e
+complexas para diferentes modelos de dados destino. A última etapa consistiu na avaliação
+de desempenho da ferramenta, cujos resultados --- \textit{throughput} por SGBD, ganho das
+estratégias de escrita otimizadas e economia de memória do modo de execução em fluxo ---
+são apresentados no Capítulo~\ref{cap:avaliacao}.
 
 \section{Estrutura do Trabalho}
 
