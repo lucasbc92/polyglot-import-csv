@@ -49,8 +49,14 @@ services:
   cassandra:
     image: cassandra:4.1
     environment:
-      MAX_HEAP_SIZE: 512M
-      HEAP_NEWSIZE: 128M
+      # Cassandra's own sizing rule (cassandra-env.sh) is
+      # max(min(1/2 RAM, 1G), min(1/4 RAM, 8G)); against the ~3.8G this Docker
+      # VM gets, that is 1G. At 512M the CMS collector hit concurrent-mode
+      # failures under a 100k-row bulk load and stalled past the driver's
+      # request timeout, aborting the benchmark matrix.
+      # HEAP_NEWSIZE stays at 1/4 of the heap, the conventional CMS ratio.
+      MAX_HEAP_SIZE: 1G
+      HEAP_NEWSIZE: 256M
     ports:
       - "9042:9042"
     healthcheck:
