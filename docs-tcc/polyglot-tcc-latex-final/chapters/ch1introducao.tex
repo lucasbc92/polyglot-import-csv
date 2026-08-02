@@ -25,9 +25,9 @@ SGBD por vez, e as soluções de migração ou de modelagem poliglota não reali
 materialização simultânea de um mesmo CSV em múltiplos paradigmas de dados --- o que
 ressalta a originalidade desta proposta.
 
-Assim sendo, a intenção deste trabalho é desenvolver a ferramenta \textit{Polyglot Import
+Assim sendo, este trabalho desenvolve a ferramenta \textit{Polyglot Import
 CSV}, que importa dados armazenados em CSV para SGBDs relacionais e NoSQL. A configuração
-da ferramenta será baseada em dois arquivos JSON: um de importação, mapeando entidades e
+da ferramenta baseia-se em dois arquivos JSON: um de importação, mapeando entidades e
 relacionamentos em cada SGBD, considerado seu modelo de dados; outro de configuração de
 conexão dos SGBDs envolvidos. A escolha pelo formato JSON deve-se à sua simplicidade e
 ampla adoção; sua finalidade é detalhar, de forma declarativa, o mapeamento das colunas do
@@ -110,8 +110,10 @@ são apresentados no Capítulo~\ref{cap:avaliacao}.
 
 \section{Estrutura do Trabalho}
 
-Este trabalho está estruturado em cinco capítulos principais. O primeiro aborda os
-objetivos, a metodologia e o contexto que levaram à elaboração deste TCC. O capítulo 2
-revisa fundamentos teóricos. O capítulo 3 apresenta trabalhos relacionados. O capítulo 4
-descreve a proposta da ferramenta \textit{Polyglot Import CSV} e o capítulo 5 as
-atividades futuras (TCC II).
+Este trabalho está estruturado em sete capítulos principais. O primeiro aborda os
+objetivos, a metodologia e o contexto que levaram à elaboração deste trabalho. O capítulo 2
+revisa os fundamentos teóricos e o capítulo 3 apresenta os trabalhos relacionados. O
+capítulo 4 descreve a proposta da ferramenta \textit{Polyglot Import CSV} --- o formato de
+configuração, o algoritmo de importação, a observabilidade e os modelos de execução. O
+capítulo 5 apresenta a avaliação de desempenho da ferramenta, com resultados reais. O
+capítulo 6 discute as atividades futuras e o capítulo 7 traz as considerações finais.

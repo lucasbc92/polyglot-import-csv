@@ -389,17 +389,25 @@
   sistemas. Por meio de configurações declarativas em arquivos JSON, a ferramenta oferece
   suporte ao principal representante de código aberto dos bancos de dados relacionais ---
   o PostgreSQL --- e aos principais representantes dos bancos de dados NoSQL: Redis
-  (chave-valor), MongoDB (documento), Apache Cassandra (colunar) e Neo4j (grafo). Não
-  foram identificadas ferramentas equivalentes que realizem, a partir de um único arquivo
-  CSV e de regras declarativas, a importação simultânea para múltiplos paradigmas de dados,
-  o que evidencia a originalidade da proposta. A publicação do código aberto da ferramenta
-  impulsiona avanços colaborativos na dinâmica arquitetura moderna de bancos de dados.
+  (chave-valor), MongoDB (documento), Apache Cassandra (colunar) e Neo4j (grafo). A
+  importação admite dois modos de entrada --- um arquivo CSV por entidade ou um único CSV
+  combinado --- e realiza a conversão nativa aos tipos de cada SGBD, com observabilidade e
+  métricas por fase de execução. São oferecidas duas estratégias de desempenho: a escrita
+  em lote otimizada e um modelo de execução em fluxo, de memória limitada, capaz de importar
+  arquivos maiores que a memória disponível. Uma avaliação empírica com dados reais
+  quantificou esses ganhos: a escrita otimizada acelerou a importação em cerca de nove vezes
+  e o modo de fluxo reduziu o pico de memória em mais de doze vezes no maior volume medido,
+  mantendo-o constante em relação ao tamanho do arquivo. Não foram identificadas ferramentas
+  equivalentes que realizem, a partir de arquivos CSV e de regras declarativas, a importação
+  simultânea para múltiplos paradigmas de dados, o que evidencia a originalidade da proposta.
+  A publicação do código aberto da ferramenta impulsiona avanços colaborativos na dinâmica
+  arquitetura moderna de bancos de dados.
 
   \vspace{\onelineskip}
 
   \noindent
   \textbf{Palavras-chave}: Persistência poliglota. Ferramenta \textit{Polyglot Import CSV}.
-  Importação de dados CSV. JSON. SQL. NoSQL. Software Livre.
+  Importação de dados CSV. Avaliação de desempenho. JSON. SQL. NoSQL. Software Livre.
 \end{resumo}
 
 % ---
@@ -417,8 +425,15 @@
   and familiar format for both humans and systems. Through declarative configurations in
   JSON files, the tool supports the leading open-source representative of relational
   databases --- PostgreSQL --- and the main representatives of NoSQL databases: Redis
-  (key-value), MongoDB (document), Apache Cassandra (columnar), and Neo4j (graph). No
-  equivalent tools were identified that perform, from a single CSV file and declarative
+  (key-value), MongoDB (document), Apache Cassandra (columnar), and Neo4j (graph). The
+  import supports two input modes --- one CSV file per entity or a single combined CSV ---
+  and performs native type casting to each DBMS, with observability and per-phase execution
+  metrics. Two performance strategies are offered: optimized batch writing and a streaming
+  execution model, with bounded memory, able to import files larger than available memory.
+  An empirical evaluation with real data quantified these gains: optimized writing sped up
+  the import by roughly nine times, and the streaming mode reduced peak memory by more than
+  twelve times at the largest measured volume, keeping it constant with respect to file
+  size. No equivalent tools were identified that perform, from CSV files and declarative
   rules, the simultaneous import to multiple data paradigms, which highlights the
   originality of the proposal. The open-source publication of the tool drives collaborative
   advances in the dynamic modern database architecture.
@@ -427,7 +442,8 @@
 
   \noindent
   {\rmfamily\upshape\textbf{Keywords}}: \textit{Polyglot persistence.
-  Polyglot Import CSV tool. CSV data import. JSON. SQL. NoSQL. Free Software.}
+  Polyglot Import CSV tool. CSV data import. Performance evaluation. JSON. SQL. NoSQL.
+  Free Software.}
 \end{resumo}
 
 \selectlanguage{brazil}
@@ -453,6 +469,7 @@
   \item[ABNT] Associação Brasileira de Normas Técnicas
   \item[API] \textit{Application Programming Interface} (Interface de Programação de Aplicações)
   \item[BSON] \textit{Binary JSON}
+  \item[CI] \textit{Continuous Integration} (Integração Contínua)
   \item[CLI] \textit{Command Line Interface} (Interface de Linha de Comando)
   \item[CSV] \textit{Comma-Separated Values} (Valores Separados por Vírgula)
   \item[DDL] \textit{Data Definition Language} (Linguagem de Definição de Dados)
@@ -464,6 +481,7 @@
   \item[TCC] Trabalho de Conclusão de Curso
   \item[UFSC] Universidade Federal de Santa Catarina
   \item[XML] \textit{Extensible Markup Language}
+  \item[YCSB] \textit{Yahoo! Cloud Serving Benchmark}
 \end{siglas}
 
 % ---

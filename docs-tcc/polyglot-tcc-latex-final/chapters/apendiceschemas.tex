@@ -13,14 +13,28 @@ apresentados nas respectivas subseções do capítulo~4.
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://polyglot-import-csv.local/schemas/import_config.schema.json",
   "title": "PolyglotImportCSV import configuration",
-  "description": "Declarative mapping from a wide CSV file to entities and relationships of one or more SGBDs. Connection settings live in the separate SGBD configuration.",
+  "description": "Declarative mapping from named CSV sources to entities and relationships of one or more SGBDs. Connection settings live in the separate SGBD configuration.",
   "type": "object",
-  "required": ["version"],
+  "required": ["sources"],
   "properties": {
-    "version": {
-      "type": "integer",
-      "minimum": 1,
-      "description": "Configuration format version."
+    "sources": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "Named data sources: a CSV path per entity, or a combined CSV whose column 0 holds each row's origin.",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string", "minLength": 1 },
+          {
+            "type": "object",
+            "required": ["file", "origin_column"],
+            "properties": {
+              "file": { "type": "string", "minLength": 1 },
+              "origin_column": { "const": true }
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
     },
     "postgres":  { "$ref": "#/$defs/postgresMapping" },
     "mongodb":   { "$ref": "#/$defs/mongoMapping" },
@@ -39,10 +53,10 @@ apresentados nas respectivas subseções do capítulo~4.
           "description": "Primary or merge key for the entity."
         },
         "csv_column": {
-          "description": "CSV header name or 0-based column index.",
+          "description": "CSV header name or 1-based data-column index when it differs from the JSON key.",
           "oneOf": [
             { "type": "string",  "minLength": 1 },
-            { "type": "integer", "minimum": 0 }
+            { "type": "integer", "minimum": 1 }
           ]
         },
         "schema_column": {
@@ -70,6 +84,7 @@ apresentados nas respectivas subseções do capítulo~4.
     },
     "filter": {
       "type": "object",
+      "description": "Row predicate applied to the full CSV before materialization.",
       "required": ["column", "operator"],
       "properties": {
         "column":        { "type": "string", "minLength": 1 },
@@ -78,13 +93,16 @@ apresentados nas respectivas subseções do capítulo~4.
           "enum": ["==","!=",">","<",">=","<=","in","not_in","each"]
         },
         "value": {},
-        "target_suffix": { "type": "string" }
+        "target_suffix": {
+          "type": "string",
+          "description": "With operator 'each', optional template; default is sanitized distinct value"
+        }
       },
       "additionalProperties": false
     },
     "entity": {
       "type": "object",
-      "required": ["columns"],
+      "description": "One logical target (table, collection, label, or Redis entity).",
       "properties": {
         "columns": {
           "type": "object",
@@ -97,11 +115,35 @@ apresentados nas respectivas subseções do capítulo~4.
         },
         "cassandra_partition": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string" },
+          "description": "CSV/source column names forming the partition key (compound supported)"
         },
         "cassandra_cluster": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string" },
+          "description": "Clustering columns (optional)"
+        },
+        "source": {
+          "description": "Source name, or list of source names (union with _source per row). Omit to bind by the entity key name.",
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+          ]
+        },
+        "csv_columns": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Auto-map restriction: column names, 1-based indices, or ranges like \"1-5\". Only valid with auto-mapping.",
+          "items": {
+            "oneOf": [
+              { "type": "string", "minLength": 1 },
+              { "type": "integer", "minimum": 1 }
+            ]
+          }
+        },
+        "auto_map": {
+          "type": "boolean",
+          "description": "With 'columns' present, auto-map the whole source and let the manual entries override per column."
         }
       },
       "additionalProperties": false
@@ -207,7 +249,11 @@ apresentados nas respectivas subseções do capítulo~4.
   "type": "object",
   "required": ["version"],
   "properties": {
-    "version": { "type": "integer", "minimum": 1 },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Configuration format version."
+    },
     "postgres":  { "$ref": "#/$defs/postgresConnection" },
     "mongodb":   { "$ref": "#/$defs/mongoConnection" },
     "cassandra": { "$ref": "#/$defs/cassandraConnection" },
@@ -232,7 +278,8 @@ apresentados nas respectivas subseções do capítulo~4.
         },
         "schema": {
           "type": "string",
-          "default": "public"
+          "default": "public",
+          "description": "Target schema for created tables."
         }
       },
       "additionalProperties": false
@@ -261,7 +308,9 @@ apresentados nas respectivas subseções do capítulo~4.
             "hosts":            { "type": "array", "items": { "type": "string" } },
             "port":             { "type": "integer" },
             "keyspace":         { "type": "string" },
-            "protocol_version": { "type": "integer" }
+            "protocol_version": { "type": "integer" },
+            "request_timeout":  { "type": "number", "exclusiveMinimum": 0,
+                                  "description": "Client-side request timeout in seconds (default 30); the driver's 10s default is short for a bulk load." }
           },
           "required": ["hosts","keyspace"],
           "additionalProperties": false

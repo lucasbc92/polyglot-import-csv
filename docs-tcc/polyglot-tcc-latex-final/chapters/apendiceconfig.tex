@@ -1,14 +1,15 @@
 \chapter{Arquivos de Configuração do Cenário E-commerce}
 \label{ap:config}
 
-Este apêndice reproduz na íntegra os dois arquivos de configuração do cenário de
-e-commerce utilizado no capítulo~4, tal como se encontram no diretório
-\texttt{data/ecommerce/} do repositório da ferramenta: o arquivo de importação
-\texttt{import\_config.json} (Listagem~\ref{lst:import-config-full}), cujos fragmentos
-por SGBD ilustraram a seção~\ref{sec:config-format}, e o arquivo de conexão
-\texttt{sgbd\_config.json} (Listagem~\ref{lst:sgbd-config-full}). Juntos com o arquivo
-de dados reproduzido no Apêndice~\ref{ap:csv}, eles constituem as três entradas
-completas do exemplo, e neles podem ser conferidas as entidades, filtros e chaves que
+Este apêndice reproduz os arquivos de configuração do cenário de e-commerce utilizado no
+capítulo~4, tal como se encontram no diretório \texttt{data/ecommerce/} do repositório da
+ferramenta: o arquivo de importação no modo multifonte \texttt{import\_config.json}
+(Listagem~\ref{lst:import-config-full}), cujos fragmentos por SGBD ilustraram a
+seção~\ref{sec:config-format}; a sua variante para o modo combinado
+\texttt{import\_config\_combined.json} (Listagem~\ref{lst:import-combined-sources}); e o
+arquivo de conexão \texttt{sgbd\_config.json} (Listagem~\ref{lst:sgbd-config-full}). Junto
+com o arquivo de dados reproduzido no Apêndice~\ref{ap:csv}, eles constituem as entradas
+completas do exemplo, e neles podem ser conferidas as entidades, fontes e chaves que
 fundamentam as saídas materializadas da seção~\ref{sec:importacao-sgbds} e as contagens
 da Tabela~\ref{tab:dryrun}.
 
@@ -182,6 +183,33 @@ da Tabela~\ref{tab:dryrun}.
       }
     }
   }
+}
+\end{lstlisting}
+
+\section{Arquivo de Importação no Modo Combinado (\texttt{import\_config\_combined.json})}
+
+No modo combinado, uma única fonte declara o arquivo largo \texttt{ecommerce\_join.csv} com
+a marca \texttt{origin\_column}, que instrui a ferramenta a tratar a primeira coluna de cada
+linha como a sua origem. O restante do arquivo --- os mapeamentos de \texttt{postgres},
+\texttt{mongodb}, \texttt{cassandra}, \texttt{redis} e \texttt{neo4j} --- é
+\textbf{idêntico} ao do arquivo multifonte da Listagem~\ref{lst:import-config-full}: as
+entidades continuam a referir-se às origens pelos mesmos nomes (\texttt{stock},
+\texttt{purchase}, \texttt{select\_product} e \texttt{add\_to\_cart}). A
+Listagem~\ref{lst:import-combined-sources} reproduz apenas o bloco \texttt{sources} que
+distingue os dois arquivos; as reticências indicam o trecho de mapeamento omitido por ser
+igual ao já apresentado.
+
+\begin{lstlisting}[style=jsonstyle,caption={Bloco \texttt{sources} do arquivo de importação no modo combinado (\texttt{import\_config\_combined.json}).},label={lst:import-combined-sources}]
+{
+  "sources": {
+    "ecommerce": { "file": "ecommerce_join.csv", "origin_column": true }
+  },
+
+  "postgres":  { ... },
+  "mongodb":   { ... },
+  "cassandra": { ... },
+  "redis":     { ... },
+  "neo4j":     { ... }
 }
 \end{lstlisting}
 
