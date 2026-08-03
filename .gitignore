@@ -18,6 +18,11 @@ data/benchmark/generated/
 
 # Large local datasets not tracked in git
 2018-census-totals-by-topic-national-highlights-csv/
+data/2013_mb_dataset_Total_New_Zealand_CSV/
+
+# Reference theses and old report exports (kept locally, purged from history)
+docs-tcc/tcc-examples/
+docs/polyglot-import-csv.pdf
 
 # Legacy duplicate entrypoint at repo root (use src/polyglotimportcsv + scripts/)
 /polyglotimportcsv.py
