@@ -189,14 +189,17 @@ def _run(
 
     step("Load sources")
     read_start = time.perf_counter()
-    sources = load_sources(
-        config.get("sources") or {}, config_path.parent, overrides=source_overrides
-    )
+    sources_cfg = config.get("sources") or {}
+    sources = load_sources(sources_cfg, config_path.parent, overrides=source_overrides)
     collector.record(
         "(sources)",
         "*",
         "read",
-        rows=sum(len(sd.df) for sd in sources.values()),
+        # A combined CSV registers one slice per origin value on top of the whole
+        # file. Those slices are views over rows already counted under the declared
+        # source, so only declared sources count: summing the whole registry would
+        # report twice the rows actually read.
+        rows=sum(len(sources[name].df) for name in sources_cfg if name in sources),
         seconds=time.perf_counter() - read_start,
     )
     for name in sorted(sources):

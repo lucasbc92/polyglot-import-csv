@@ -65,7 +65,8 @@
             "hosts": { "type": "array", "items": { "type": "string" } },
             "port": { "type": "integer" },
             "keyspace": { "type": "string" },
-            "protocol_version": { "type": "integer" }
+            "protocol_version": { "type": "integer" },
+            "request_timeout": { "type": "number", "exclusiveMinimum": 0, "description": "Client-side request timeout in seconds (default 30). The driver's own default of 10s is short for a bulk load." }
           },
           "required": ["hosts", "keyspace"],
           "additionalProperties": false

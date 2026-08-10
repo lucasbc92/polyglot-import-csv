@@ -32,6 +32,8 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
+from polyglotimportcsv.metrics import EXCLUDED_PHASES
+
 logger = logging.getLogger(__name__)
 
 #: Entities with at most this many rows have their records dumped (spec §4.3).
@@ -234,7 +236,11 @@ def dump_entity_frame(
 
 
 def metrics_table(records: Sequence[Dict[str, Any]]) -> Table:
-    """Summary table for the end of a run (spec §4.4)."""
+    """Summary table for the end of a run (spec §4.4).
+
+    Phases in ``metrics.EXCLUDED_PHASES`` are left out, matching the consolidated
+    benchmark report.
+    """
     table = Table(title="Import metrics", header_style="bold")
     table.add_column("backend")
     table.add_column("entity")
@@ -243,6 +249,8 @@ def metrics_table(records: Sequence[Dict[str, Any]]) -> Table:
     table.add_column("seconds", justify="right")
     table.add_column("rows/s", justify="right")
     for rec in records:
+        if rec.get("phase") in EXCLUDED_PHASES:
+            continue
         rate = rec.get("rows_per_second")
         table.add_row(
             str(rec.get("backend", "")),

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 
 from typing import Any, Callable, Dict, List, Tuple
 
@@ -29,8 +30,38 @@ from polyglotimportcsv.entity_utils import (
 from polyglotimportcsv.filter_engine import apply_filters, expand_each
 from polyglotimportcsv.mapping_resolver import BoundEntity
 from polyglotimportcsv.reporting import entity_progress
+from polyglotimportcsv.row_view import iter_rows
 
 logger = logging.getLogger(__name__)
+
+#: Client-side request timeout, in seconds. The driver's own default is 10s, which
+#: a node busy flushing or compacting a bulk load routinely exceeds — and a single
+#: overrun raises OperationTimedOut, aborting the whole import. Override per
+#: deployment with ``connection.request_timeout``.
+DEFAULT_REQUEST_TIMEOUT = 30.0
+
+#: Retries for rows a concurrent write reported as failed, before giving up.
+WRITE_RETRIES = 3
+
+#: Multiplied by the attempt number, so a stalling node gets increasing room.
+RETRY_BACKOFF_SECONDS = 2.0
+
+
+def _request_timeout(conn: Dict[str, Any]) -> float:
+    raw = conn.get("request_timeout", DEFAULT_REQUEST_TIMEOUT)
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        raise ImportExecutionError(
+            f"Cassandra connection.request_timeout must be a positive number of "
+            f"seconds, got {raw!r}."
+        ) from None
+    if value <= 0:
+        raise ImportExecutionError(
+            f"Cassandra connection.request_timeout must be a positive number of "
+            f"seconds, got {raw!r}."
+        )
+    return value
 
 
 def _source_to_db_map(ecfg: Dict[str, Any], csv_columns: List[str]) -> Dict[str, str]:
@@ -160,7 +191,11 @@ def _default_cassandra_session(conn: Dict[str, Any]):
     port = int(conn.get("port", 9042))
     cluster = Cluster(hosts, port=port, connect_timeout=5)
     cluster.connection_class = AsyncioConnection  # <-- Forces the driver to use asyncio instead of deleted asyncore
-    return cluster, cluster.connect()
+    session = cluster.connect()
+    # Applies to every statement on this session; without it the driver's 10s
+    # default governs bulk writes (see DEFAULT_REQUEST_TIMEOUT).
+    session.default_timeout = _request_timeout(conn)
+    return cluster, session
 
 
 def _row_values(row, ordered_src: List[str], cql_by_src: Dict[str, str]) -> List[Any]:
@@ -185,13 +220,53 @@ def _write_naive(session, prepared, params_list, advance) -> int:
     return count
 
 
-def _write_batched(session, prepared, params_list, advance, concurrency: int = 64) -> int:
+def _write_batched(
+    session,
+    prepared,
+    params_list,
+    advance,
+    concurrency: int = 64,
+    *,
+    retries: int = WRITE_RETRIES,
+    sleep: Callable[[float], None] = time.sleep,
+) -> int:
+    """Write rows concurrently, retrying the ones a transient failure hit.
+
+    Collects per-row outcomes instead of aborting on the first error, so only the
+    failed rows are resent — resending is safe because a Cassandra INSERT is an
+    upsert on the primary key, so a row that actually landed is simply rewritten.
+    A node stalling on a flush or compaction under a bulk load would otherwise end
+    the whole import (and, in the benchmark matrix, discard the runs still queued).
+    """
     if execute_concurrent_with_args is None:
         raise ImportExecutionError(
             "Cassandra driver could not be loaded: cassandra.concurrent is unavailable. "
             "Install the 'pyasyncore' package (pip install pyasyncore) on Python 3.12+; see DataStax docs."
         )
-    execute_concurrent_with_args(session, prepared, params_list, concurrency=concurrency)
+    pending = list(params_list)
+    for attempt in range(retries + 1):
+        outcomes = execute_concurrent_with_args(
+            session, prepared, pending,
+            concurrency=concurrency, raise_on_first_error=False,
+        )
+        # A driver (or stub) that reports nothing is taken at its word: no failures.
+        failed = [p for p, outcome in zip(pending, outcomes or []) if not outcome[0]]
+        if not failed:
+            break
+        if attempt == retries:
+            raise ImportExecutionError(
+                f"Cassandra write failed for {len(failed)} row(s) after "
+                f"{attempt + 1} attempt(s): {failed[0] if failed else ''} "
+                f"-> {outcomes[0][1] if outcomes else 'unknown error'}. "
+                "Raise connection.request_timeout, or give the node more heap, "
+                "if this repeats under load."
+            )
+        logger.warning(
+            "cassandra: %d/%d row(s) failed, retrying (attempt %d/%d)",
+            len(failed), len(pending), attempt + 1, retries,
+        )
+        sleep(RETRY_BACKOFF_SECONDS * (attempt + 1))
+        pending = failed
     advance(len(params_list))
     return len(params_list)
 
@@ -257,7 +332,7 @@ def run_cassandra_import(
             writer = _write_naive if strategy == "naive" else _write_batched
             with metrics.timed_phase("cassandra", table, "write") as tw:
                 params_list = [_row_values(row, ordered_src, cql_by_src)
-                               for _, row in part_df.iterrows()]
+                               for row in iter_rows(part_df)]
                 with entity_progress(f"cassandra · {table}", len(params_list)) as advance:
                     count = writer(session, prep, params_list, advance)
                 tw.rows = count
