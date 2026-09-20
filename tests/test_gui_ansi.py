@@ -139,3 +139,80 @@ def test_html_is_escaped():
 def test_module_does_not_import_qt():
     source = open(ansi.__file__, encoding="utf-8").read()
     assert "PySide6" not in source
+
+
+# -- fix round 1: incomplete-escape detection must be a real completeness
+# test, not a fixed-length heuristic (I1/I2/I3) --------------------------
+
+
+def test_combined_truecolor_split_across_chunks_mid_params():
+    # 36-char combined fg+bg truecolor SGR, exactly what rich emits. The old
+    # "< 16 chars remaining" heuristic let a split past offset 16 fall
+    # through to _skip_unknown_escape and corrupt the line.
+    seq = "\x1b[38;2;255;255;255;48;2;0;0;0mOK\x1b[0m"
+    r = AnsiRenderer()
+    r.feed(seq[:20])
+    r.feed(seq[20:])
+    assert render_all(r) == ['<span style="color:#FFFFFF;background-color:#000000">OK</span>']
+
+
+def test_osc_split_across_chunks_past_old_threshold():
+    osc = "\x1b]0;um titulo bem longo de janela\x07texto"
+    r = AnsiRenderer()
+    r.feed(osc[:20])
+    r.feed(osc[20:])
+    assert render_all(r) == ["texto"]
+
+
+def test_short_osc_is_dropped_without_eating_text():
+    # Well under any length threshold: this must not depend on how many
+    # characters happen to be in the buffer.
+    r = AnsiRenderer()
+    r.feed("\x1b]0;t\x07texto")
+    assert render_all(r) == ["texto"]
+
+
+def test_osc_split_across_two_feed_calls():
+    r = AnsiRenderer()
+    r.feed("\x1b]0;um titulo bem longo de janela")
+    r.feed("\x07texto")
+    assert render_all(r) == ["texto"]
+
+
+def test_osc_terminated_by_st_is_dropped():
+    # ST (ESC \) is a valid OSC terminator alongside BEL.
+    r = AnsiRenderer()
+    r.feed("\x1b]0;titulo\x1b\\texto")
+    assert render_all(r) == ["texto"]
+
+
+def test_overlong_incomplete_escape_is_dropped_and_does_not_corrupt_next_text():
+    # A CSI that never terminates must not grow _pending without bound; past
+    # the cap it is dropped so later text renders cleanly.
+    r = AnsiRenderer()
+    r.feed("\x1b[" + ";" * 5000)
+    r.feed("hello")
+    assert render_all(r) == ["hello"]
+
+
+# -- fix round 1: flush() surfaces trailing pending bytes at process exit
+# (I4) --------------------------------------------------------------------
+
+
+def test_flush_writes_pending_incomplete_escape_as_literal_text():
+    r = AnsiRenderer()
+    r.feed("fim\x1b[3")
+    assert render_all(r) == ["fim"]
+    r.flush()
+    start, lines = r.take_update()
+    assert start == 0
+    assert lines == ["fim\x1b[3"]
+
+
+def test_flush_is_a_no_op_when_nothing_is_pending():
+    r = AnsiRenderer()
+    r.feed("fim")
+    render_all(r)
+    r.flush()
+    start, lines = r.take_update()
+    assert lines == []

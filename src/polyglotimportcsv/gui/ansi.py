@@ -24,6 +24,7 @@ BRIGHT_COLORS = (
 )
 CUBE_LEVELS = (0, 95, 135, 175, 215, 255)
 DEFAULT_MAX_LINES = 5000
+_MAX_PENDING = 4096  # bytes withheld while waiting for a split escape sequence
 
 _CSI = re.compile(r"\x1b\[([0-9;?]*)([A-Za-z])")
 
@@ -123,8 +124,13 @@ class AnsiRenderer(object):
                     self._handle_csi(match.group(1), match.group(2))
                     index = match.end()
                     continue
-                if len(data) - index < 16:
-                    self._pending = data[index:]
+                if self._is_incomplete_escape(data, index):
+                    remainder = data[index:]
+                    if len(remainder) <= _MAX_PENDING:
+                        self._pending = remainder
+                    # else: drop it — an unterminated escape this long will
+                    # never be valid text anyway, and _pending must stay
+                    # bounded rather than grow without limit.
                     return
                 index = self._skip_unknown_escape(data, index)
                 continue
@@ -149,16 +155,68 @@ class AnsiRenderer(object):
         self._dirty = len(self._lines)
         return first, rendered
 
+    def flush(self) -> None:
+        """Flush any buffered incomplete escape sequence as literal text.
+
+        Call this once the child process has exited, so trailing output that
+        was withheld while waiting for a possible continuation (e.g. a
+        truncated escape sequence at end of stream) is not silently
+        dropped. Task 9's ``ConsolePanel.flush_output()`` calls this when
+        Task 10's ``MainWindow`` detects the child process has finished.
+        """
+        if not self._pending:
+            return
+        text = self._pending
+        self._pending = ""
+        self._write(text)
+
     # -- internals --------------------------------------------------------
+
+    @staticmethod
+    def _is_incomplete_escape(data: str, index: int) -> bool:
+        """Return True if the escape sequence starting at ``index`` cannot
+        yet be classified because its terminator has not arrived.
+
+        This is a real completeness test, not a length heuristic: a lone
+        ESC, a CSI introducer followed only by parameter characters, or an
+        OSC introducer with no BEL/ST terminator anywhere in ``data`` are
+        all incomplete regardless of how many characters remain.
+        """
+        rest = data[index + 1:]
+        if rest == "":
+            return True
+        introducer = rest[0]
+        if introducer == "[":
+            body = rest[1:]
+            for ch in body:
+                if ch.isalpha():
+                    return False
+                if ch not in "0123456789;?":
+                    return False
+            return True
+        if introducer == "]":
+            body = rest[1:]
+            if "\x07" in body:
+                return False
+            if "\x1b\\" in body:
+                return False
+            return True
+        return False
 
     @staticmethod
     def _skip_unknown_escape(data: str, index: int) -> int:
         """Drop an escape sequence we don't interpret, terminator included."""
         if data[index + 1:index + 2] == "]":
-            # OSC: runs until BEL. Its payload can contain letters, so we
-            # cannot stop at the first one.
+            # OSC: runs until BEL or ST (ESC \). Its payload can contain
+            # letters, so we cannot stop at the first one.
             bel = data.find("\x07", index)
-            return bel + 1 if bel != -1 else len(data)
+            st = data.find("\x1b\\", index)
+            ends = [candidate for candidate in (bel, st) if candidate != -1]
+            if not ends:
+                return len(data)
+            if st == -1 or (bel != -1 and bel < st):
+                return bel + 1
+            return st + 2
         return min(index + 2, len(data))
 
     def _handle_csi(self, params: str, final: str) -> None:
