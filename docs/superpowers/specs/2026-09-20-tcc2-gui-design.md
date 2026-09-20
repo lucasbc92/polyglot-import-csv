@@ -286,8 +286,9 @@ lado do rótulo (`Estratégia (--strategy)`), o que mantém a correspondência c
 CLI visível sem traduzir a flag. Não há mecanismo de i18n: as cadeias ficam
 diretamente no código, como nas demais partes do projeto.
 
-Janela com 1240×1020 px por padrão, como no protótipo, e mínimo de 960×680 px; o divisor entre
-formulário e console é arrastável, e o console tem altura mínima de 160 px.
+Janela com 1240×1020 px por padrão, como no protótipo, e mínimo de 960×820 px (o piso
+vertical é imposto pelos mínimos do formulário e do console, não por 680 px); o divisor
+entre formulário e console é arrastável, e o console tem altura mínima de 160 px.
 
 ## 12. Empacotamento
 

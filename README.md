@@ -31,6 +31,17 @@ Any source's path can be overridden at run time with `--source NAME=PATH` (repea
 pip install -e ".[dev]"
 ```
 
+### Graphical interface
+
+```bash
+pip install -e ".[gui]"
+polyglotimportcsv-gui
+```
+
+The window builds the command for you, shows it before running, and streams the
+CLI's output into an integrated console. The command shown is the command that
+runs — you can switch the panel to edit mode and type it yourself.
+
 ### Usage
 
 ```bash
@@ -198,6 +209,17 @@ O caminho de qualquer origem pode ser sobrescrito em tempo de execução com `--
 ```bash
 pip install -e ".[dev]"
 ```
+
+### Interface gráfica
+
+```bash
+pip install -e ".[gui]"
+polyglotimportcsv-gui
+```
+
+A janela monta o comando, mostra-o antes de executar e transmite a saída da CLI
+para um console integrado. O comando exibido é o comando executado — o painel
+pode ser colocado em modo de edição para digitá-lo à mão.
 
 ### Uso
 

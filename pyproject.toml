@@ -26,6 +26,7 @@ gui = ["PySide6"]
 
 [project.scripts]
 polyglotimportcsv = "polyglotimportcsv.cli:main"
+polyglotimportcsv-gui = "polyglotimportcsv.gui.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

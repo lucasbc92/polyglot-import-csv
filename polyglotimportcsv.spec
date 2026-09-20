@@ -42,3 +42,43 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
 )
+
+
+gui_a = Analysis(
+    ['src/polyglotimportcsv/gui/app.py'],
+    pathex=['.'],
+    binaries=[],
+    datas=[('src/polyglotimportcsv/schemas', 'polyglotimportcsv/schemas')],
+    hiddenimports=['polyglotimportcsv.cli'],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
+)
+gui_pyz = PYZ(gui_a.pure, gui_a.zipped_data, cipher=block_cipher)
+
+gui_exe = EXE(
+    gui_pyz,
+    gui_a.scripts,
+    gui_a.binaries,
+    gui_a.zipfiles,
+    gui_a.datas,
+    [],
+    name='PolyglotImportCSV',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)

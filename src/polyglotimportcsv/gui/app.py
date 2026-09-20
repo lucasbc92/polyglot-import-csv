@@ -10,6 +10,8 @@ from __future__ import annotations
 import sys
 from typing import List, Optional
 
+import click
+
 from polyglotimportcsv.gui.launcher import CLI_FLAG
 
 
@@ -19,15 +21,24 @@ def main(argv: Optional[List[str]] = None) -> int:
         from polyglotimportcsv.cli import main as cli_main
 
         # standalone_mode=False makes click return instead of calling sys.exit,
-        # so the exit code flows back through our own main().
-        return cli_main(arguments[1:], standalone_mode=False) or 0
+        # but it also disables click's own error rendering, so a bad flag
+        # would otherwise propagate as a raw ClickException traceback instead
+        # of the usual "Error: ..." message with exit code 2. We restore that
+        # rendering here ourselves.
+        try:
+            return cli_main(arguments[1:], standalone_mode=False) or 0
+        except click.ClickException as error:
+            error.show()
+            return error.exit_code
+        except click.Abort:
+            return 1
 
     from PySide6.QtWidgets import QApplication
 
     from polyglotimportcsv.gui.style import STYLESHEET
     from polyglotimportcsv.gui.widgets.main_window import MainWindow
 
-    app = QApplication(sys.argv)
+    app = QApplication([sys.argv[0]] + arguments)
     app.setApplicationName("PolyglotImportCSV")
     app.setOrganizationName("UFSC")
     app.setStyleSheet(STYLESHEET)
