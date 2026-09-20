@@ -1178,3 +1178,110 @@ assegurada por testes automatizados, de modo que a escolha entre materializaçã
 uma decisão de \textbf{custo}, não de \textbf{correção}. É justamente esse custo --- tempo de
 importação e, sobretudo, pico de memória --- que a avaliação do Capítulo~\ref{cap:avaliacao}
 quantifica, varrendo sistematicamente os dois eixos aqui descritos.
+
+\section{Interface Gráfica}
+\label{sec:interface-grafica}
+
+Todas as capacidades descritas até aqui são acionadas por uma interface de linha de comando
+governada por onze opções, que precisam ser digitadas corretamente a cada execução e cujos
+erros de sintaxe só se manifestam depois que o comando é submetido. Para reduzir essa barreira
+--- sem esconder a ferramenta de quem deseja aprendê-la --- foi construída uma
+\textbf{interface gráfica} \textit{desktop} sobre a CLI já existente. O princípio que orienta
+o seu projeto é deliberadamente didático: \textbf{o comando exibido é o comando executado}.
+Cada opção da CLI corresponde a um controle gráfico, e o comando resultante permanece visível
+o tempo todo, de modo que a interface \textbf{ensina} a linha de comando em vez de substituí-la.
+
+A interface é um \textbf{invólucro fino}: ela não reimplementa nenhuma etapa da importação.
+O seu núcleo traduz o estado do formulário na lista de argumentos da CLI e a executa como
+\textbf{processo filho}, capturando a saída do processo e apresentando-a em um console
+integrado. Duas consequências decorrem dessa escolha. A primeira é de correção: como quem
+importa é a própria CLI, não existe risco de a interface e a linha de comando divergirem em
+comportamento, e toda a validação por \textit{JSON Schema} descrita na
+Seção~\ref{sec:config-format} continua sendo exercida pelo mesmo código. A segunda é
+de arquitetura: os módulos que montam o comando, resolvem o executável e traduzem a saída não
+dependem da biblioteca gráfica, podendo ser testados sem instanciar uma aplicação de janelas.
+
+A janela divide-se em duas regiões, separadas por um divisor ajustável, como mostra a
+Figura~\ref{fig:gui-ocioso}. Na metade superior estão três cartões de formulário: os dois
+arquivos de configuração, selecionados por diálogos de arquivo; as opções de execução, com
+um controle para cada \textit{flag} --- os SGBDs de destino, a estratégia de escrita e o
+modelo de execução discutidos na Seção~\ref{sec:modelos-execucao}, os modificadores de
+simulação, criação de esquema e \textit{benchmark}, o nível de \textit{log} e a exibição de
+dados; e a tabela de sobrescrita de caminhos das fontes CSV. Na metade inferior está o
+console integrado, que exibe o comando montado e, abaixo dele, a saída da execução. Antes de
+executar, a interface faz uma \textbf{validação local} restrita ao que pode conferir sem
+abrir os arquivos --- existência dos caminhos, nomes de fonte não vazios e não repetidos ---
+e mantém o botão de execução desabilitado enquanto houver pendências, reservando a validação
+semântica ao \textit{JSON Schema}.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\textwidth]{images/figure12-gui-ocioso}
+  \caption{Interface gráfica no estado ocioso: formulário preenchido e comando montado em
+  modo somente leitura.}
+  \label{fig:gui-ocioso}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{figure}
+
+O comando montado é, por padrão, \textbf{somente leitura}, e reflete apenas as opções que
+diferem dos valores padrão da CLI, de modo a permanecer tão curto quanto aquilo que uma
+pessoa realmente digitaria. Um \textbf{modo de edição} permite editar o texto diretamente;
+ao entrá-lo, o formulário é \textbf{bloqueado}, sinalizando que o texto passou a ser a fonte
+da verdade. Essa decisão é intencional e tem uma razão precisa: \textbf{não existe analisador
+de comando} na ferramenta. O caminho do formulário para o texto é de mão única, e manter os
+dois editáveis ao mesmo tempo exigiria reconstruir o estado do formulário a partir de uma
+cadeia de caracteres arbitrária --- precisamente o tipo de acoplamento que a interface se
+propõe a evitar. Ao sair do modo de edição, o texto digitado é descartado mediante
+confirmação e o comando é remontado a partir dos controles.
+
+Durante a execução, o formulário permanece desabilitado, o botão principal passa a oferecer
+a interrupção do processo e a saída da CLI chega ao console de forma incremental, como ilustra
+a Figura~\ref{fig:gui-executando}. Ao término, a barra de estado informa o desfecho de maneira
+explícita: a Figura~\ref{fig:gui-sucesso} mostra uma execução concluída, com o tempo total e o
+caminho do arquivo de \textit{log} da sessão, e a Figura~\ref{fig:gui-erro} mostra uma execução
+malsucedida, com a mensagem de erro preservada no console e o código de saída informado. Esse
+último ponto merece registro: como a interface executa a CLI real, um erro de configuração ou
+de conexão produz exatamente a mesma mensagem que produziria no terminal, sem tradução
+intermediária que pudesse mascará-lo.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\textwidth]{images/figure13-gui-executando}
+  \caption{Execução em andamento: formulário bloqueado, botão de interrupção e saída da CLI
+  chegando ao console em tempo real.}
+  \label{fig:gui-executando}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\textwidth]{images/figure14-gui-sucesso}
+  \caption{Execução concluída com sucesso, com o tempo total e o arquivo de \textit{log} da
+  sessão na barra de estado.}
+  \label{fig:gui-sucesso}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\textwidth]{images/figure15-gui-erro}
+  \caption{Execução malsucedida: a mensagem de erro da CLI é preservada no console e o código
+  de saída é informado na barra de estado.}
+  \label{fig:gui-erro}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{figure}
+
+Duas limitações devem ser registradas. A primeira é de apresentação: a saída da CLI é
+colorida por meio de sequências de escape ANSI quando escrita em um terminal, mas, no Windows,
+a biblioteca de formatação emprega chamadas próprias do console do sistema operacional, que
+não produzem efeito quando a saída é redirecionada para um canal de comunicação entre
+processos. O console integrado, portanto, apresenta a saída em tom único nessa plataforma,
+preservando integralmente o seu conteúdo, a sua estrutura e as barras de progresso, mas não
+as suas cores. A segunda é de escopo: a interface \textbf{monta e executa} o comando, mas não
+\textbf{edita} os arquivos JSON de configuração, que continuam a ser mantidos em um editor de
+texto externo. Ampliar a interface para editar a configuração de forma assistida é uma das
+atividades futuras discutidas no Capítulo~\ref{cap:futuros}.
