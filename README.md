@@ -42,6 +42,12 @@ The window builds the command for you, shows it before running, and streams the
 CLI's output into an integrated console. The command shown is the command that
 runs — you can switch the panel to edit mode and type it yourself.
 
+On Windows the integrated console is monochrome. `rich` detects a legacy
+Windows console (`color_system='windows'`) and drives colour through Win32
+console calls instead of ANSI escapes; those calls have no effect on the pipe
+the GUI reads from, so no colour codes ever reach the console. Text, tables and
+progress bars all arrive correctly — only the colour is missing.
+
 ### Usage
 
 ```bash
@@ -220,6 +226,13 @@ polyglotimportcsv-gui
 A janela monta o comando, mostra-o antes de executar e transmite a saída da CLI
 para um console integrado. O comando exibido é o comando executado — o painel
 pode ser colocado em modo de edição para digitá-lo à mão.
+
+No Windows o console integrado é monocromático. O `rich` identifica um console
+legado do Windows (`color_system='windows'`) e produz cor por chamadas Win32 de
+console, não por sequências ANSI; essas chamadas não têm efeito sobre o *pipe*
+que a GUI lê, de modo que nenhum código de cor chega ao console. O texto, as
+tabelas e as barras de progresso continuam chegando corretamente — falta apenas
+a cor.
 
 ### Uso
 

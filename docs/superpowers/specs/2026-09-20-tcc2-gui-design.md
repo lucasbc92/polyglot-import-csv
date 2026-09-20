@@ -194,8 +194,12 @@ painel e é registrado como primeira linha do log de cada execução
   animar as barras mesmo sem TTY), `PYTHONUNBUFFERED=1`,
   `PYTHONIOENCODING=utf-8` e `COLUMNS` igual à largura atual do console em
   caracteres, recalculado a cada execução.
-- Diretório de trabalho: a raiz do projeto, para que `logs/` e `benchmarks/`
-  caiam onde a CLI já os coloca.
+- Diretório de trabalho: **o diretório de trabalho corrente** (`os.getcwd()`),
+  não a raiz do projeto como esta seção afirmava antes de a implementação ser
+  medida. Ao lançar a GUI de dentro do repositório — que é o caso da
+  demonstração — o efeito é o mesmo: `logs/` e `benchmarks/` caem onde a CLI já
+  os coloca. A partir de um executável congelado ou de um atalho, porém, esses
+  diretórios seguem o diretório de trabalho do lançamento, e não o projeto.
 - Interrupção: `terminate()`, espera de 3 s, depois `kill()`. Como `terminate()`
   não atinge processos de console no Windows, o caminho efetivo lá é o `kill()`.
   O botão pede confirmação, avisando que a importação pode parar pela metade e
@@ -218,14 +222,33 @@ Subconjunto suportado:
 
 A saída é um `QTextEdit` em modo HTML, com buffer de linhas limitado (padrão
 5.000 linhas, as mais antigas descartadas). As cores ANSI são mapeadas para os
-mesmos tokens do protótipo, para que o console tenha a aparência do quadro
-`02 · Executando`.
+mesmos tokens do protótipo.
+
+O terminador de linha do Windows é `\r\n`, e por isso o `\r` da tabela acima só
+reinicia a linha corrente quando **não** é seguido de `\n`. Um `\r\n` é fim de
+linha; tratá-lo como reinício apagaria cada linha logo depois de escrevê-la.
+
+**Cor no Windows — medido, não previsto.** Com `FORCE_COLOR=1` e a saída em um
+*pipe*, o console do `rich` usado por `reporting.py` relata
+`legacy_windows=True` e `color_system='windows'`: nessa combinação o `rich` não
+emite sequências ANSI, e sim chamadas Win32 de console, que não têm efeito
+sobre um *pipe*. Numa execução real de 80 KB de saída, o filho não emitiu um
+único byte ESC. **O console da GUI é, portanto, monocromático na plataforma do
+autor**, e a semelhança com o quadro `02 · Executando` do protótipo não se
+verifica ali. O tradutor de ANSI continua correto e exercitado por testes, e a
+cor aparece em plataformas cujo `rich` escolhe `color_system='truecolor'`.
+
+`FORCE_COLOR=1` continua sendo indispensável por outro motivo: `reporting.py`
+desvia de `entity_progress` quando `not _console.is_terminal`, de modo que sem
+essa variável **não há barra de progresso alguma**. Ela não deve ser removida a
+pretexto de "simplificar", mesmo estando claro que não é ela que traz a cor no
+Windows.
 
 **Plano B documentado:** se a animação de progresso se mostrar instável em alguma
 combinação de terminal/versão do `rich`, basta não definir `FORCE_COLOR`. O
-`rich` volta a escrever texto simples, o console fica monocromático e todo o
-restante continua funcionando. A escolha fica exposta como preferência
-(`Console colorido`), com o padrão ligado.
+`rich` volta a escrever texto simples (e sem barras de progresso) e todo o
+restante continua funcionando. A escolha ficaria exposta como preferência
+(`Console colorido`) — ver §14, onde o corte dessa preferência está registrado.
 
 ## 8. Estados da interface
 
@@ -274,7 +297,8 @@ são escritas no console em vermelho e levam ao estado de erro, com o texto de
 
 `QSettings` (organização `UFSC`, aplicação `PolyglotImportCSV`) guarda apenas
 conveniências: geometria da janela, posição do divisor, últimos caminhos usados
-nos dois *file choosers* e a preferência de console colorido. **Nenhuma opção de
+nos dois *file choosers* e a preferência de console colorido (esta última foi
+cortada — ver §14.1). **Nenhuma opção de
 execução é persistida** — cada abertura parte dos padrões da CLI, para que o
 comando exibido corresponda ao que está na tela e não a uma sessão anterior
 esquecida.
@@ -337,6 +361,29 @@ widgets, e por último o empacotamento.
 4. **Prazo.** Três semanas em outubro para implementação. Se apertar, o corte é
    nesta ordem: preferência de console colorido, persistência de `QSettings`,
    leitura do `sgbd_config.json` para filtrar as caixas (§9).
+
+### 14.1 O que foi efetivamente cortado
+
+- **Preferência `Console colorido` (§7 e §10).** Primeiro item da lista de
+  cortes acima, e foi o único acionado: `main_window.py` passa `color=True`
+  incondicionalmente, e nem a caixa de preferência nem a chave correspondente em
+  `QSettings` existem. Dado o que §7 registra sobre a cor no Windows, o controle
+  não mudaria nada na plataforma do autor — desligá-lo apenas suprimiria também
+  as barras de progresso. O corte fica registrado aqui para que a ausência não
+  seja lida como esquecimento.
+
+### 14.2 Riscos conhecidos, ainda não exercitados
+
+- **O desvio `--cli` do executável congelado nunca foi executado.** O alvo da
+  GUI é `console=False`, e `launcher.resolve()` inicia `sys.executable --cli`
+  para que o filho faça toda a escrita em `stdout`. Se o carregador *windowed*
+  do PyInstaller deixa `sys.stdout` utilizável sobre um *handle* redirecionado
+  varia conforme a versão. **Precisa de um teste de fumaça com o PyInstaller
+  antes da defesa**: gerar os dois alvos, abrir a GUI congelada e executar uma
+  importação de ponta a ponta.
+- **O arquivo `.spec` do PyInstaller** herda do alvo de CLI preexistente dois
+  pontos a revisar no mesmo teste de fumaça: o parâmetro `cipher=`, removido no
+  PyInstaller 6.x, e `upx=True`, fonte conhecida de pacotes Qt quebrados.
 
 ## 15. Referências
 
