@@ -18,11 +18,15 @@ QGroupBox::title {
     color: #5C6675;
     font-weight: 600;
 }
-/* M1: the QWidget rule above also paints every QLabel/QCheckBox/QRadioButton
-   nested inside a card, so without this the native render shows grey
-   rectangles behind labels and grey bars where the (often empty) error
-   labels sit, and the card stops reading as a card. */
-QGroupBox QLabel, QGroupBox QCheckBox, QGroupBox QRadioButton {
+/* M1: the QWidget rule above also paints every QLabel nested inside a card,
+   so without this the native render shows grey bars where the (often
+   empty) error labels sit and the card stops reading as a card.
+   QCheckBox/QRadioButton are deliberately left out of this selector: once a
+   stylesheet rule targets either control directly, Qt stops drawing its
+   native indicator and, with no ::indicator sub-control rule defined, the
+   box/circle disappears entirely (round 1 caused exactly this regression).
+   A grey rectangle behind each checkbox/radio is the accepted trade-off. */
+QGroupBox QLabel {
     background: transparent;
 }
 QLineEdit, QComboBox, QTableWidget {
