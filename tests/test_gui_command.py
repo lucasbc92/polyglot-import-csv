@@ -72,9 +72,41 @@ def test_sources_are_repeated_pairs():
     assert "stock=" + str(Path("/d/stock.csv")) in argv
 
 
-def test_argv_order_is_stable():
-    options = RunOptions(config_path=CFG, only=("redis",), dry_run=True, log_level="DEBUG")
-    assert build_argv(options) == build_argv(options)
+def test_argv_follows_the_order_of_the_spec_table():
+    """§4.2 fixes the order of the emitted flags, not merely that it repeats.
+
+    The previous version of this test compared build_argv(o) to build_argv(o),
+    which is true of any deterministic function and would have passed with the
+    flags emitted in any order at all.
+    """
+    sgbd = Path("/proj/sgbd.json")
+    source = Path("/proj/dados.csv")
+    options = RunOptions(
+        config_path=CFG,
+        sgbd_config_path=sgbd,
+        only=("postgres", "redis"),
+        strategy="naive",
+        execution="materialize",
+        dry_run=True,
+        create_schema=False,
+        benchmark=True,
+        log_level="DEBUG",
+        show_data=True,
+        sources=(("clientes", source),),
+    )
+    assert build_argv(options) == [
+        "--config", str(CFG),
+        "--sgbd-config", str(sgbd),
+        "--only", "postgres,redis",
+        "--strategy", "naive",
+        "--execution", "materialize",
+        "--dry-run",
+        "--no-create-schema",
+        "--benchmark",
+        "--log-level", "DEBUG",
+        "--show-data",
+        "--source", "clientes={0}".format(source),
+    ]
 
 
 def test_display_prefixes_the_program_name():

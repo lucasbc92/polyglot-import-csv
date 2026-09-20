@@ -18,11 +18,15 @@ from PySide6.QtWidgets import (
 )
 
 from polyglotimportcsv.gui.ansi import AnsiRenderer
+from polyglotimportcsv.gui.launcher import MIN_COLUMNS
 
 READ_ONLY_BADGE = "somente leitura"
 EDITING_BADGE = "modo de edição"
 RUNNING_BADGE = "em execução"
-MIN_COLUMNS = 40
+# MIN_COLUMNS is re-exported from launcher rather than redefined: it is the
+# same floor the child's COLUMNS environment variable is clamped to, and two
+# copies could drift apart silently.
+__all__ = ["ConsolePanel", "MIN_COLUMNS"]
 
 
 class ConsolePanel(QFrame):

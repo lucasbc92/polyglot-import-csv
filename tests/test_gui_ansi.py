@@ -136,9 +136,22 @@ def test_html_is_escaped():
     assert render_all(r) == ["&lt;b&gt;&amp;&lt;/b&gt;"]
 
 
-def test_module_does_not_import_qt():
-    source = open(ansi.__file__, encoding="utf-8").read()
-    assert "PySide6" not in source
+def test_pure_core_modules_do_not_import_qt():
+    """§3.1: ansi, state, command and launcher must stay importable without Qt.
+
+    The constraint covers all four modules, not just this one: any of them
+    reaching for PySide6 would make the pure core untestable without a
+    QApplication and break the one-way dependency rule.
+    """
+    from polyglotimportcsv.gui import command, launcher, state
+
+    for module in (ansi, state, command, launcher):
+        source = open(module.__file__, encoding="utf-8").read()
+        assert "PySide6" not in source, (
+            "{0} imports PySide6; the pure core must not depend on Qt.".format(
+                module.__name__
+            )
+        )
 
 
 # -- fix round 1: incomplete-escape detection must be a real completeness
