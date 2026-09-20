@@ -46,6 +46,7 @@ class ConsolePanel(QFrame):
         self._generated = ""
         self._editing = False
         self._running = False
+        self._run_enabled = True
         self._rendered_lines = 0
 
         mono = QFontDatabase.systemFont(QFontDatabase.FixedFont)
@@ -100,6 +101,13 @@ class ConsolePanel(QFrame):
         return self._editing
 
     def set_editing(self, editing: bool) -> None:
+        if self._running:
+            # The command must stay locked and the "em execução" badge must
+            # stay in force while a child process is running, regardless of
+            # what a caller asks for. Task 10's MainWindow already disables
+            # edit_button while running, but the panel enforces the
+            # invariant itself rather than trusting the caller's discipline.
+            return
         if editing == self._editing:
             return
         self._editing = editing
@@ -116,7 +124,7 @@ class ConsolePanel(QFrame):
         self._running = running
         self.run_button.setText("■  Interromper" if running else "▶  Executar")
         self.run_button.setProperty("running", running)
-        self.run_button.setEnabled(True)
+        self.run_button.setEnabled(self._run_enabled or running)
         self.edit_button.setEnabled(not running)
         self.command_edit.setReadOnly(running or not self._editing)
         if running:
@@ -131,8 +139,11 @@ class ConsolePanel(QFrame):
 
         While ``_running`` is true, this same button is the Interromper
         button, so disabling it here would strand the user with no way to
-        stop the child process.
+        stop the child process. The requested state is remembered so that
+        ``set_running(False)`` can restore it instead of unconditionally
+        re-enabling the button (e.g. when the form is still invalid).
         """
+        self._run_enabled = enabled
         self.run_button.setEnabled(enabled or self._running)
 
     # -- log --------------------------------------------------------------
@@ -140,10 +151,7 @@ class ConsolePanel(QFrame):
     def append_output(self, chunk: str) -> None:
         """Feed one decoded chunk of CLI output into the log view."""
         self._renderer.feed(chunk)
-        first, lines = self._renderer.take_update()
-        if not lines and first >= self._rendered_lines:
-            return
-        self._replace_from(first, lines)
+        self._apply_update()
 
     def flush_output(self) -> None:
         """Flush any buffered incomplete escape sequence and repaint.
@@ -153,10 +161,7 @@ class ConsolePanel(QFrame):
         lost and its literal text still reaches the log.
         """
         self._renderer.flush()
-        first, lines = self._renderer.take_update()
-        if not lines and first >= self._rendered_lines:
-            return
-        self._replace_from(first, lines)
+        self._apply_update()
 
     def clear_output(self) -> None:
         self._renderer = AnsiRenderer()
@@ -170,14 +175,30 @@ class ConsolePanel(QFrame):
 
     # -- internals --------------------------------------------------------
 
+    def _apply_update(self) -> None:
+        first, lines = self._renderer.take_update()
+        # ``take_update`` guarantees first + len(lines) == line_count, and
+        # ``_trim`` resets the dirty marker to 0 on any shrink, so an empty
+        # ``lines`` here can only mean nothing changed since the last call
+        # — never that content should be deleted. The guard below is thus
+        # load-bearing, not defensive paranoia.
+        if not lines and first >= self._rendered_lines:
+            return
+        self._replace_from(first, lines)
+
     def _replace_from(self, first: int, lines: List[str]) -> None:
         cursor = self.log_view.textCursor()
         cursor.movePosition(QTextCursor.Start)
         for _ in range(first):
-            cursor.movePosition(QTextCursor.NextBlock)
+            if not cursor.movePosition(QTextCursor.NextBlock):
+                cursor.movePosition(QTextCursor.End)
+                break
         cursor.movePosition(QTextCursor.End, QTextCursor.KeepAnchor)
         cursor.removeSelectedText()
-        cursor.insertHtml("<br>".join(lines))
+        for offset, line in enumerate(lines):
+            if offset:
+                cursor.insertBlock()
+            cursor.insertHtml(line)
         self._rendered_lines = first + len(lines)
         scrollbar = self.log_view.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())

@@ -111,3 +111,43 @@ def test_flush_output_reveals_a_pending_incomplete_escape(qtbot):
     assert "[3" not in panel.log_view.toPlainText()
     panel.flush_output()
     assert "[3" in panel.log_view.toPlainText()
+
+
+def test_sequential_appends_keep_earlier_lines(qtbot):
+    panel = ConsolePanel()
+    qtbot.addWidget(panel)
+    panel.append_output("linha A\n")
+    panel.append_output("linha B\n")
+    panel.append_output("linha C\n")
+    text = panel.log_view.toPlainText()
+    assert "linha A" in text
+    assert "linha B" in text
+    assert "linha C" in text
+
+
+def test_block_count_matches_rendered_lines(qtbot):
+    panel = ConsolePanel()
+    qtbot.addWidget(panel)
+    panel.append_output("linha A\n")
+    panel.append_output("linha B\n")
+    panel.append_output("linha C\n")
+    assert panel.log_view.document().blockCount() == panel._rendered_lines
+
+
+def test_set_running_false_respects_run_enabled_false(qtbot):
+    panel = ConsolePanel()
+    qtbot.addWidget(panel)
+    panel.set_run_enabled(False)
+    panel.set_running(True)
+    panel.set_running(False)
+    assert not panel.run_button.isEnabled()
+
+
+def test_set_editing_is_ignored_while_running(qtbot):
+    panel = ConsolePanel()
+    qtbot.addWidget(panel)
+    panel.set_running(True)
+    panel.set_editing(True)
+    assert panel.is_editing() is False
+    assert panel.command_edit.isReadOnly()
+    assert "em execução" in panel.badge_label.text()
