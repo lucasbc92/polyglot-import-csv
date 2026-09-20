@@ -1,5 +1,6 @@
 """The GUI entry point and its CLI hand-off."""
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -23,6 +24,24 @@ def test_pyproject_declares_the_gui_script():
     text = Path("pyproject.toml").read_text(encoding="utf-8")
     assert 'polyglotimportcsv-gui = "polyglotimportcsv.gui.app:main"' in text
     assert 'gui = ["PySide6"]' in text
+
+
+def test_spec_exe_names_do_not_collide_case_insensitively():
+    """Guard against a repeat of the CLI/GUI EXE name collision.
+
+    PyInstaller's ``EXE(..., name=...)`` becomes a file on disk. Two names that
+    only differ by case resolve to the same path on case-insensitive
+    filesystems (Windows NTFS, default macOS APFS), so a single
+    ``pyinstaller polyglotimportcsv.spec`` run would have the second EXE()
+    silently overwrite the first one's binary.
+    """
+    text = Path("polyglotimportcsv.spec").read_text(encoding="utf-8")
+    names = re.findall(r"name=['\"]([^'\"]+)['\"]", text)
+    assert len(names) == 2, f"expected exactly two EXE() name= values, found {names}"
+    lowered = [name.lower() for name in names]
+    assert len(set(lowered)) == len(lowered), (
+        f"EXE names collide case-insensitively: {names}"
+    )
 
 
 def test_cli_flag_never_imports_pyside6():

@@ -68,7 +68,7 @@ gui_exe = EXE(
     gui_a.zipfiles,
     gui_a.datas,
     [],
-    name='PolyglotImportCSV',
+    name='polyglotimportcsv-gui',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
