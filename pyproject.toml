@@ -21,7 +21,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "pytest-qt"]
+gui = ["PySide6"]
 
 [project.scripts]
 polyglotimportcsv = "polyglotimportcsv.cli:main"
@@ -31,3 +32,8 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 polyglotimportcsv = ["schemas/*.json"]
+
+[tool.pytest.ini_options]
+markers = [
+    "gui: precisa de PySide6 instalado (pulado quando ausente)",
+]
