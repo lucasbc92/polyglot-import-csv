@@ -72,3 +72,31 @@ def test_errors_are_shown(qtbot):
     assert panel.error_label.text() == "Nome de fonte repetido: stock"
     panel.set_errors({})
     assert panel.error_label.text() == ""
+
+
+def test_add_row_restores_signals_after_exception(qtbot, monkeypatch):
+    panel = SourcesPanel()
+    qtbot.addWidget(panel)
+
+    def boom(_index):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(panel.table, "insertRow", boom)
+    with pytest.raises(RuntimeError):
+        panel.add_row("stock", "/d/stock.csv")
+    assert panel.table.signalsBlocked() is False
+
+
+def test_remove_selected_rows_restores_signals_after_exception(qtbot, monkeypatch):
+    panel = SourcesPanel()
+    qtbot.addWidget(panel)
+    panel.add_row("a", "/d/a.csv")
+    panel.table.selectRow(0)
+
+    def boom(_index):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(panel.table, "removeRow", boom)
+    with pytest.raises(RuntimeError):
+        panel.remove_selected_rows()
+    assert panel.table.signalsBlocked() is False

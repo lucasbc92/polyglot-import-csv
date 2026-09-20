@@ -82,10 +82,12 @@ class SourcesPanel(QGroupBox):
     def add_row(self, name: str = "", path: str = "") -> int:
         index = self.table.rowCount()
         self.table.blockSignals(True)
-        self.table.insertRow(index)
-        self.table.setItem(index, 0, QTableWidgetItem(name))
-        self.table.setItem(index, 1, QTableWidgetItem(path))
-        self.table.blockSignals(False)
+        try:
+            self.table.insertRow(index)
+            self.table.setItem(index, 0, QTableWidgetItem(name))
+            self.table.setItem(index, 1, QTableWidgetItem(path))
+        finally:
+            self.table.blockSignals(False)
         self.changed.emit()
         return index
 
@@ -94,9 +96,11 @@ class SourcesPanel(QGroupBox):
         if not indexes:
             return
         self.table.blockSignals(True)
-        for index in indexes:
-            self.table.removeRow(index)
-        self.table.blockSignals(False)
+        try:
+            for index in indexes:
+                self.table.removeRow(index)
+        finally:
+            self.table.blockSignals(False)
         self.changed.emit()
 
     def set_errors(self, errors: Dict[str, str]) -> None:
