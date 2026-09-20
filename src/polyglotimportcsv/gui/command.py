@@ -45,6 +45,23 @@ def build_argv(options: RunOptions) -> List[str]:
     return argv
 
 
+def is_program_token(token: str) -> bool:
+    """True when ``token`` names this program rather than one of its options.
+
+    Used by edit mode to decide whether the first token typed is the program
+    name — which the resolved launcher prefix replaces — or already an
+    argument. Blindly dropping the first token turned a typed ``--dry-run``
+    into a run with no arguments at all. A bare name, a name with ``.exe``,
+    and a full path to either all count as the program name; anything else
+    (notably anything starting with ``-``) does not. This is a single-token
+    identity check, not a command parser.
+    """
+    name = token.strip('"').replace("\\", "/").rsplit("/", 1)[-1]
+    if name.lower().endswith(".exe"):
+        name = name[:-4]
+    return name.lower() == PROGRAM
+
+
 def quote(token: str, windows: Optional[bool] = None) -> str:
     """Quote one token the way the host shell would display it."""
     if windows is None:

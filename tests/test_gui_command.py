@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from polyglotimportcsv.gui.command import build_argv, to_display
+from polyglotimportcsv.gui.command import build_argv, is_program_token, to_display
 from polyglotimportcsv.gui.state import RunOptions
 
 CFG = Path("/proj/import_config.json")
@@ -126,3 +126,30 @@ def test_display_quotes_paths_with_spaces_on_posix():
 
 def test_display_leaves_plain_tokens_unquoted():
     assert to_display(["--dry-run"], windows=True) == "polyglotimportcsv --dry-run"
+
+
+# -- I5: telling the program name apart from an argument -------------------
+
+
+def test_bare_program_name_is_recognised():
+    assert is_program_token("polyglotimportcsv")
+
+
+def test_program_name_with_exe_suffix_is_recognised():
+    assert is_program_token("polyglotimportcsv.exe")
+
+
+def test_program_name_with_a_path_prefix_is_recognised():
+    assert is_program_token(r"C:\venv\Scripts\polyglotimportcsv.exe")
+    assert is_program_token("/usr/local/bin/polyglotimportcsv")
+    assert is_program_token(r'"C:\meu venv\Scripts\polyglotimportcsv.exe"')
+
+
+def test_an_option_is_not_the_program_name():
+    assert not is_program_token("--dry-run")
+    assert not is_program_token("--config")
+
+
+def test_another_program_is_not_the_program_name():
+    assert not is_program_token("python")
+    assert not is_program_token("polyglotimportcsv-gui")

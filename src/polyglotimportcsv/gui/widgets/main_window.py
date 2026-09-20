@@ -30,7 +30,13 @@ from polyglotimportcsv.gui.widgets.console_panel import ConsolePanel
 from polyglotimportcsv.gui.widgets.options_panel import OptionsPanel
 from polyglotimportcsv.gui.widgets.sources_panel import SourcesPanel
 
-LOG_PATH_RE = re.compile(r"Log file:\s*(\S+)")
+# I4: the path is captured to the end of its own line, not with \S+. The real
+# CLI prints path.resolve(), an absolute path, and on Windows those routinely
+# contain spaces ("C:\Users\Lucas Bueno\..."); \S+ stopped at the first space
+# and showed the user a truncated path. The per-line $ anchor also means a
+# match can only complete once the line's newline has arrived, which is what
+# makes the mid-chunk truncation check below reliable.
+LOG_PATH_RE = re.compile(r"Log file:[ \t]*(.+?)[ \t\r]*$", re.MULTILINE)
 # Strips SGR/CSI escape codes before searching for the log path: FORCE_COLOR=1
 # lets rich wrap the "Log file:" label in a dim escape (reporting.kv() styles
 # only the label span), which would otherwise land right before the path and
@@ -111,6 +117,11 @@ class MainWindow(QMainWindow):
         self.console_panel.stop_requested.connect(self.on_stop)
         self.console_panel.edit_mode_changed.connect(self._on_edit_mode_changed)
 
+        # I3 / §6.1: the resolved launcher prefix is the one divergence between
+        # the command shown and the process spawned, and the spec mitigates it
+        # with a tooltip as well as the "Executando:" log line.
+        self.console_panel.set_launcher_prefix(" ".join(launcher.resolve()))
+
         self._settings = settings if settings is not None else QSettings("UFSC", "PolyglotImportCSV")
         self._restore_settings()
         self.refresh_command()
@@ -147,7 +158,12 @@ class MainWindow(QMainWindow):
         prefix = launcher.resolve()
         if self.console_panel.is_editing():
             tokens = shlex.split(self.console_panel.command_text(), posix=os.name != "nt")
-            return prefix + [token.strip('"') for token in tokens[1:]]
+            # I5: drop the first token only when it is the program name, which
+            # the resolved prefix replaces. Dropping it unconditionally turned
+            # a typed "--dry-run" into a run with no arguments at all.
+            if tokens and command_module.is_program_token(tokens[0]):
+                tokens = tokens[1:]
+            return prefix + [token.strip('"') for token in tokens]
         return prefix + command_module.build_argv(self.options())
 
     # -- running ----------------------------------------------------------
@@ -202,9 +218,10 @@ class MainWindow(QMainWindow):
         stripped = _ANSI_RE.sub("", self._log_search_buffer)
         match = LOG_PATH_RE.search(stripped)
         # A match that reaches the end of the buffered text may just be a
-        # path token truncated mid-chunk (\S+ is greedy and has no closing
-        # boundary yet); only accept it once something follows the token
-        # (normally the line's own newline), otherwise keep buffering.
+        # path truncated mid-chunk: with the per-line $ anchor, the end of
+        # the buffer is itself a valid anchor point. Only accept the match
+        # once something follows it — normally the line's own newline —
+        # otherwise keep buffering.
         if match and match.end() < len(stripped):
             self.log_path_label.setText(match.group(1))
             self._log_path_found = True

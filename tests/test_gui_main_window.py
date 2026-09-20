@@ -7,6 +7,7 @@ import pytest
 pytest.importorskip("PySide6")
 pytestmark = pytest.mark.gui
 
+from polyglotimportcsv.gui import launcher  # noqa: E402
 from polyglotimportcsv.gui.widgets.main_window import MainWindow  # noqa: E402
 
 
@@ -85,7 +86,44 @@ def test_argv_for_run_in_edit_mode_uses_the_typed_text(window, config_files):
     window.config_panel.set_paths(cfg, None)
     window.console_panel.set_editing(True)
     window.console_panel.command_edit.setPlainText("polyglotimportcsv --dry-run")
-    assert window.argv_for_run()[-1] == "--dry-run"
+    argv = window.argv_for_run()
+    assert argv[-1] == "--dry-run"
+    assert argv == launcher.resolve() + ["--dry-run"]
+
+
+def test_edit_mode_keeps_every_token_when_the_program_name_is_absent(window, config_files):
+    """I5: dropping tokens[0] unconditionally ran the CLI with no arguments."""
+    cfg, _ = config_files
+    window.config_panel.set_paths(cfg, None)
+    window.console_panel.set_editing(True)
+    window.console_panel.command_edit.setPlainText("--dry-run --benchmark")
+    assert window.argv_for_run() == launcher.resolve() + ["--dry-run", "--benchmark"]
+
+
+def test_edit_mode_drops_a_program_name_written_as_a_full_path(window, config_files):
+    """I5: an .exe suffix or a path prefix still names the program."""
+    cfg, _ = config_files
+    window.config_panel.set_paths(cfg, None)
+    window.console_panel.set_editing(True)
+    window.console_panel.command_edit.setPlainText(
+        r'"C:\venv\Scripts\polyglotimportcsv.exe" --dry-run'
+    )
+    assert window.argv_for_run() == launcher.resolve() + ["--dry-run"]
+
+
+def test_edit_mode_enables_run_even_with_an_invalid_form(window):
+    """I6: the opening move — no config chosen, type a whole command by hand."""
+    assert not window.console_panel.run_button.isEnabled()
+    window.console_panel.set_editing(True)
+    window.console_panel.command_edit.setPlainText(
+        "polyglotimportcsv --config c.json --dry-run"
+    )
+    assert window.console_panel.run_button.isEnabled()
+
+
+def test_launcher_prefix_tooltip_is_installed_on_the_console_panel(window):
+    """I3 / §6.1: the resolved prefix is visible in the interface itself."""
+    assert " ".join(launcher.resolve()) in window.console_panel.command_edit.toolTip()
 
 
 def test_declared_dbms_filter_the_checkboxes(window, config_files):
@@ -117,24 +155,36 @@ def test_finishing_with_non_zero_sets_an_error_status(window, config_files):
     assert "código de saída 2" in window.status_label.text()
 
 
+# The real shape printed by reporting.kv("Log file", log_path): a leading
+# indent, a colon after the label, one space, then path.resolve() — an
+# absolute path, which on Windows routinely contains spaces.
+REAL_LOG_PATH = r"C:\Users\Lucas Bueno\proj\logs\session-20260920-142233.log"
+REAL_LOG_LINE = "    Log file: " + REAL_LOG_PATH
+
+
 def test_log_path_is_picked_up_from_the_output(window):
-    # This is the real shape printed by reporting.kv("Log file", log_path):
-    # a leading indent, a colon after the label, one space, then the path.
-    window._on_output("    Log file: logs\\session-20260920-142233.log\n")
-    assert "session-20260920-142233.log" in window.log_path_label.text()
+    window._on_output(REAL_LOG_LINE + "\n")
+    assert window.log_path_label.text() == REAL_LOG_PATH
+
+
+def test_log_path_keeps_the_spaces_of_an_absolute_windows_path(window):
+    r"""I4: the old \S+ stopped at the first space and showed "C:\Users\Lucas"."""
+    window._on_output(REAL_LOG_LINE + "\r\n")
+    assert window.log_path_label.text() == REAL_LOG_PATH
+    assert " " in window.log_path_label.text()
 
 
 def test_log_path_survives_a_split_across_two_chunks(window):
     """I1 robustness: readyRead can split the line at any byte boundary."""
-    window._on_output("    Log file: logs\\sess")
-    window._on_output("ion-20260920-142233.log\n")
-    assert "session-20260920-142233.log" in window.log_path_label.text()
+    window._on_output("    Log file: " + REAL_LOG_PATH[:-12])
+    window._on_output(REAL_LOG_PATH[-12:] + "\r\n")
+    assert window.log_path_label.text() == REAL_LOG_PATH
 
 
 def test_log_path_ignores_a_surrounding_colour_escape(window):
     """I1 robustness: FORCE_COLOR=1 can wrap the dim label in SGR codes."""
-    window._on_output("\x1b[2m    Log file: \x1b[0mlogs\\session-20260920-142233.log\n")
-    assert window.log_path_label.text() == "logs\\session-20260920-142233.log"
+    window._on_output("\x1b[2m    Log file: \x1b[0m" + REAL_LOG_PATH + "\n")
+    assert window.log_path_label.text() == REAL_LOG_PATH
 
 
 def test_finishing_flushes_a_pending_partial_escape(window, config_files):
