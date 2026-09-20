@@ -216,3 +216,63 @@ def test_flush_is_a_no_op_when_nothing_is_pending():
     r.flush()
     start, lines = r.take_update()
     assert lines == []
+
+
+# -- fix round 2 (C1): "\r\n" is a line ending, not an erase ----------------
+
+
+def test_crlf_renders_exactly_like_lf():
+    crlf = AnsiRenderer()
+    crlf.feed("linha A\r\nlinha B\r\n")
+    lf = AnsiRenderer()
+    lf.feed("linha A\nlinha B\n")
+    rendered = render_all(crlf)
+    assert rendered == render_all(lf)
+    # Not a vacuous comparison: both sides must carry the real text.
+    assert "linha&nbsp;A" in rendered
+
+
+def test_crlf_does_not_blank_the_lines_it_terminates():
+    r = AnsiRenderer()
+    r.feed("linha A\r\nlinha B\r\n")
+    assert render_all(r) == ["linha&nbsp;A", "linha&nbsp;B", "&nbsp;"]
+
+
+def test_lone_carriage_return_still_redraws_the_current_line():
+    # rich's progress bar redraws in place with a bare "\r": that behaviour
+    # must survive the CRLF fix untouched.
+    r = AnsiRenderer()
+    r.feed("progresso 10%\rprogresso 90%\n")
+    assert render_all(r) == ["progresso&nbsp;90%", "&nbsp;"]
+
+
+def test_carriage_return_at_a_chunk_boundary_is_withheld_until_decided():
+    # The OS splits a pipe read wherever it likes; a "\r" that lands last in
+    # one chunk cannot be classified until the next character arrives.
+    r = AnsiRenderer()
+    r.feed("linha A\r")
+    r.feed("\nlinha B\r\n")
+    assert render_all(r) == ["linha&nbsp;A", "linha&nbsp;B", "&nbsp;"]
+
+
+def test_carriage_return_at_a_chunk_boundary_still_erases_when_no_newline_follows():
+    r = AnsiRenderer()
+    r.feed("progresso 10%\r")
+    r.feed("progresso 90%\n")
+    assert render_all(r) == ["progresso&nbsp;90%", "&nbsp;"]
+
+
+def test_double_carriage_return_before_a_newline_erases_then_breaks():
+    r = AnsiRenderer()
+    r.feed("linha A\r\r\nlinha B")
+    assert render_all(r) == ["&nbsp;", "linha&nbsp;B"]
+
+
+def test_trailing_carriage_return_at_end_of_stream_erases_on_flush():
+    r = AnsiRenderer()
+    r.feed("linha A\r")
+    assert render_all(r) == ["linha&nbsp;A"]
+    r.flush()
+    start, lines = r.take_update()
+    assert start == 0
+    assert lines == ["&nbsp;"]

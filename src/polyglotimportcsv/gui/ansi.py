@@ -139,6 +139,21 @@ class AnsiRenderer(object):
                 index += 1
                 continue
             if char == "\r":
+                # C1: on Windows every text line ends with "\r\n". Treating a
+                # bare "\r" as an erase would wipe each line right after it was
+                # written, leaving a console full of blank rows. Only a "\r"
+                # that is NOT followed by "\n" is the carriage return rich uses
+                # to redraw a progress line in place.
+                if index + 1 >= len(data):
+                    # The next character decides which of the two this is, and
+                    # it has not arrived yet: withhold the "\r" rather than
+                    # guess. _pending stays bounded — this adds one character.
+                    self._pending = "\r"
+                    return
+                if data[index + 1] == "\n":
+                    self._newline()
+                    index += 2
+                    continue
                 self._clear_line()
                 index += 1
                 continue
@@ -168,6 +183,12 @@ class AnsiRenderer(object):
             return
         text = self._pending
         self._pending = ""
+        if text == "\r":
+            # C1: a trailing "\r" was withheld only to see whether a "\n"
+            # would follow. The stream is over, so no "\n" ever will: it is
+            # the redraw form, not a line ending, and it is not literal text.
+            self._clear_line()
+            return
         self._write(text)
 
     # -- internals --------------------------------------------------------

@@ -40,7 +40,10 @@ def test_successful_run_emits_output_then_zero(qtbot, process):
     text = "".join(chunks)
     assert "primeira linha" in text
     assert "\x1b[32m" in text
-    assert "\r" in text
+    # C1: the fake CLI writes the real Windows line shape, CRLF, plus one
+    # bare "\r" for the progress redraw.
+    assert "\r\n" in text
+    assert "progresso 10%\rprogresso 90%" in text
 
 
 def test_non_zero_exit_code_is_reported(qtbot, process):

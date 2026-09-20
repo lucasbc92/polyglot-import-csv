@@ -187,3 +187,60 @@ def test_on_run_preserves_previous_log_on_a_rejected_command(window, config_file
     window.console_panel.command_edit.setPlainText('polyglotimportcsv --config "C:\\a b.json')
     window.on_run()
     assert "saída da execução anterior" in window.console_panel.log_view.toPlainText()
+
+
+# -- fix round 2 (C3): the happy path through on_run(), end to end ----------
+
+
+def test_a_full_run_shows_the_child_output_in_the_console(qtbot, window, config_files, monkeypatch):
+    """C3: on_run -> process.start -> _on_output -> _on_finished, for real.
+
+    The whole chain had never been exercised: every earlier test called
+    on_run() only on its rejection path or poked _on_finished() directly, so
+    a run whose console stayed completely blank still reported "Concluído"
+    and passed. This test asserts the child's own text is visible, which is
+    what C1 (CRLF wiping every line) made false.
+    """
+    import sys
+
+    cfg, _ = config_files
+    window.config_panel.set_paths(cfg, None)
+    fake_cli = Path(__file__).parent / "gui_fake_cli.py"
+    monkeypatch.setattr(
+        window, "argv_for_run", lambda: [sys.executable, str(fake_cli), "0"]
+    )
+
+    with qtbot.waitSignal(window.process.finished, timeout=15000) as blocker:
+        window.on_run()
+    assert blocker.args == [0]
+    qtbot.waitUntil(lambda: "Concluído" in window.status_label.text(), timeout=5000)
+
+    text = window.console_panel.log_view.toPlainText()
+    assert "primeira linha" in text
+    assert "segunda linha" in text
+    # The bare "\r" redraw still collapses onto one line, as rich intends.
+    assert "progresso 90%" in text
+    assert "progresso 10%" not in text
+    # And no line the child wrote was erased by its own CRLF terminator.
+    body = [line for line in text.splitlines() if line.strip()]
+    assert len(body) >= 4  # "Executando: …" plus the three child lines
+
+
+def test_a_full_run_re_enables_the_form_and_clears_the_running_badge(
+    qtbot, window, config_files, monkeypatch
+):
+    """C3: the run must land back in the idle state, not stay stuck."""
+    import sys
+
+    cfg, _ = config_files
+    window.config_panel.set_paths(cfg, None)
+    fake_cli = Path(__file__).parent / "gui_fake_cli.py"
+    monkeypatch.setattr(
+        window, "argv_for_run", lambda: [sys.executable, str(fake_cli), "3"]
+    )
+
+    with qtbot.waitSignal(window.process.finished, timeout=15000):
+        window.on_run()
+    qtbot.waitUntil(lambda: "código de saída 3" in window.status_label.text(), timeout=5000)
+    assert window.config_panel.isEnabled()
+    assert "Executar" in window.console_panel.run_button.text()
