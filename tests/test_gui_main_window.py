@@ -118,8 +118,23 @@ def test_finishing_with_non_zero_sets_an_error_status(window, config_files):
 
 
 def test_log_path_is_picked_up_from_the_output(window):
-    window._on_output("Log file logs\\session-20260920-142233.log\n")
+    # This is the real shape printed by reporting.kv("Log file", log_path):
+    # a leading indent, a colon after the label, one space, then the path.
+    window._on_output("    Log file: logs\\session-20260920-142233.log\n")
     assert "session-20260920-142233.log" in window.log_path_label.text()
+
+
+def test_log_path_survives_a_split_across_two_chunks(window):
+    """I1 robustness: readyRead can split the line at any byte boundary."""
+    window._on_output("    Log file: logs\\sess")
+    window._on_output("ion-20260920-142233.log\n")
+    assert "session-20260920-142233.log" in window.log_path_label.text()
+
+
+def test_log_path_ignores_a_surrounding_colour_escape(window):
+    """I1 robustness: FORCE_COLOR=1 can wrap the dim label in SGR codes."""
+    window._on_output("\x1b[2m    Log file: \x1b[0mlogs\\session-20260920-142233.log\n")
+    assert window.log_path_label.text() == "logs\\session-20260920-142233.log"
 
 
 def test_finishing_flushes_a_pending_partial_escape(window, config_files):
@@ -130,3 +145,45 @@ def test_finishing_flushes_a_pending_partial_escape(window, config_files):
     assert "[3" not in window.console_panel.log_view.toPlainText()
     window._on_finished(0)
     assert "[3" in window.console_panel.log_view.toPlainText()
+
+
+def test_finishing_does_not_reenable_the_form_while_editing(window, config_files):
+    """I2: edit mode must stay in force across a run that ends while active."""
+    cfg, _ = config_files
+    window.config_panel.set_paths(cfg, None)
+    window.console_panel.set_editing(True)
+    window._on_finished(0)
+    assert not window.config_panel.isEnabled()
+    assert not window.options_panel.isEnabled()
+    assert not window.sources_panel.isEnabled()
+
+
+def test_failing_does_not_reenable_the_form_while_editing(window, config_files):
+    """I2: same invariant on the failure path."""
+    cfg, _ = config_files
+    window.config_panel.set_paths(cfg, None)
+    window.console_panel.set_editing(True)
+    window._on_failed("não foi possível iniciar o processo")
+    assert not window.config_panel.isEnabled()
+
+
+def test_on_run_rejects_unbalanced_quotes_in_edit_mode(window, config_files):
+    """I3: a malformed edited command must not raise or start a process."""
+    cfg, _ = config_files
+    window.config_panel.set_paths(cfg, None)
+    window.console_panel.set_editing(True)
+    window.console_panel.command_edit.setPlainText('polyglotimportcsv --config "C:\\a b.json')
+    window.on_run()
+    assert "inválido" in window.status_label.text().lower()
+    assert not window.process.is_running()
+
+
+def test_on_run_preserves_previous_log_on_a_rejected_command(window, config_files):
+    """I3: a rejected command must not wipe out the previous run's output."""
+    cfg, _ = config_files
+    window.config_panel.set_paths(cfg, None)
+    window.console_panel.append_output("saída da execução anterior\n")
+    window.console_panel.set_editing(True)
+    window.console_panel.command_edit.setPlainText('polyglotimportcsv --config "C:\\a b.json')
+    window.on_run()
+    assert "saída da execução anterior" in window.console_panel.log_view.toPlainText()

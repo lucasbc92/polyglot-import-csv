@@ -30,8 +30,17 @@ from polyglotimportcsv.gui.widgets.console_panel import ConsolePanel
 from polyglotimportcsv.gui.widgets.options_panel import OptionsPanel
 from polyglotimportcsv.gui.widgets.sources_panel import SourcesPanel
 
-LOG_PATH_RE = re.compile(r"Log file\s+(\S+)")
+LOG_PATH_RE = re.compile(r"Log file:\s*(\S+)")
+# Strips SGR/CSI escape codes before searching for the log path: FORCE_COLOR=1
+# lets rich wrap the "Log file:" label in a dim escape (reporting.kv() styles
+# only the label span), which would otherwise land right before the path and
+# defeat a plain \s* boundary.
+_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+# Bounds the tail kept across chunks while still hunting for the log path
+# line, in case readyReadStandardOutput ever splits it mid-token.
+_LOG_SEARCH_LIMIT = 4096
 IDLE_STATUS = "Pronto — nenhuma importação em execução"
+INVALID_EDIT_STATUS = "Comando inválido: aspas não fechadas"
 
 
 class MainWindow(QMainWindow):
@@ -45,7 +54,11 @@ class MainWindow(QMainWindow):
         super().__init__(parent)
         self.setWindowTitle("PolyglotImportCSV")
         self.resize(1240, 1020)
-        self.setMinimumSize(960, 680)
+        # M2: 680 was a guess made before any layout existed; measured, the
+        # splitter's real floor is 773 (form 608 + console 200 - handle),
+        # so anything below ~814 clips the option rows and collapses the
+        # sources table to its header. 820 leaves a small margin.
+        self.setMinimumSize(960, 820)
 
         self.config_panel = ConfigPanel(self)
         self.options_panel = OptionsPanel(self)
@@ -88,6 +101,8 @@ class MainWindow(QMainWindow):
         self._elapsed_timer.setInterval(500)
         self._elapsed_timer.timeout.connect(self._tick)
         self._started_at = 0.0
+        self._log_search_buffer = ""
+        self._log_path_found = False
 
         self.config_panel.changed.connect(self._on_config_changed)
         self.options_panel.changed.connect(self.refresh_command)
@@ -138,14 +153,24 @@ class MainWindow(QMainWindow):
     # -- running ----------------------------------------------------------
 
     def on_run(self) -> None:
+        # I3: resolve argv before touching anything else. shlex.split raises
+        # ValueError on an edited command with an unbalanced quote (e.g. a
+        # pasted Windows path), and the previous run's log must survive that
+        # rejection instead of being wiped by an early clear_output().
+        try:
+            argv = self.argv_for_run()
+        except ValueError:
+            self.status_label.setText(INVALID_EDIT_STATUS)
+            return
         self.console_panel.clear_output()
-        argv = self.argv_for_run()
         self.console_panel.append_output(
             "Executando: {0} …\n".format(" ".join(launcher.resolve()))
         )
         self._set_form_enabled(False)
         self.console_panel.set_running(True)
         self.log_path_label.setText("")
+        self._log_search_buffer = ""
+        self._log_path_found = False
         self._started_at = time.monotonic()
         self._elapsed_timer.start()
         self.status_label.setText("Executando — 00:00 decorridos")
@@ -165,13 +190,35 @@ class MainWindow(QMainWindow):
 
     def _on_output(self, chunk: str) -> None:
         self.console_panel.append_output(chunk)
-        match = LOG_PATH_RE.search(chunk)
-        if match:
+        # I1: the CLI prints "    Log file: <path>", not "Log file <path>",
+        # so the regex must expect the colon. It is also matched against
+        # ANSI-stripped, cross-chunk text: readyReadStandardOutput can split
+        # the line at any byte boundary, and FORCE_COLOR=1 can wrap the
+        # label in an SGR escape that would otherwise sit between the label
+        # and the path.
+        if self._log_path_found:
+            return
+        self._log_search_buffer += chunk
+        stripped = _ANSI_RE.sub("", self._log_search_buffer)
+        match = LOG_PATH_RE.search(stripped)
+        # A match that reaches the end of the buffered text may just be a
+        # path token truncated mid-chunk (\S+ is greedy and has no closing
+        # boundary yet); only accept it once something follows the token
+        # (normally the line's own newline), otherwise keep buffering.
+        if match and match.end() < len(stripped):
             self.log_path_label.setText(match.group(1))
+            self._log_path_found = True
+            self._log_search_buffer = ""
+        else:
+            self._log_search_buffer = self._log_search_buffer[-_LOG_SEARCH_LIMIT:]
 
     def _on_finished(self, code: int) -> None:
         self._elapsed_timer.stop()
-        self._set_form_enabled(True)
+        # I2: a run that ends while the user is mid-edit must not silently
+        # re-enable the form — set_command() is ignored while editing, so
+        # the displayed command would stop tracking the form even though
+        # argv_for_run() still executes whatever text is typed.
+        self._set_form_enabled(not self.console_panel.is_editing())
         self.console_panel.set_running(False)
         # Ruling 1: a lone trailing partial escape sequence must not be
         # stranded inside the renderer forever, so flush before reporting
@@ -185,7 +232,8 @@ class MainWindow(QMainWindow):
 
     def _on_failed(self, message: str) -> None:
         self._elapsed_timer.stop()
-        self._set_form_enabled(True)
+        # I2: same invariant as _on_finished.
+        self._set_form_enabled(not self.console_panel.is_editing())
         self.console_panel.set_running(False)
         # Ruling 1: same as _on_finished — flush before the final append and
         # status, so nothing withheld by the renderer is lost.

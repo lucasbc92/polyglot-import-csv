@@ -18,6 +18,13 @@ QGroupBox::title {
     color: #5C6675;
     font-weight: 600;
 }
+/* M1: the QWidget rule above also paints every QLabel/QCheckBox/QRadioButton
+   nested inside a card, so without this the native render shows grey
+   rectangles behind labels and grey bars where the (often empty) error
+   labels sit, and the card stops reading as a card. */
+QGroupBox QLabel, QGroupBox QCheckBox, QGroupBox QRadioButton {
+    background: transparent;
+}
 QLineEdit, QComboBox, QTableWidget {
     background-color: #FFFFFF;
     border: 1px solid #D9DFE7;
