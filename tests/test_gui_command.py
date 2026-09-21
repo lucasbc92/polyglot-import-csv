@@ -8,14 +8,27 @@ from polyglotimportcsv.gui.state import RunOptions
 CFG = Path("/proj/import_config.json")
 
 
-def test_only_config_in_the_default_state():
-    assert build_argv(RunOptions(config_path=CFG)) == ["--config", str(CFG)]
+def test_the_default_state_spells_every_option_out():
+    """Q1: a control at its default value must still appear in the command.
+
+    The first version emitted only what differed from the CLI defaults, so
+    clicking "optimized", "stream" or "Criar esquema" produced no visible
+    change and the control looked dead. Verbosity is the point here: the shown
+    command is a teaching aid, not the shortest line a person could type.
+    """
+    assert build_argv(RunOptions(config_path=CFG)) == [
+        "--config", str(CFG),
+        "--strategy", "optimized",
+        "--execution", "stream",
+        "--create-schema",
+        "--log-level", "INFO",
+    ]
 
 
 def test_sgbd_config_is_emitted_when_set():
     sgbd = Path("/proj/sgbd.json")
     argv = build_argv(RunOptions(config_path=CFG, sgbd_config_path=sgbd))
-    assert argv[2:] == ["--sgbd-config", str(sgbd)]
+    assert argv[2:4] == ["--sgbd-config", str(sgbd)]
 
 
 def test_only_is_comma_joined():
@@ -24,10 +37,10 @@ def test_only_is_comma_joined():
     assert argv[argv.index("--only") + 1] == "postgres,redis"
 
 
-def test_default_strategy_and_execution_are_omitted():
+def test_default_strategy_and_execution_are_emitted_too():
     argv = build_argv(RunOptions(config_path=CFG, strategy="optimized", execution="stream"))
-    assert "--strategy" not in argv
-    assert "--execution" not in argv
+    assert argv[argv.index("--strategy") + 1] == "optimized"
+    assert argv[argv.index("--execution") + 1] == "stream"
 
 
 def test_non_default_strategy_and_execution_are_emitted():
@@ -43,13 +56,15 @@ def test_boolean_flags():
     assert "--benchmark" in argv
 
 
-def test_create_schema_true_emits_nothing():
-    assert "--create-schema" not in build_argv(RunOptions(config_path=CFG, create_schema=True))
-    assert "--no-create-schema" not in build_argv(RunOptions(config_path=CFG, create_schema=True))
+def test_create_schema_emits_one_of_its_two_forms():
+    on = build_argv(RunOptions(config_path=CFG, create_schema=True))
+    assert "--create-schema" in on
+    assert "--no-create-schema" not in on
 
 
-def test_log_level_only_when_not_info():
-    assert "--log-level" not in build_argv(RunOptions(config_path=CFG, log_level="INFO"))
+def test_log_level_is_always_emitted():
+    default = build_argv(RunOptions(config_path=CFG, log_level="INFO"))
+    assert default[default.index("--log-level") + 1] == "INFO"
     argv = build_argv(RunOptions(config_path=CFG, log_level="DEBUG"))
     assert argv[argv.index("--log-level") + 1] == "DEBUG"
 
@@ -106,6 +121,42 @@ def test_argv_follows_the_order_of_the_spec_table():
         "--log-level", "DEBUG",
         "--show-data",
         "--source", "clientes={0}".format(source),
+    ]
+
+
+def test_every_option_changes_the_command_when_toggled():
+    """Q1: no control may be a no-op, in either direction.
+
+    Written as a sweep rather than one case per flag because the bug was not in
+    any single flag but in the rule they all shared: skip whatever matches the
+    CLI default.
+    """
+    base = RunOptions(config_path=CFG)
+    flipped = (
+        RunOptions(config_path=CFG, strategy="naive"),
+        RunOptions(config_path=CFG, execution="materialize"),
+        RunOptions(config_path=CFG, dry_run=True),
+        RunOptions(config_path=CFG, create_schema=False),
+        RunOptions(config_path=CFG, benchmark=True),
+        RunOptions(config_path=CFG, log_level="DEBUG"),
+        RunOptions(config_path=CFG, show_data=True),
+        RunOptions(config_path=CFG, show_data=False),
+        RunOptions(config_path=CFG, only=("redis",)),
+    )
+    for options in flipped:
+        assert build_argv(options) != build_argv(base)
+
+
+def test_argv_order_is_stable_when_options_are_at_their_defaults():
+    """The spelled-out defaults keep the order of the §4.2 table."""
+    argv = build_argv(RunOptions(config_path=CFG, only=("postgres",)))
+    assert argv == [
+        "--config", str(CFG),
+        "--only", "postgres",
+        "--strategy", "optimized",
+        "--execution", "stream",
+        "--create-schema",
+        "--log-level", "INFO",
     ]
 
 

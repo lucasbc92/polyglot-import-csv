@@ -1224,9 +1224,14 @@ semântica ao \textit{JSON Schema}.
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{figure}
 
-O comando montado é, por padrão, \textbf{somente leitura}, e reflete apenas as opções que
-diferem dos valores padrão da CLI, de modo a permanecer tão curto quanto aquilo que uma
-pessoa realmente digitaria. Um \textbf{modo de edição} permite editar o texto diretamente;
+O comando montado é, por padrão, \textbf{somente leitura}, e \textbf{explicita todas as
+opções}, inclusive aquelas mantidas no valor padrão da CLI. A alternativa --- omitir o que
+coincide com o padrão, de modo a permanecer tão curto quanto aquilo que uma pessoa realmente
+digitaria --- contraria o propósito didático da interface: um controle deixado no padrão não
+produzia alteração visível no texto, e o clique parecia ter sido ignorado. Escrever a opção
+por extenso custa alguns caracteres e devolve ao comando a propriedade que justifica exibi-lo
+--- a de que cada controle do formulário tem um correspondente literal na linha de comando.
+Um \textbf{modo de edição} permite editar o texto diretamente;
 ao entrá-lo, o formulário é \textbf{bloqueado}, sinalizando que o texto passou a ser a fonte
 da verdade. Essa decisão é intencional e tem uma razão precisa: \textbf{não existe analisador
 de comando} na ferramenta. O caminho do formulário para o texto é de mão única, e manter os

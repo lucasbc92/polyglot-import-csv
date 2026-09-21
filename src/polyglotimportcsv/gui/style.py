@@ -20,15 +20,45 @@ QGroupBox::title {
 }
 /* M1: the QWidget rule above also paints every QLabel nested inside a card,
    so without this the native render shows grey bars where the (often
-   empty) error labels sit and the card stops reading as a card.
-   QCheckBox/QRadioButton are deliberately left out of this selector: once a
-   stylesheet rule targets either control directly, Qt stops drawing its
-   native indicator and, with no ::indicator sub-control rule defined, the
-   box/circle disappears entirely (round 1 caused exactly this regression).
-   A grey rectangle behind each checkbox/radio is the accepted trade-off. */
+   empty) error labels sit and the card stops reading as a card. */
 QGroupBox QLabel {
     background: transparent;
 }
+/* Q1: keeping QCheckBox/QRadioButton out of the selectors above does not
+   spare them — the global QWidget rule already matches both, so Qt routes
+   them through QStyleSheetStyle and stops drawing the native indicator. With
+   no ::indicator rule to take over, a *checked* radio painted as nothing at
+   all: the strategy and execution rows looked like plain labels and clicking
+   them appeared to do nothing. The indicators are therefore drawn here, on
+   purpose, with the checked state filled in the accent colour so the current
+   choice is unmistakable. */
+QCheckBox, QRadioButton {
+    background: transparent;
+    spacing: 6px;
+}
+QCheckBox::indicator, QRadioButton::indicator {
+    width: 14px;
+    height: 14px;
+    background-color: #FFFFFF;
+    border: 1px solid #B9C2CE;
+}
+QCheckBox::indicator { border-radius: 3px; }
+QRadioButton::indicator { border-radius: 8px; }
+QCheckBox::indicator:hover, QRadioButton::indicator:hover {
+    border-color: #2F6FE0;
+}
+QCheckBox::indicator:checked {
+    background-color: #2F6FE0;
+    border-color: #2F6FE0;
+}
+QRadioButton::indicator:checked {
+    border: 4px solid #2F6FE0;
+}
+QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {
+    background-color: #EDF0F4;
+    border-color: #D9DFE7;
+}
+QCheckBox:disabled, QRadioButton:disabled { color: #9AA4B2; }
 QLineEdit, QComboBox, QTableWidget {
     background-color: #FFFFFF;
     border: 1px solid #D9DFE7;

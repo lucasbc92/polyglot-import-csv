@@ -1,7 +1,17 @@
 """Turn the form state into the CLI argv, and into the text the panel shows.
 
-Only options that differ from the CLI's own defaults are emitted, so the
-displayed command stays as short as what a person would actually type.
+Every option the form can set is written out in full, including the ones left
+at the CLI's own default. Emitting only the differences made the command
+shorter but made three controls look broken: selecting "optimized", "stream" or
+"Criar esquema" — each already the default — changed nothing on screen, so the
+click seemed to have been ignored. A visible, complete command is worth more
+here than a short one, because the panel doubles as documentation of what will
+actually run.
+
+Two options have no spelled-out "off": ``--dry-run`` and ``--benchmark`` are
+switches with no negative form in the CLI, and "Automático" for the data dump
+is the absence of both ``--show-data`` and ``--no-data``. Their absence *is*
+their default, so toggling them still changes the command.
 """
 
 from __future__ import annotations
@@ -24,18 +34,14 @@ def build_argv(options: RunOptions) -> List[str]:
         argv += ["--sgbd-config", str(options.sgbd_config_path)]
     if options.only:
         argv += ["--only", ",".join(options.only)]
-    if options.strategy != "optimized":
-        argv += ["--strategy", options.strategy]
-    if options.execution != "stream":
-        argv += ["--execution", options.execution]
+    argv += ["--strategy", options.strategy]
+    argv += ["--execution", options.execution]
     if options.dry_run:
         argv.append("--dry-run")
-    if not options.create_schema:
-        argv.append("--no-create-schema")
+    argv.append("--create-schema" if options.create_schema else "--no-create-schema")
     if options.benchmark:
         argv.append("--benchmark")
-    if options.log_level != "INFO":
-        argv += ["--log-level", options.log_level]
+    argv += ["--log-level", options.log_level]
     if options.show_data is True:
         argv.append("--show-data")
     elif options.show_data is False:

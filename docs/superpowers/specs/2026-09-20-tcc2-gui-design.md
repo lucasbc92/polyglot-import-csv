@@ -122,23 +122,35 @@ class RunOptions:
 
 ### 4.2 Regras de montagem (`command.build_argv`)
 
-`build_argv` emite **apenas o que difere do padrão da CLI**, para que o comando
-exibido seja o mais curto possível e legível:
+`build_argv` **escreve toda opção por extenso**, inclusive as que estão no valor
+padrão da CLI:
 
 | Condição | Emite |
 |---|---|
 | sempre | `--config <caminho>` |
 | `sgbd_config_path` definido | `--sgbd-config <caminho>` |
 | `only` não vazio | `--only a,b,c` |
-| `strategy != "optimized"` | `--strategy naive` |
-| `execution != "stream"` | `--execution materialize` |
+| sempre | `--strategy naive\|optimized` |
+| sempre | `--execution stream\|materialize` |
 | `dry_run` verdadeiro | `--dry-run` |
-| `create_schema` falso | `--no-create-schema` |
+| sempre | `--create-schema` ou `--no-create-schema` |
 | `benchmark` verdadeiro | `--benchmark` |
-| `log_level != "INFO"` | `--log-level <nível>` |
+| sempre | `--log-level <nível>` |
 | `show_data is True` | `--show-data` |
 | `show_data is False` | `--no-data` |
 | cada par em `sources` | `--source NOME=CAMINHO` |
+
+A regra anterior — emitir apenas o que difere do padrão, para manter o comando
+curto — foi revertida (Q1). Ela fazia três controles parecerem quebrados:
+`optimized`, `stream` e `Criar esquema` já são o padrão, de modo que selecioná-los
+não mudava nada no texto e o clique parecia ignorado. O comando exibido é material
+didático antes de ser um atalho de digitação, e a correspondência um-para-um entre
+controle e flag vale mais do que a brevidade.
+
+Três estados continuam sem forma escrita, por falta de sintaxe na CLI:
+`--dry-run` e `--benchmark` são interruptores sem forma negativa, e o
+`Automático` da exibição de dados **é** a ausência de `--show-data` e `--no-data`.
+Em todos, a ausência é o próprio padrão, e alternar o controle ainda muda o texto.
 
 `to_display(argv)` produz o texto do painel: `polyglotimportcsv` seguido dos
 argumentos, com aspas apenas onde necessário (`shlex.quote` no POSIX; regra
