@@ -8,7 +8,7 @@ import re
 import shlex
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from PySide6.QtCore import QSettings, QTimer, Qt
 from PySide6.QtWidgets import (
@@ -265,6 +265,7 @@ class MainWindow(QMainWindow):
 
     def _on_config_changed(self) -> None:
         self.options_panel.set_available_dbms(self._declared_dbms())
+        self.sources_panel.set_known_sources(self._declared_sources())
         self.refresh_command()
 
     def _tick(self) -> None:
@@ -278,6 +279,37 @@ class MainWindow(QMainWindow):
     def _set_form_enabled(self, enabled: bool) -> None:
         for panel in (self.config_panel, self.options_panel, self.sources_panel):
             panel.setEnabled(enabled)
+
+    def _declared_sources(self) -> Optional[Dict[str, str]]:
+        """``{source name: declared file name}`` from the chosen import config.
+
+        Lets the sources panel name a chosen file the way the configuration
+        does. ``--source`` overrides a source *declared in the config*, so a
+        name invented from the file's own stem would be rejected by the CLI.
+        Unreadable or unexpected JSON simply means "unknown": the panel falls
+        back to the stem and the person can correct the cell.
+        """
+        path = self.config_panel.config_path()
+        if path is None or not path.is_file():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        declared = data.get("sources")
+        if not isinstance(declared, dict):
+            return None
+        names = {}  # type: Dict[str, str]
+        for name, value in declared.items():
+            if isinstance(value, str):
+                names[name] = value
+            elif isinstance(value, dict) and isinstance(value.get("file"), str):
+                # A combined source: one CSV whose column 0 names each row's
+                # origin. It still has exactly one file behind it.
+                names[name] = value["file"]
+        return names or None
 
     def _declared_dbms(self) -> Optional[List[str]]:
         """Names declared in the chosen sgbd_config.json, or None if unreadable."""

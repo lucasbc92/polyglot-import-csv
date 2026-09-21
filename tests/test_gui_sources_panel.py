@@ -58,11 +58,136 @@ def test_remove_selected_rows(qtbot):
     assert panel.sources() == (("b", Path("/d/b.csv")),)
 
 
-def test_add_button_appends_a_row(qtbot):
+# -- Q3: the buttons pick files, they do not make blank rows ---------------
+
+
+def test_the_add_button_opens_the_file_dialog_and_adds_what_it_returns(qtbot, tmp_path):
+    """The old button inserted an empty row and hid the dialog behind it."""
     panel = SourcesPanel()
     qtbot.addWidget(panel)
+    first = tmp_path / "stock.csv"
+    second = tmp_path / "purchase.csv"
+    asked = []
+
+    def choose():
+        asked.append(True)
+        return [str(first), str(second)]
+
+    panel.choose_files = choose
     panel.add_button.click()
-    assert panel.table.rowCount() == 1
+    assert asked, "clicking the button must open the file dialog"
+    assert panel.sources() == (("stock", first), ("purchase", second))
+
+
+def test_cancelling_the_file_dialog_adds_nothing(qtbot):
+    panel = SourcesPanel()
+    qtbot.addWidget(panel)
+    panel.choose_files = lambda: []
+    panel.add_button.click()
+    assert panel.table.rowCount() == 0
+
+
+def test_the_folder_button_attaches_every_csv_in_the_folder(qtbot, tmp_path):
+    panel = SourcesPanel()
+    qtbot.addWidget(panel)
+    (tmp_path / "b.csv").write_text("x", encoding="utf-8")
+    (tmp_path / "a.csv").write_text("x", encoding="utf-8")
+    (tmp_path / "notes.txt").write_text("x", encoding="utf-8")
+    (tmp_path / "nested").mkdir()
+    (tmp_path / "nested" / "deep.csv").write_text("x", encoding="utf-8")
+
+    panel.choose_folder = lambda: str(tmp_path)
+    panel.add_folder_button.click()
+
+    names = [name for name, _ in panel.sources()]
+    assert names == ["a", "b"], "only the .csv files, in a predictable order"
+
+
+def test_the_folder_button_ignores_a_cancelled_dialog(qtbot):
+    panel = SourcesPanel()
+    qtbot.addWidget(panel)
+    panel.choose_folder = lambda: ""
+    panel.add_folder_button.click()
+    assert panel.table.rowCount() == 0
+
+
+def test_attaching_the_same_file_twice_adds_it_once(qtbot, tmp_path):
+    panel = SourcesPanel()
+    qtbot.addWidget(panel)
+    csv = tmp_path / "stock.csv"
+    assert panel.attach([csv]) == 1
+    assert panel.attach([csv]) == 0
+    assert len(panel.sources()) == 1
+
+
+def test_a_batch_emits_changed_once(qtbot, tmp_path):
+    """A folder of twenty files must not rebuild the command twenty times."""
+    panel = SourcesPanel()
+    qtbot.addWidget(panel)
+    emitted = []
+    panel.changed.connect(lambda: emitted.append(True))
+    panel.attach([tmp_path / "a.csv", tmp_path / "b.csv", tmp_path / "c.csv"])
+    assert len(emitted) == 1
+
+
+def test_attach_restores_signals_after_exception(qtbot, tmp_path, monkeypatch):
+    panel = SourcesPanel()
+    qtbot.addWidget(panel)
+
+    def boom(_index):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(panel.table, "insertRow", boom)
+    with pytest.raises(RuntimeError):
+        panel.attach([tmp_path / "stock.csv"])
+    assert panel.table.signalsBlocked() is False
+
+
+# -- Q3: naming a chosen file the way the configuration does ---------------
+
+
+def test_without_a_configuration_the_stem_is_used(qtbot, tmp_path):
+    panel = SourcesPanel()
+    qtbot.addWidget(panel)
+    panel.attach([tmp_path / "ecommerce_stock.csv"])
+    assert panel.sources()[0][0] == "ecommerce_stock"
+
+
+def test_the_declared_file_name_names_the_row(qtbot, tmp_path):
+    """The reference dataset declares "stock" and stores ecommerce_stock.csv.
+
+    Naming that row from the stem would emit --source ecommerce_stock=..., an
+    override of a source that does not exist.
+    """
+    panel = SourcesPanel()
+    qtbot.addWidget(panel)
+    panel.set_known_sources({"stock": "ecommerce_stock.csv", "purchase": "p.csv"})
+    panel.attach([tmp_path / "ecommerce_stock.csv"])
+    assert panel.sources()[0][0] == "stock"
+
+
+def test_a_declared_name_matches_its_own_stem(qtbot, tmp_path):
+    panel = SourcesPanel()
+    qtbot.addWidget(panel)
+    panel.set_known_sources({"stock": "whatever.csv"})
+    panel.attach([tmp_path / "stock.csv"])
+    assert panel.sources()[0][0] == "stock"
+
+
+def test_a_suffix_match_prefers_the_longest_declared_name(qtbot, tmp_path):
+    panel = SourcesPanel()
+    qtbot.addWidget(panel)
+    panel.set_known_sources({"stock": "a.csv", "restock": "b.csv"})
+    panel.attach([tmp_path / "loja_restock.csv"])
+    assert panel.sources()[0][0] == "restock"
+
+
+def test_an_unrecognised_file_keeps_its_stem(qtbot, tmp_path):
+    panel = SourcesPanel()
+    qtbot.addWidget(panel)
+    panel.set_known_sources({"stock": "ecommerce_stock.csv"})
+    panel.attach([tmp_path / "outra_coisa.csv"])
+    assert panel.sources()[0][0] == "outra_coisa"
 
 
 def test_errors_are_shown(qtbot):

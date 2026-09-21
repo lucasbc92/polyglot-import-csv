@@ -35,12 +35,16 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     from PySide6.QtWidgets import QApplication
 
+    from polyglotimportcsv.gui import indicators
     from polyglotimportcsv.gui.style import STYLESHEET
     from polyglotimportcsv.gui.widgets.main_window import MainWindow
 
     app = QApplication([sys.argv[0]] + arguments)
     app.setApplicationName("PolyglotImportCSV")
     app.setOrganizationName("UFSC")
+    # Before the stylesheet: setStyle() resets the style, and the stylesheet
+    # has to be applied on top of the style that will actually paint.
+    indicators.install(app)
     app.setStyleSheet(STYLESHEET)
     window = MainWindow()
     window.show()

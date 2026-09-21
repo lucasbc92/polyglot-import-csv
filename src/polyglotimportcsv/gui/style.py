@@ -1,6 +1,19 @@
-"""Qt stylesheet built from the prototype's colour tokens."""
+"""Qt stylesheet built from the prototype's colour tokens.
+
+Deliberately free of Qt imports, so the rules can be checked without a running
+QApplication. The tokens below are the few colours ``indicators`` has to paint
+with; ``tests/test_gui_style.py`` checks that each one still appears in the
+stylesheet, so the painted indicators cannot drift away from the rules around
+them.
+"""
 
 from __future__ import annotations
+
+TOKEN_ACCENT = "#2F6FE0"
+TOKEN_BORDER = "#B9C2CE"
+TOKEN_FIELD = "#FFFFFF"
+TOKEN_DISABLED_LINE = "#D9DFE7"
+TOKEN_DISABLED_FILL = "#EDF0F4"
 
 STYLESHEET = """
 QWidget { background-color: #EEF1F5; color: #1A2330; font-size: 12px; }
@@ -26,37 +39,17 @@ QGroupBox QLabel {
 }
 /* Q1: keeping QCheckBox/QRadioButton out of the selectors above does not
    spare them — the global QWidget rule already matches both, so Qt routes
-   them through QStyleSheetStyle and stops drawing the native indicator. With
-   no ::indicator rule to take over, a *checked* radio painted as nothing at
-   all: the strategy and execution rows looked like plain labels and clicking
-   them appeared to do nothing. The indicators are therefore drawn here, on
-   purpose, with the checked state filled in the accent colour so the current
-   choice is unmistakable. */
+   them through QStyleSheetStyle and stops drawing the native indicator, and a
+   *checked* radio was painted as nothing at all.
+   Q2: no ::indicator rule may be added here to compensate. A stylesheet can
+   only give the indicator a box and a fill, never a tick, so the marks are
+   painted by gui/indicators.py instead — and a single ::indicator rule is
+   enough for Qt to take the primitive back and paint it itself, silently
+   disabling that painter. The rules below cover everything around the mark;
+   the mark itself belongs to the painter. */
 QCheckBox, QRadioButton {
     background: transparent;
     spacing: 6px;
-}
-QCheckBox::indicator, QRadioButton::indicator {
-    width: 14px;
-    height: 14px;
-    background-color: #FFFFFF;
-    border: 1px solid #B9C2CE;
-}
-QCheckBox::indicator { border-radius: 3px; }
-QRadioButton::indicator { border-radius: 8px; }
-QCheckBox::indicator:hover, QRadioButton::indicator:hover {
-    border-color: #2F6FE0;
-}
-QCheckBox::indicator:checked {
-    background-color: #2F6FE0;
-    border-color: #2F6FE0;
-}
-QRadioButton::indicator:checked {
-    border: 4px solid #2F6FE0;
-}
-QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {
-    background-color: #EDF0F4;
-    border-color: #D9DFE7;
 }
 QCheckBox:disabled, QRadioButton:disabled { color: #9AA4B2; }
 QLineEdit, QComboBox, QTableWidget {

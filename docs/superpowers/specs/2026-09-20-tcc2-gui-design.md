@@ -326,6 +326,50 @@ Janela com 1240×1020 px por padrão, como no protótipo, e mínimo de 960×820 
 vertical é imposto pelos mínimos do formulário e do console, não por 680 px); o divisor
 entre formulário e console é arrastável, e o console tem altura mínima de 160 px.
 
+### 11.1 Indicadores de caixa e de rádio (`gui/indicators.py`)
+
+Os indicadores não vêm da folha de estilo. Uma folha de estilo Qt sabe dar ao
+indicador um tamanho, uma borda e um preenchimento, mas não sabe desenhar um
+tique dentro dele: o único caminho é `image: url(...)`, que exigiria empacotar
+bitmaps. Sem isso, uma caixa marcada vira um quadrado azul maciço e um rádio
+marcado vira um anel grosso — nenhum dos dois se parece com o controle que a
+pessoa conhece do resto do sistema.
+
+Um `QProxyStyle` pinta os dois primitivos: o tique é uma polilinha de três
+pontos e a marca do rádio é um círculo pequeno **dentro** do anel, que continua
+vazado. A cor é a de destaque da própria aplicação, e não a do tema do sistema.
+
+Consequência que precisa ficar registrada: a folha de estilo **não pode** conter
+nenhuma regra `::indicator`. Basta uma para que o Qt retome o primitivo e passe
+a pintá-lo sozinho, desativando o pintor em silêncio.
+`tests/test_gui_style.py` guarda essa condição; `tests/test_gui_indicators.py`
+verifica os pixels — que a caixa marcada tenha pixels claros dentro do
+preenchimento (o tique) e que o rádio marcado produza três trechos de cor de
+destaque ao longo do meio (anel, marca, anel).
+
+### 11.2 Cartão "Fontes CSV"
+
+As linhas nascem da escolha de arquivos, nunca em branco. Uma sobrescrita *é*
+um caminho, e uma linha sem caminho não é uma sobrescrita: inserir uma linha
+vazia e usá-la para abrir o diálogo transformava o diálogo em um segundo passo
+escondido atrás de uma célula que parecia um campo de digitação.
+
+- `+ Adicionar arquivos` abre o seletor de arquivos direto, com seleção
+  múltipla, e cria uma linha por arquivo.
+- `+ Adicionar pasta` anexa de uma vez todos os `.csv` **diretamente** dentro da
+  pasta escolhida, em ordem de nome. Não é recursivo.
+- Caminhos já listados são ignorados, e o lote inteiro emite `changed` uma única
+  vez — uma pasta com vinte arquivos não deve remontar o comando vinte vezes.
+
+O nome da fonte é deduzido do arquivo, porque `--source` sobrescreve uma fonte
+**declarada na configuração**: o conjunto de referência declara `stock` e o
+guarda em `ecommerce_stock.csv`, de modo que o radical do arquivo produziria
+`--source ecommerce_stock=…`, uma sobrescrita de fonte inexistente. A dedução
+tenta, nesta ordem, o nome de arquivo declarado, o nome declarado igual ao
+radical e o nome declarado que o radical termina (o mais longo vence); se nada
+casar, fica o radical e a célula pode ser corrigida. Enquanto não houver
+configuração escolhida, é sempre o radical.
+
 ## 12. Empacotamento
 
 - Nova dependência opcional em `pyproject.toml`:

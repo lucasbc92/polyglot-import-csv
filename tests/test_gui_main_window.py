@@ -32,8 +32,17 @@ def window(qtbot, tmp_path):
     return widget
 
 
-def test_window_opens_with_an_empty_command(window):
-    assert window.console_panel.command_text() == "polyglotimportcsv"
+def test_window_opens_showing_the_defaults_it_would_run_with(window):
+    """Q1: no configuration chosen yet, but the options still have values.
+
+    Before, the command was the bare program name until something was changed,
+    which hid the fact that a run already had a strategy, an execution mode and
+    a log level picked out for it.
+    """
+    assert window.console_panel.command_text() == (
+        "polyglotimportcsv --strategy optimized --execution stream "
+        "--create-schema --log-level INFO"
+    )
 
 
 def test_choosing_a_config_updates_the_command(window, config_files):

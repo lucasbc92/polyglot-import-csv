@@ -28,6 +28,7 @@ from pathlib import Path
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication
 
+from polyglotimportcsv.gui import indicators
 from polyglotimportcsv.gui.style import STYLESHEET
 from polyglotimportcsv.gui.widgets.main_window import MainWindow
 
@@ -113,6 +114,7 @@ def main() -> int:
             return 1
 
     app = QApplication([sys.argv[0]])
+    indicators.install(app)
     app.setStyleSheet(STYLESHEET)
     with tempfile.TemporaryDirectory() as tmp:
         settings_path = Path(tmp) / "capture.ini"

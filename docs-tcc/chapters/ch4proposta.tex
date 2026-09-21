@@ -1207,8 +1207,13 @@ arquivos de configuração, selecionados por diálogos de arquivo; as opções d
 um controle para cada \textit{flag} --- os SGBDs de destino, a estratégia de escrita e o
 modelo de execução discutidos na Seção~\ref{sec:modelos-execucao}, os modificadores de
 simulação, criação de esquema e \textit{benchmark}, o nível de \textit{log} e a exibição de
-dados; e a tabela de sobrescrita de caminhos das fontes CSV. Na metade inferior está o
-console integrado, que exibe o comando montado e, abaixo dele, a saída da execução. Antes de
+dados; e a tabela de sobrescrita de caminhos das fontes CSV, cujas linhas nascem da escolha
+de arquivos --- um seletor de arquivos com seleção múltipla, ou uma pasta inteira, da qual
+todos os arquivos com extensão \texttt{.csv} são anexados de uma vez. O nome de cada fonte é
+deduzido do arquivo escolhido comparando-o com o bloco \texttt{sources} da configuração, de
+modo que a sobrescrita gerada se refira a uma fonte que de fato existe. Na metade inferior
+está o console integrado, que exibe o comando montado e, abaixo dele, a saída da execução.
+Antes de
 executar, a interface faz uma \textbf{validação local} restrita ao que pode conferir sem
 abrir os arquivos --- existência dos caminhos, nomes de fonte não vazios e não repetidos ---
 e mantém o botão de execução desabilitado enquanto houver pendências, reservando a validação
