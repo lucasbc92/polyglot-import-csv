@@ -376,6 +376,27 @@
 \afterpage{\blankpage}
 
 % ---
+% Epígrafe: terço inferior da página, recuo de 8 cm, espaçamento simples, 11 pt
+% ---
+\begin{epigrafe}
+  \thispagestyle{empty}
+  \vspace*{\fill}
+  \noindent\hspace{8cm}%
+  \begin{minipage}{\dimexpr\textwidth-8cm\relax}
+    \SingleSpacing
+    \fontsize{11pt}{13pt}\selectfont
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{0pt}
+    \textit{``Sabendo que a provação da fé que vocês têm produz perseverança.
+    Ora, a perseverança deve ter ação completa, para que vocês sejam perfeitos
+    e íntegros, sem que lhes falte nada.''}
+
+    \vspace{0.5\baselineskip}
+    {\raggedleft Tiago, 1:3-4\par}
+  \end{minipage}
+\end{epigrafe}
+
+% ---
 % Resumo em Português
 % ---
 
