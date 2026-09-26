@@ -13,7 +13,11 @@ never read: that would mean scanning a file that may be larger than memory.
 The CLI still checks all of it when the import runs.
 
 Every file read is cached by (path, mtime, size), because the window calls
-``check`` on every click; in steady state a call costs a few ``stat``s.
+``check`` on every click. The header bind-and-validate step (the one that
+calls ``resolve_backend_entities`` and ``validate_backend_entities``) is
+memoized on top of that: its cache key is built from a ``stat`` of the import
+configuration and of every CSV it declares, plus the overrides and ``--only``
+selection, so in steady state a call costs a few ``stat``s and no rebinding.
 """
 
 from __future__ import annotations
@@ -42,6 +46,9 @@ COMBINED = "combined"
 
 _Stamp = Tuple[int, int]
 _cache = {}  # type: Dict[Tuple[str, str], Tuple[_Stamp, Any]]
+# Memoizes the (error key, message) result of the bind-and-validate step in
+# _check_headers, keyed by _headers_cache_key(); see the module docstring.
+_headers_cache = {}  # type: Dict[Tuple[Any, ...], Tuple[str, str]]
 
 
 @dataclass(frozen=True)
@@ -59,6 +66,7 @@ class Preflight:
 
 def clear_cache() -> None:
     _cache.clear()
+    _headers_cache.clear()
 
 
 def classify_sources(sources: Dict[str, Any]) -> str:
@@ -103,7 +111,7 @@ def check(options: RunOptions) -> Preflight:
     if sources_error:
         errors["sources"] = sources_error
     else:
-        key, message = _check_headers(options, path.parent, import_cfg, sources_cfg)
+        key, message = _check_headers(options, path, path.parent, import_cfg, sources_cfg)
         if message:
             errors[key] = message
 
@@ -145,6 +153,7 @@ def _check_overrides(options: RunOptions, kind: str, declared: Dict[str, str]) -
 
 def _check_headers(
     options: RunOptions,
+    import_path: Path,
     base_dir: Path,
     import_cfg: Dict[str, Any],
     sources_cfg: Dict[str, Any],
@@ -154,21 +163,86 @@ def _check_headers(
     Returns ``(error key, message)``; the message is empty when all is well.
     Problems are shown under the sources card when the person has overridden
     a path, and under the configuration card otherwise.
+
+    The bind-and-validate step is the slow part (it builds a DataFrame per
+    source and calls ``resolve_backend_entities`` / ``validate_backend_entities``
+    over the whole configuration), so its result is memoized under a key built
+    from a ``stat`` of every file it depends on; see ``_headers_cache_key``.
     """
     key = "sources" if options.sources else "config_path"
     overrides = {name: path for name, path in options.sources}
+    csv_paths = {
+        name: _resolve_source_csv(name, decl, base_dir, overrides)
+        for name, decl in sources_cfg.items()
+    }  # type: Dict[str, Path]
+
+    try:
+        cache_key = _headers_cache_key(import_path, options, csv_paths)  # type: Optional[Tuple[Any, ...]]
+    except OSError:
+        # A declared or overridden file is missing: the loop below reports it
+        # with the CLI's own wording, and there is nothing stable to key on.
+        cache_key = None
+    if cache_key is not None:
+        cached = _headers_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+    result = _bind_and_validate_headers(key, options, import_cfg, sources_cfg, csv_paths)
+    if cache_key is not None:
+        _headers_cache[cache_key] = result
+    return result
+
+
+def _resolve_source_csv(
+    name: str, decl: Any, base_dir: Path, overrides: Dict[str, Path]
+) -> Path:
+    """Same resolution as ``sources._resolve_path``: an override follows the
+    working directory, a declared path the configuration's folder."""
+    if name in overrides:
+        return Path(overrides[name])
+    file_name = decl if isinstance(decl, str) else decl.get("file", "")
+    csv_path = Path(file_name)
+    if not csv_path.is_absolute():
+        csv_path = base_dir / csv_path
+    return csv_path
+
+
+def _headers_cache_key(
+    import_path: Path, options: RunOptions, csv_paths: Dict[str, Path]
+) -> Tuple[Any, ...]:
+    """Stat every file the bind-and-validate step depends on.
+
+    These are the "few stats" the module docstring promises per call: with
+    them unchanged, the cached ``(error key, message)`` is returned without
+    rebinding anything. Raises ``OSError`` when a file is missing, in which
+    case the caller skips memoization and lets the real check report it.
+    """
+    stamps = [_file_stamp(import_path)]
+    for csv_path in csv_paths.values():
+        stamps.append(_file_stamp(csv_path))
+    return (
+        tuple(sorted(stamps)),
+        tuple(str(source) for source in options.sources),
+        tuple(options.only) if options.only else (),
+    )
+
+
+def _file_stamp(path: Path) -> Tuple[str, int, int]:
+    stat = path.stat()
+    return (str(path.resolve()), stat.st_mtime_ns, stat.st_size)
+
+
+def _bind_and_validate_headers(
+    key: str,
+    options: RunOptions,
+    import_cfg: Dict[str, Any],
+    sources_cfg: Dict[str, Any],
+    csv_paths: Dict[str, Path],
+) -> Tuple[str, str]:
     registry = {}  # type: Dict[str, SourceData]
     combined_headers = []  # type: List[List[str]]
     for name, decl in sources_cfg.items():
-        file_name = decl if isinstance(decl, str) else decl.get("file", "")
-        # Same resolution as sources._resolve_path: an override follows the
-        # working directory, a declared path the configuration's folder.
-        if name in overrides:
-            csv_path = Path(overrides[name])
-        else:
-            csv_path = Path(file_name)
-            if not csv_path.is_absolute():
-                csv_path = base_dir / csv_path
+        csv_path = csv_paths[name]
         if not csv_path.is_file():
             return key, "Fonte '{0}': arquivo CSV não encontrado: {1}".format(name, csv_path)
         try:
@@ -204,7 +278,8 @@ def _check_headers(
             for ename, ecfg in (import_cfg[dbms].get("entities") or {}).items():
                 ref = (ecfg or {}).get("source", ename)
                 for name in ref if isinstance(ref, list) else [ref]:
-                    registry.setdefault(name, _header_only(name, union_header))
+                    if name not in registry:
+                        registry[name] = _header_only(name, union_header)
     try:
         for dbms in dbms_names:
             bound = resolve_backend_entities(import_cfg[dbms], registry)

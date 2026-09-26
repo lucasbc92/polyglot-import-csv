@@ -247,6 +247,40 @@ def test_a_mixed_config_with_two_combined_files_uses_their_header_union(ecommerc
     assert result.errors == {}
 
 
+def test_the_bind_and_validate_step_is_memoized_until_a_file_changes(ecommerce, monkeypatch):
+    """The slow part of ``_check_headers`` (binding+validating) must not
+    re-run on every call while the config and every CSV it reads stay put.
+
+    Measured in a real ``MainWindow`` on data/ecommerce, this step (not the
+    header reads, which were already cached by mtime) is what made a single
+    spin-box step cost ~100 ms.
+    """
+    calls = []
+    real = preflight.resolve_backend_entities
+
+    def counting(*args, **kwargs):
+        calls.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(preflight, "resolve_backend_entities", counting)
+
+    first = _check(ecommerce)
+    count_after_first = len(calls)
+    assert count_after_first > 0, "the first call must bind at least once"
+
+    second = _check(ecommerce)
+    assert len(calls) == count_after_first, (
+        "an unchanged config and CSVs must not call resolve_backend_entities again"
+    )
+    assert second.errors == first.errors
+
+    csv = ecommerce / "ecommerce_stock.csv"
+    stat = csv.stat()
+    os.utime(csv, ns=(stat.st_atime_ns, stat.st_mtime_ns + 10_000_000))
+    _check(ecommerce)
+    assert len(calls) > count_after_first, "a touched CSV must trigger a rebind"
+
+
 def test_a_cached_exception_does_not_accumulate_traceback_frames(ecommerce):
     """A file that stays broken must not leak memory one click at a time."""
     broken = ecommerce / "import_config.json"
