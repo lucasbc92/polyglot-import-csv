@@ -13,13 +13,12 @@ def test_defaults_match_the_cli(qtbot):
     panel = OptionsPanel()
     qtbot.addWidget(panel)
     assert panel.only() == ()
-    assert panel.strategy() == "optimized"
     assert panel.execution() == "stream"
     assert panel.dry_run() is False
     assert panel.create_schema() is True
-    assert panel.benchmark() is False
     assert panel.log_level() == "INFO"
     assert panel.show_data() is None
+    assert panel.sample_size() == 50
 
 
 def test_every_dbms_has_a_checkbox(qtbot):
@@ -43,24 +42,74 @@ def test_changing_a_control_emits_changed(qtbot):
         panel.dbms_boxes["redis"].setChecked(True)
 
 
-def test_strategy_and_execution_radios(qtbot):
+def test_strategy_and_benchmark_are_gone(qtbot):
     panel = OptionsPanel()
     qtbot.addWidget(panel)
-    panel.strategy_buttons["naive"].setChecked(True)
+    assert not hasattr(panel, "strategy_buttons")
+    assert not hasattr(panel, "benchmark_box")
+
+
+def test_execution_radios(qtbot):
+    panel = OptionsPanel()
+    qtbot.addWidget(panel)
     panel.execution_buttons["materialize"].setChecked(True)
-    assert panel.strategy() == "naive"
     assert panel.execution() == "materialize"
 
 
-def test_show_data_tri_state(qtbot):
+def test_data_display_modes_and_labels(qtbot):
     panel = OptionsPanel()
     qtbot.addWidget(panel)
-    panel.show_data_buttons["always"].setChecked(True)
+    assert panel.show_data_buttons["sample"].text() == "Amostra (--sample)"
+    assert panel.show_data_buttons["all"].text() == "Todos os dados (--show-data)"
+    assert panel.show_data_buttons["none"].text() == "Nenhum dado (--no-data)"
+    panel.show_data_buttons["all"].setChecked(True)
     assert panel.show_data() is True
-    panel.show_data_buttons["never"].setChecked(True)
+    panel.show_data_buttons["none"].setChecked(True)
     assert panel.show_data() is False
-    panel.show_data_buttons["auto"].setChecked(True)
+    panel.show_data_buttons["sample"].setChecked(True)
     assert panel.show_data() is None
+
+
+def test_the_sample_size_is_only_editable_while_sampling(qtbot):
+    panel = OptionsPanel()
+    qtbot.addWidget(panel)
+    assert panel.sample_spin.isEnabled()
+    panel.show_data_buttons["all"].setChecked(True)
+    assert not panel.sample_spin.isEnabled()
+    panel.show_data_buttons["sample"].setChecked(True)
+    assert panel.sample_spin.isEnabled()
+
+
+def test_changing_the_sample_size_emits_changed(qtbot):
+    panel = OptionsPanel()
+    qtbot.addWidget(panel)
+    with qtbot.waitSignal(panel.changed, timeout=1000):
+        panel.sample_spin.setValue(120)
+    assert panel.sample_size() == 120
+
+
+def test_the_sample_size_range(qtbot):
+    panel = OptionsPanel()
+    qtbot.addWidget(panel)
+    assert panel.sample_spin.minimum() == 1
+    assert panel.sample_spin.maximum() == 1000000
+
+
+def test_every_unclear_option_has_a_help_badge(qtbot):
+    panel = OptionsPanel()
+    qtbot.addWidget(panel)
+    assert set(panel.info_badges) == {
+        "stream", "materialize", "dry_run", "create_schema", "log_level", "show_data",
+    }
+    assert "memória" in panel.info_badges["stream"].toolTip()
+    assert "lento" in panel.info_badges["show_data"].toolTip()
+
+
+def test_sample_size_errors_are_shown(qtbot):
+    panel = OptionsPanel()
+    qtbot.addWidget(panel)
+    panel.set_errors({"sample_size": "O tamanho da amostra deve estar entre 1 e 1000000."})
+    assert "amostra" in panel.error_label.text()
 
 
 def test_log_level_combo(qtbot):
