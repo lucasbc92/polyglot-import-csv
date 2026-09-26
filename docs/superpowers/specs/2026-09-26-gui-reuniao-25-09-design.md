@@ -116,7 +116,10 @@ e `errors: Dict[str, str]` nas mesmas chaves que `validate` usa (`config_path`,
 `sgbd_config_path`, `sources`), para que os painéis continuem mostrando erros
 do jeito que já mostram.
 
-Verificações, em ordem; cada uma só roda se a anterior passou:
+Verificações, em ordem. Cada uma só roda se a anterior passou, com uma exceção:
+a classificação (3) depende apenas do schema da configuração de importação (1),
+e não da consistência com a configuração de SGBDs (2). Assim, as fontes
+podem ser escolhidas antes de a configuração de SGBDs estar pronta.
 
 1. **JSON Schema** dos dois arquivos, com `config_parser.load_import_config` /
    `load_sgbd_config` e a validação que eles já fazem.
@@ -191,8 +194,19 @@ O cartão recebe o `Preflight` e se adapta a `kind`:
 | Nome da fonte | deduzido como hoje (`_name_for`) | o nome declarado da fonte combinada |
 | Seleção na tabela | múltipla (`ExtendedSelection`) | única (`SingleSelection`) |
 
-Com `kind is None` (configuração ainda não escolhida ou ilegível), o cartão se
-comporta como multifonte e o rótulo do tipo fica vazio.
+**Sem configuração de importação, não se escolhem fontes.** Com `kind is None`
+(nenhuma configuração escolhida, arquivo inexistente, JSON ilegível ou fora do
+schema), os botões de adicionar e a área de soltar ficam desabilitados, e o
+rótulo do tipo diz "Escolha a configuração de importação para anexar fontes".
+A razão é que uma sobrescrita `--source NOME=…` só faz sentido contra as fontes
+declaradas, e sem elas não há como nomear o arquivo nem saber se cabe mais de
+um. Linhas que já estavam na tabela (quando a configuração é trocada ou
+apagada) **não são removidas**: "− Remover" continua disponível, e a execução
+já fica bloqueada pela falta da configuração.
+
+Por isso, a classificação (item 3 da §3.2) depende só da configuração de
+importação ter passado no próprio schema (item 1). Uma configuração de SGBDs
+ausente ou inconsistente não impede a escolha de fontes.
 
 - **Arrastar e soltar:** a tabela aceita `.csv` soltos sobre ela (arquivos e,
   na multifonte, pastas, com a mesma regra do "Adicionar pasta"). Enquanto a
