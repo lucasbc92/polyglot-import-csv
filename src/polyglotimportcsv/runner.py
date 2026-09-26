@@ -12,6 +12,7 @@ from rich.text import Text
 
 from polyglotimportcsv import metrics
 from polyglotimportcsv.config_parser import load_config
+from polyglotimportcsv.data_preview import StreamDataPreview
 from polyglotimportcsv.dbms_sink import SinkFactory
 from polyglotimportcsv.importers import default_importer_registry
 from polyglotimportcsv.importers.base import ImporterRegistry
@@ -104,6 +105,8 @@ def run_import(
                 sink_factories=sink_factories or default_sink_factories(),
                 collector=collector,
                 strategy=strategy,
+                show_data=show_data,
+                sample_size=sample_size,
             )
         return _run(
             config_path,
@@ -133,6 +136,8 @@ def _run_stream(
     sink_factories: Dict[str, SinkFactory],
     collector: metrics.MetricsCollector,
     strategy: str,
+    show_data: Optional[bool],
+    sample_size: int,
 ) -> List[str]:
     """Bounded-memory streaming path: hand the loaded config to ``run_stream_import``."""
     step("Load config", str(config_path))
@@ -149,6 +154,7 @@ def _run_stream(
     else:
         note("existing schema only (--no-create-schema)")
 
+    preview = StreamDataPreview(show_data, sample_size)
     write_start = time.perf_counter()
     written = run_stream_import(
         config,
@@ -157,7 +163,9 @@ def _run_stream(
         only=only,
         create_schema=create_schema,
         source_overrides=source_overrides,
+        on_batch=preview.observe,
     )
+    preview.finish()
     # One summary metric for the whole streaming import. Streaming is
     # DBMS-agnostic and does not break into read/map/filter/write phases the
     # way the materialize importers do, so record a single aggregate row; it
