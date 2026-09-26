@@ -108,4 +108,9 @@ QTextEdit#logView {
     color: #D6DCE5;
     padding: 8px;
 }
+QTableWidget::item:selected,
+QTableWidget::item:selected:!active {
+    background-color: #D6E4FB;
+    color: #1A2330;
+}
 """

@@ -62,6 +62,12 @@ def test_the_guard_only_looks_at_rules_not_at_comments():
     assert "::indicator" not in _COMMENT_RE.sub("", commented_out)
 
 
+def test_selected_rows_stay_highlighted_without_focus():
+    """A selection that fades when the table loses focus looked like no selection."""
+    assert "QTableWidget::item:selected" in STYLESHEET
+    assert "QTableWidget::item:selected:!active" in STYLESHEET
+
+
 def test_every_painted_token_is_a_colour_of_the_stylesheet():
     """The painter and the rules around it must not drift apart.
 
