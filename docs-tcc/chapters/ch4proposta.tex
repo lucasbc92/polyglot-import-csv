@@ -23,7 +23,7 @@ citados neste trabalho, como \texttt{data/\allowbreak ecommerce/} ou
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=11cm]{images/figure7-overview}
+  \includegraphics[width=10cm]{images/figure7-overview}
   \caption{Visão geral da ferramenta: entradas, processamento e saídas.}
   \label{fig:overview}
   \par\vspace{4pt}
@@ -68,7 +68,7 @@ caminho de uma fonte declarada no bloco \texttt{sources} sem editar o arquivo de
 configuração (por exemplo, para apontar a mesma configuração a um conjunto de dados
 maior); pode ser repetida uma vez por fonte.
 
-As demais opções são facultativas e agrupam-se em dois conjuntos. O primeiro controla
+As demais opções são facultativas e agrupam-se em três conjuntos. O primeiro controla
 \textbf{o que} e \textbf{onde} importar: \texttt{-{}-dry-run} executa somente as
 validações e a preparação dos dados e reporta quantos registros \textbf{seriam}
 importados em cada destino, sem conectar a nenhum SGBD, o que é útil para revisar o
@@ -77,9 +77,11 @@ mapeamento antes da carga real; \texttt{-{}-create-schema} e
 armazenamento necessárias (tabelas no PostgreSQL, \textit{keyspace} e tabelas no
 Cassandra) antes de gravar os dados, sendo a criação ativada por padrão; e
 \texttt{-{}-only} restringe a execução a um subconjunto dos SGBDs configurados (por
-exemplo, \texttt{-{}-only postgres,redis}). As opções \texttt{-{}-execution} e
-\texttt{-{}-strategy} escolhem, respectivamente, o modelo de execução e a estratégia de
-escrita, descritos na seção~\ref{sec:execucao-estrategias}. O segundo conjunto governa a
+exemplo, \texttt{-{}-only postgres,redis}). O segundo define \textbf{como} importar:
+\texttt{-{}-execution} e \texttt{-{}-strategy} escolhem, respectivamente, o modelo de
+execução (\texttt{stream}, o padrão, ou \texttt{materialize}) e a estratégia de escrita
+(\texttt{optimized}, o padrão, ou \texttt{naive}), descritos na
+Seção~\ref{sec:execucao-estrategias}. O terceiro conjunto governa a
 \textbf{observabilidade} da execução --- \texttt{-{}-log-level} ajusta o nível de detalhe
 das mensagens no terminal; \texttt{-{}-sample}~\texttt{N} exibe as primeiras
 \texttt{N} linhas de cada entidade (50, por padrão), enquanto \texttt{-{}-show-data}
@@ -751,7 +753,8 @@ conferir o resultado da carga.
 \label{sec:exemplo-linha}
 
 Para concretizar o algoritmo, esta subseção e a seguinte percorrem o cenário de
-e-commerce que acompanha o repositório da ferramenta --- o mesmo cenário cujos
+e-commerce que acompanha o repositório da ferramenta (Seção~\ref{sec:visao-geral}) --- o
+mesmo cenário cujos
 fragmentos de configuração ilustraram a seção~\ref{sec:config-format} e cuja execução
 completa é demonstrada na seção~\ref{sec:exemplo-uso}.
 
@@ -1142,9 +1145,9 @@ de uma só vez; e no \textbf{Neo4j}, a cláusula \texttt{UNWIND} aplicada a uma 
 registros, seguida de \texttt{MERGE}, sobre um rótulo com restrição de unicidade. Como as
 duas estratégias produzem resultados idênticos, diferindo apenas no custo, a estratégia
 ingênua tem valor sobretudo metodológico: é a \textit{linha de base} contra a qual o ganho
-da via otimizada é medido no Capítulo~\ref{cap:avaliacao}. Ela corresponde, de fato, à
-implementação original da ferramenta, desenvolvida na primeira etapa deste Trabalho de
-Conclusão de Curso (TCC1); no TCC2, foi mantida apenas como referência de comparação. Por
+da via otimizada é medido no Capítulo~\ref{cap:avaliacao}. A estratégia ingênua corresponde
+à implementação original da ferramenta, desenvolvida na primeira etapa deste Trabalho de
+Conclusão de Curso (TCC1), e foi mantida no TCC2 apenas como referência de comparação. Por
 isso, continua acessível pela CLI (\texttt{-{}-strategy naive}), mas não é oferecida na
 interface gráfica (Seção~\ref{sec:interface-grafica}), que emprega sempre a estratégia
 otimizada.
@@ -1211,7 +1214,8 @@ erros de sintaxe só se manifestam depois que o comando é submetido. Para reduz
 --- sem esconder a ferramenta de quem deseja aprendê-la --- foi construída uma
 \textbf{interface gráfica} \textit{desktop} sobre a CLI já existente. O princípio que orienta
 o seu projeto é deliberadamente didático: \textbf{o comando exibido é o comando executado}.
-Cada opção da CLI corresponde a um controle gráfico, e o comando resultante permanece visível
+Cada opção de uso cotidiano da CLI corresponde a um controle gráfico, e o comando resultante
+permanece visível
 o tempo todo, de modo que a interface \textbf{ensina} a linha de comando em vez de substituí-la.
 
 A interface é um \textbf{invólucro fino}: ela não reimplementa nenhuma etapa da importação.
