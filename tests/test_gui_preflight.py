@@ -202,6 +202,73 @@ def test_headers_are_read_once_while_unchanged(ecommerce, monkeypatch):
     assert len(reads) == first, "an unchanged file must not be re-read"
 
 
+def test_a_non_utf8_import_config_is_reported_not_raised(ecommerce):
+    """cp1252 (e.g. Excel/Notepad on a PT-BR Windows) must not crash the form."""
+    path = ecommerce / "import_config.json"
+    text = path.read_text(encoding="utf-8").replace('"product_name"', '"descrição"', 1)
+    path.write_bytes(text.encode("cp1252"))
+    result = _check(ecommerce)
+    assert result.errors["config_path"].startswith("Não foi possível ler")
+
+
+def test_a_non_utf8_sgbd_config_is_reported_not_raised(ecommerce):
+    path = ecommerce / "sgbd_config.json"
+    text = path.read_text(encoding="utf-8").replace("{", '{"nota": "descrição",', 1)
+    path.write_bytes(text.encode("cp1252"))
+    result = _check(ecommerce)
+    assert result.errors["sgbd_config_path"].startswith("Não foi possível ler")
+
+
+def test_a_mixed_config_with_two_combined_files_uses_their_header_union(ecommerce):
+    """Each unresolved slice name may draw on any combined file's columns.
+
+    Without reading rows we cannot know which combined file an origin value
+    lives in, so the check must not blame a slice for a column that belongs
+    to a *different* combined file than the last one seen.
+    """
+    (ecommerce / "a.csv").write_text("origin,x1\nsa,1\n", encoding="utf-8")
+    (ecommerce / "b.csv").write_text("origin,y1\nsb,1\n", encoding="utf-8")
+    (ecommerce / "p.csv").write_text("z\n1\n", encoding="utf-8")
+    mixed = {
+        "sources": {
+            "p": "p.csv",
+            "A": {"file": "a.csv", "origin_column": True},
+            "B": {"file": "b.csv", "origin_column": True},
+        },
+        "redis": {
+            "entities": {
+                "ea": {"source": "sa", "columns": {"x1": {"is_key": True}}},
+                "eb": {"source": "sb", "columns": {"y1": {"is_key": True}}},
+            }
+        },
+    }
+    (ecommerce / "mixed.json").write_text(json.dumps(mixed), encoding="utf-8")
+    result = _check(ecommerce, "mixed.json")
+    assert result.errors == {}
+
+
+def test_a_cached_exception_does_not_accumulate_traceback_frames(ecommerce):
+    """A file that stays broken must not leak memory one click at a time."""
+    broken = ecommerce / "import_config.json"
+    broken.write_text("{ quebrado", encoding="utf-8")
+
+    def _tb_len(exc):
+        n, tb = 0, exc.__traceback__
+        while tb:
+            n += 1
+            tb = tb.tb_next
+        return n
+
+    for _ in range(5):
+        _check(ecommerce)
+    entry = next(v for k, v in preflight._cache.items() if k[0] == "import")
+    first_len = _tb_len(entry[1])
+    assert first_len > 0
+    for _ in range(50):
+        _check(ecommerce)
+    assert _tb_len(entry[1]) == first_len
+
+
 def test_the_pure_core_never_imports_qt():
     """state, command and preflight must stay importable without PySide6."""
     script = (

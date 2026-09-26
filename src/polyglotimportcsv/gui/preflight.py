@@ -33,7 +33,7 @@ from polyglotimportcsv.config_parser import (
     merge_configs,
 )
 from polyglotimportcsv.gui.state import RunOptions
-from polyglotimportcsv.mapping_resolver import resolve_backend_entities
+from polyglotimportcsv.mapping_resolver import resolve_backend_entities, union_data_cols
 from polyglotimportcsv.sources import SOURCE_COLUMN, SourceData
 from polyglotimportcsv.validation import validate_backend_entities
 
@@ -81,6 +81,11 @@ def check(options: RunOptions) -> Preflight:
         import_cfg = _cached("import", path, load_import_config)
     except BusinessException as exc:
         return Preflight(errors={"config_path": str(exc)})
+    except (OSError, ValueError) as exc:
+        # A file that is not valid UTF-8 (e.g. saved as cp1252) or cannot be
+        # opened (permissions) must be reported, not raised: the window calls
+        # check on every click.
+        return Preflight(errors={"config_path": "Não foi possível ler {0}: {1}".format(path, exc)})
 
     sources_cfg = import_cfg.get("sources") or {}
     kind = classify_sources(sources_cfg)
@@ -124,6 +129,8 @@ def _check_sgbd(options: RunOptions, import_path: Path, import_cfg: Dict[str, An
         merge_configs(import_cfg, sgbd_cfg)
     except BusinessException as exc:
         return str(exc)
+    except (OSError, ValueError) as exc:
+        return "Não foi possível ler {0}: {1}".format(sgbd_path, exc)
     return ""
 
 
@@ -151,7 +158,7 @@ def _check_headers(
     key = "sources" if options.sources else "config_path"
     overrides = {name: path for name, path in options.sources}
     registry = {}  # type: Dict[str, SourceData]
-    combined_header = None  # type: Optional[List[str]]
+    combined_headers = []  # type: List[List[str]]
     for name, decl in sources_cfg.items():
         file_name = decl if isinstance(decl, str) else decl.get("file", "")
         # Same resolution as sources._resolve_path: an override follows the
@@ -178,19 +185,26 @@ def _check_headers(
                 "Source '{0}': combined CSV needs an origin column plus data "
                 "columns: {1}".format(name, csv_path)
             )
-        combined_header = header[1:]
-        registry[name] = _header_only(name, combined_header)
+        header = header[1:]
+        combined_headers.append(header)
+        registry[name] = _header_only(name, header)
 
     only = set(options.only) if options.only else None
     dbms_names = [b for b in BACKENDS if b in import_cfg and (only is None or b in only)]
-    if combined_header is not None:
+    if combined_headers:
         # The origin values that name each slice are in the rows, which are
-        # not read. Every name an entity refers to stands for one slice.
+        # not read, so we cannot tell which combined file a given slice name
+        # lives in. Every name an entity refers to stands for one slice, and
+        # that slice may draw on any of the combined files declared, so an
+        # unresolved name gets the union of all of them rather than just the
+        # last one seen. The CLI still validates the real binding, built from
+        # the actual origin column, when the import runs.
+        union_header = union_data_cols(combined_headers)
         for dbms in dbms_names:
             for ename, ecfg in (import_cfg[dbms].get("entities") or {}).items():
                 ref = (ecfg or {}).get("source", ename)
                 for name in ref if isinstance(ref, list) else [ref]:
-                    registry.setdefault(name, _header_only(name, combined_header))
+                    registry.setdefault(name, _header_only(name, union_header))
     try:
         for dbms in dbms_names:
             bound = resolve_backend_entities(import_cfg[dbms], registry)
@@ -237,5 +251,9 @@ def _cached(kind: str, path: Path, load: Callable[[Path], Any]) -> Any:
             value = exc
         _cache[entry] = (stamp, value)
     if isinstance(value, Exception):
-        raise value
+        # Clear the traceback before re-raising: otherwise each raise of the
+        # same cached exception appends another set of frames to it, growing
+        # without bound while the file stays broken (the window calls check
+        # on every click).
+        raise value.with_traceback(None)
     return value
