@@ -21,6 +21,14 @@ The `sources` block supports two input modes, chosen per config:
 
 Any source's path can be overridden at run time with `--source NAME=PATH` (repeatable), without editing the config.
 
+### Download
+
+Ready-to-run executables for Windows and Linux — the CLI and the GUI, no Python
+needed — are attached to each release on the
+[releases page](https://github.com/lucasbc92/polyglot-import-csv/releases). Every
+package ships the e-commerce example, `docker-compose.yml` and a `LEIAME.txt`
+with the first steps.
+
 ### Requirements
 
 - Python 3.9+ (official Cassandra driver C extensions are easiest on Python ≤3.11; `--dry-run` never opens sockets).
@@ -207,6 +215,14 @@ O bloco `sources` admite dois modos de entrada, escolhidos por configuração:
 - **CSV combinado:** um único CSV cuja coluna 0 designa a origem de cada linha, por exemplo `"sources": {"ecommerce": {"file": "ecommerce_join.csv", "origin_column": true}}`. O importador particiona o arquivo pelos valores distintos dessa coluna; cada valor fica disponível aos mapeamentos como a pseudocoluna `_source`.
 
 O caminho de qualquer origem pode ser sobrescrito em tempo de execução com `--source NOME=CAMINHO` (repetível), sem editar a configuração.
+
+### Download
+
+Executáveis prontos para Windows e Linux — a CLI e a interface gráfica, sem
+precisar de Python — acompanham cada versão na
+[página de releases](https://github.com/lucasbc92/polyglot-import-csv/releases).
+Todo pacote traz o exemplo de e-commerce, o `docker-compose.yml` e um
+`LEIAME.txt` com os primeiros passos.
 
 ### Requisitos
 
