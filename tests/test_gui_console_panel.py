@@ -233,3 +233,61 @@ def test_launcher_prefix_is_shown_as_a_tooltip(qtbot):
     panel.set_launcher_prefix(r"C:\py.exe -m polyglotimportcsv")
     assert r"C:\py.exe -m polyglotimportcsv" in panel.command_edit.toolTip()
     assert "polyglotimportcsv" in panel.toolTip()
+
+
+from PySide6.QtGui import QColor  # noqa: E402
+
+from polyglotimportcsv.gui.widgets.command_highlighter import COLOURS  # noqa: E402
+
+
+def _colour_at(panel, position):
+    block = panel.command_edit.document().firstBlock()
+    for fmt in block.layout().formats():
+        if fmt.start <= position < fmt.start + fmt.length:
+            return fmt.format.foreground().color().name().upper()
+    return None
+
+
+def test_the_command_is_coloured_by_token_kind(qtbot):
+    panel = ConsolePanel()
+    qtbot.addWidget(panel)
+    panel.set_command("polyglotimportcsv --config c.json")
+    assert _colour_at(panel, 0) == QColor(COLOURS["program"]).name().upper()
+    assert _colour_at(panel, len("polyglotimportcsv ")) == QColor(COLOURS["option"]).name().upper()
+    assert _colour_at(panel, len("polyglotimportcsv --config ")) == (
+        QColor(COLOURS["value"]).name().upper()
+    )
+
+
+def test_typed_text_is_coloured_too(qtbot):
+    panel = ConsolePanel()
+    qtbot.addWidget(panel)
+    panel.set_editing(True)
+    panel.command_edit.setPlainText("--dry-run")
+    assert _colour_at(panel, 0) == QColor(COLOURS["option"]).name().upper()
+
+
+def test_save_log_starts_disabled(qtbot):
+    panel = ConsolePanel()
+    qtbot.addWidget(panel)
+    assert panel.save_log_button.text() == "Salvar log…"
+    assert not panel.save_log_button.isEnabled()
+
+
+def test_save_log_is_enabled_when_a_log_is_available_and_nothing_runs(qtbot):
+    panel = ConsolePanel()
+    qtbot.addWidget(panel)
+    panel.set_log_available(True)
+    assert panel.save_log_button.isEnabled()
+    panel.set_running(True)
+    assert not panel.save_log_button.isEnabled()
+    panel.set_running(False)
+    assert panel.save_log_button.isEnabled()
+
+
+def test_clicking_save_log_emits_the_request(qtbot):
+    panel = ConsolePanel()
+    qtbot.addWidget(panel)
+    panel.set_log_available(True)
+    with qtbot.waitSignal(panel.save_log_requested, timeout=1000):
+        panel.save_log_button.click()

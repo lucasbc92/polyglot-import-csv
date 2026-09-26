@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 from polyglotimportcsv.gui.ansi import AnsiRenderer
 from polyglotimportcsv.gui.command import PROGRAM
 from polyglotimportcsv.gui.launcher import MIN_COLUMNS
+from polyglotimportcsv.gui.widgets.command_highlighter import CommandHighlighter
 
 READ_ONLY_BADGE = "somente leitura"
 EDITING_BADGE = "modo de edição"
@@ -54,6 +55,7 @@ class ConsolePanel(QFrame):
     run_requested = Signal()
     stop_requested = Signal()
     edit_mode_changed = Signal(bool)
+    save_log_requested = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -64,6 +66,7 @@ class ConsolePanel(QFrame):
         self._running = False
         self._run_enabled = True
         self._rendered_lines = 0
+        self._log_available = False
         # I2: injection point for the "discard the edited command?" question.
         # Tests replace it so no modal dialog is ever opened headlessly.
         self.confirm_discard = self._ask_discard_confirmation
@@ -76,12 +79,20 @@ class ConsolePanel(QFrame):
         self.command_edit.setReadOnly(True)
         self.command_edit.setMaximumHeight(96)
 
+        self._highlighter = CommandHighlighter(self.command_edit.document())
+
         self.badge_label = QLabel(READ_ONLY_BADGE, self)
         self.badge_label.setObjectName("badgeLabel")
         self.edit_button = QPushButton("Editar comando", self)
         self.copy_button = QPushButton("Copiar", self)
         self.run_button = QPushButton("▶  Executar", self)
         self.run_button.setObjectName("runButton")
+        self.save_log_button = QPushButton("Salvar log…", self)
+        self.save_log_button.setToolTip(
+            "Salvar uma cópia do arquivo de log desta execução (nível DEBUG, sem cores)"
+        )
+        self.save_log_button.setEnabled(False)
+        self.save_log_button.clicked.connect(self.save_log_requested)
 
         # I6: while editing, the typed text governs whether a run is possible,
         # so the button has to follow the text rather than the (disabled) form.
@@ -94,6 +105,7 @@ class ConsolePanel(QFrame):
         actions = QHBoxLayout()
         actions.addWidget(self.badge_label)
         actions.addStretch(1)
+        actions.addWidget(self.save_log_button)
         actions.addWidget(self.edit_button)
         actions.addWidget(self.copy_button)
         actions.addWidget(self.run_button)
@@ -171,6 +183,7 @@ class ConsolePanel(QFrame):
         self.run_button.setProperty("running", running)
         self._update_run_enabled()
         self.edit_button.setEnabled(not running)
+        self.save_log_button.setEnabled(self._log_available and not running)
         self.command_edit.setReadOnly(running or not self._editing)
         if running:
             self.badge_label.setText(RUNNING_BADGE)
@@ -190,6 +203,11 @@ class ConsolePanel(QFrame):
         """
         self._run_enabled = enabled
         self._update_run_enabled()
+
+    def set_log_available(self, available: bool) -> None:
+        """Offer "Salvar log…" once a finished run has left a log behind."""
+        self._log_available = available
+        self.save_log_button.setEnabled(available and not self._running)
 
     # -- log --------------------------------------------------------------
 
