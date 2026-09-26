@@ -1,0 +1,236 @@
+{
+  "sources": {
+    "stock": 12345,
+    "purchase": "ecommerce_purchase.csv",
+    "select_product": "ecommerce_select_product.csv",
+    "add_to_cart": "ecommerce_add_to_cart.csv"
+  },
+  "postgres": {
+    "entities": {
+      "categories": {
+        "source": "stock",
+        "columns": {
+          "category_id": {
+            "is_key": true,
+            "db_type": "BIGINT"
+          },
+          "category_name": {
+            "db_type": "TEXT"
+          }
+        }
+      },
+      "products": {
+        "source": "stock",
+        "columns": {
+          "product_id": {
+            "is_key": true,
+            "db_type": "BIGINT"
+          },
+          "product_name": {
+            "db_type": "TEXT"
+          },
+          "product_variant": {
+            "db_type": "TEXT"
+          },
+          "product_brand": {
+            "db_type": "TEXT"
+          },
+          "category_id": {
+            "db_type": "BIGINT"
+          },
+          "price": {
+            "db_type": "NUMERIC(14,2)"
+          }
+        }
+      },
+      "inventory": {
+        "source": "stock",
+        "columns": {
+          "product_id": {
+            "is_key": true,
+            "db_type": "BIGINT"
+          },
+          "quantity_available": {
+            "db_type": "BIGINT"
+          },
+          "last_restock_date": {
+            "db_type": "TIMESTAMPTZ"
+          },
+          "price": {
+            "db_type": "NUMERIC(14,2)"
+          }
+        }
+      },
+      "orders": {
+        "source": "purchase",
+        "columns": {
+          "order_number": {
+            "is_key": true,
+            "db_type": "TEXT"
+          },
+          "user_id": {
+            "db_type": "TEXT"
+          },
+          "order_date": {
+            "db_type": "TIMESTAMPTZ"
+          },
+          "order_status": {
+            "db_type": "TEXT"
+          },
+          "payment_method": {
+            "db_type": "TEXT"
+          },
+          "quantity": {
+            "db_type": "BIGINT"
+          },
+          "product_id": {
+            "db_type": "BIGINT"
+          },
+          "price": {
+            "db_type": "NUMERIC(14,2)"
+          },
+          "comment": {
+            "db_type": "TEXT"
+          },
+          "rating": {
+            "db_type": "BIGINT"
+          }
+        }
+      }
+    },
+    "relationships": {
+      "product_category": {
+        "from": "products",
+        "to": "categories",
+        "foreign_key": "category_id",
+        "references_key": "category_id"
+      },
+      "order_product": {
+        "from": "orders",
+        "to": "products",
+        "foreign_key": "product_id",
+        "references_key": "product_id"
+      }
+    }
+  },
+  "mongodb": {
+    "entities": {
+      "product_catalog": {
+        "source": "stock",
+        "columns": {
+          "product_id": {},
+          "product_name": {},
+          "product_variant": {},
+          "product_brand": {},
+          "product_description": {},
+          "product_image": {},
+          "price": {},
+          "category": {
+            "category_id": {},
+            "category_name": {}
+          },
+          "stock": {
+            "quantity_available": {},
+            "last_restock_date": {}
+          }
+        }
+      }
+    }
+  },
+  "cassandra": {
+    "entities": {
+      "user_activity_log": {
+        "source": [
+          "stock",
+          "purchase",
+          "select_product",
+          "add_to_cart"
+        ],
+        "columns": {
+          "user_id": {},
+          "timestamp": {
+            "schema_column": "event_time"
+          },
+          "_source": {
+            "schema_column": "event_type"
+          },
+          "product_id": {},
+          "order_number": {},
+          "selected_product_id": {},
+          "shopping_cart_id": {}
+        },
+        "cassandra_partition": [
+          "user_id"
+        ],
+        "cassandra_cluster": [
+          "timestamp"
+        ]
+      }
+    }
+  },
+  "redis": {
+    "entities": {
+      "shopping_cart": {
+        "source": "add_to_cart",
+        "auto_map": true,
+        "columns": {
+          "shopping_cart_id": {
+            "is_key": true
+          }
+        }
+      },
+      "user_session": {
+        "source": "select_product",
+        "columns": {
+          "user_id": {
+            "is_key": true
+          },
+          "user_name": {},
+          "user_email": {},
+          "timestamp": {
+            "schema_column": "last_seen"
+          }
+        }
+      }
+    }
+  },
+  "neo4j": {
+    "entities": {
+      "User": {
+        "source": "purchase",
+        "columns": {
+          "user_id": {
+            "is_key": true
+          },
+          "user_name": {},
+          "user_email": {}
+        }
+      },
+      "Product": {
+        "source": "stock",
+        "columns": {
+          "product_id": {
+            "is_key": true
+          },
+          "product_name": {},
+          "product_brand": {}
+        }
+      }
+    },
+    "relationships": {
+      "PURCHASED": {
+        "from": "User",
+        "to": "Product",
+        "type": "PURCHASED",
+        "columns": {
+          "order_number": {
+            "is_key": true
+          },
+          "quantity": {},
+          "price": {},
+          "rating": {}
+        }
+      }
+    }
+  }
+}

@@ -15,8 +15,9 @@ import re
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import IO, Any, Callable, Dict, Iterator, Optional, Sequence
+from typing import IO, Any, Callable, Dict, Iterator, Mapping, Optional, Sequence
 
+from rich import box
 from rich.console import Console
 from rich.json import JSON
 from rich.logging import RichHandler
@@ -36,12 +37,33 @@ from polyglotimportcsv.metrics import EXCLUDED_PHASES
 
 logger = logging.getLogger(__name__)
 
-#: Entities with at most this many rows have their records dumped (spec §4.3).
-DATA_DUMP_THRESHOLD = 50
+#: Rows shown per entity by the default data display (CLI --sample).
+DEFAULT_SAMPLE_SIZE = 50
+#: Entities above this many rows get a live progress bar (spec §4.4). Kept
+#: apart from the sample size so choosing a bigger sample does not change when
+#: the bars appear.
+PROGRESS_THRESHOLD = 50
 
 _FILE_FORMAT = "%(asctime)s %(levelname)-8s %(name)s: %(message)s"
 
-_console = Console(soft_wrap=True)
+
+def _make_console(environ: Optional[Mapping[str, str]] = None) -> Console:
+    """The terminal console.
+
+    With FORCE_COLOR set (the GUI sets it on the child process), output must
+    be ANSI even into a pipe. On Windows rich otherwise picks the legacy
+    console API, whose colour calls do nothing on a pipe, so not a single
+    escape reached the GUI and its console was monochrome (measured
+    2026-09-20). ``legacy_windows=False`` makes rich write ANSI instead;
+    Windows 10+ terminals understand it too, so a real terminal is unaffected.
+    """
+    environ = os.environ if environ is None else environ
+    if environ.get("FORCE_COLOR"):
+        return Console(soft_wrap=True, legacy_windows=False)
+    return Console(soft_wrap=True)
+
+
+_console = _make_console()
 _terminal_level: int = logging.INFO
 _file_console: Optional[Console] = None
 _file_handle: Optional[IO[str]] = None
@@ -206,33 +228,61 @@ def format_json_row(obj: Any) -> Text:
     return JSON.from_data(obj, indent=None, default=str).text
 
 
-def dump_rows(label: str, rows: Sequence[Dict[str, Any]]) -> None:
+def dump_rows(
+    label: str, rows: Sequence[Dict[str, Any]], *, total: Optional[int] = None
+) -> None:
+    """Print ``rows`` under ``label``; with ``total``, say they are a sample of it."""
     header = Text(f"  {label}: ")
     header.append(str(len(rows)), style="bold yellow")
-    header.append(" row(s)")
+    if total is not None and total > len(rows):
+        header.append(f" of {total} row(s) (sample; --sample N or --show-data shows more)")
+    else:
+        header.append(" row(s)")
     print_rich(header)
     if not rows:
         line = Text("    ")
         line.append_text(empty_label())
         print_rich(line)
         return
-    for i, row in enumerate(rows, start=1):
+    dump_rows_page(rows, start=1)
+
+
+def dump_rows_page(rows: Sequence[Dict[str, Any]], start: int) -> None:
+    """Print ``rows`` numbered from ``start``, with no header.
+
+    The stream path prints an entity batch by batch, so its numbering has to
+    carry on from where the previous batch stopped.
+    """
+    for i, row in enumerate(rows, start=start):
         line = Text(f"    [{i}] ", style="dim")
         line.append_text(format_json_row(row))
         print_rich(line)
 
 
 def dump_entity_frame(
-    backend: str, entity: str, df: Any, *, force: Optional[bool] = None
+    backend: str,
+    entity: str,
+    df: Any,
+    *,
+    force: Optional[bool] = None,
+    sample_size: int = DEFAULT_SAMPLE_SIZE,
 ) -> None:
-    """Dump entity records up to DATA_DUMP_THRESHOLD rows; counts only above (spec §4.3)."""
+    """Dump an entity's records.
+
+    ``force=True`` shows every row (--show-data), ``force=False`` none
+    (--no-data), and the default shows the first ``sample_size`` rows plus
+    the total (--sample N).
+    """
     n = len(df)
-    show = force if force is not None else n <= DATA_DUMP_THRESHOLD
-    if not show:
+    if force is False:
         note(f"{backend} · {entity}: {n} row(s) (data dump suppressed; --show-data forces it)")
         logger.debug("%s · %s: data dump suppressed for %d row(s)", backend, entity, n)
         return
-    dump_rows(f"{backend} · {entity}", df.to_dict(orient="records"))
+    label = f"{backend} · {entity}"
+    if force is True or n <= sample_size:
+        dump_rows(label, df.to_dict(orient="records"))
+        return
+    dump_rows(label, df.head(sample_size).to_dict(orient="records"), total=n)
 
 
 def metrics_table(records: Sequence[Dict[str, Any]]) -> Table:
@@ -240,8 +290,19 @@ def metrics_table(records: Sequence[Dict[str, Any]]) -> Table:
 
     Phases in ``metrics.EXCLUDED_PHASES`` are left out, matching the consolidated
     benchmark report.
+
+    ``box=box.SQUARE`` is explicit: rich's default ``HEAVY_HEAD`` box only
+    gets swapped for a light one (``box.Box.substitute``'s
+    ``LEGACY_WINDOWS_SUBSTITUTIONS``) when the console is
+    ``legacy_windows``. Task 3 made the GUI's console ``legacy_windows=False``
+    (so ANSI reaches the pipe at all), which left the heavy glyphs
+    (``┏━┳┃┡╇``) in place; the console panel's monospace font lacks them, Qt
+    falls back to a different font with different advance widths for those
+    codepoints, and the columns misalign (found 2026-09-26, round 2). Every
+    console this table can be printed to has ``┌─┬│├┼`` (SQUARE), so asking
+    for it directly avoids the substitution question entirely.
     """
-    table = Table(title="Import metrics", header_style="bold")
+    table = Table(title="Import metrics", header_style="bold", box=box.SQUARE)
     table.add_column("backend")
     table.add_column("entity")
     table.add_column("phase")
@@ -292,12 +353,14 @@ class _RowRateColumn(ProgressColumn):
 
 @contextmanager
 def entity_progress(description: str, total: int) -> Iterator[Callable[[int], None]]:
-    """Live progress for entities above the dump threshold (spec §4.4).
+    """Live progress for entities above ``PROGRESS_THRESHOLD`` (spec §4.4).
 
-    No-op (yields a do-nothing advance) when the entity is small enough to
-    be dumped instead, or when stdout is not a terminal.
+    An entity at or below the threshold gets no bar: it is small enough that
+    reporting its count once, when it is written, already says enough.
+    No-op (yields a do-nothing advance) then, and also when stdout is not a
+    terminal, since a live bar has nothing to draw itself against.
     """
-    if total <= DATA_DUMP_THRESHOLD or not _console.is_terminal:
+    if total <= PROGRESS_THRESHOLD or not _console.is_terminal:
         yield lambda n=1: None
         return
     progress = Progress(

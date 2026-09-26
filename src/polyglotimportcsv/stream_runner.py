@@ -14,8 +14,9 @@ deduplicates rows. Both are the sink's responsibility, applied inside
 
 from __future__ import annotations
 
+from functools import partial
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Set
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set
 
 import pandas as pd
 
@@ -81,6 +82,7 @@ def _flush_ready(
     written: Dict[str, int],
     sink: DbmsSink,
     batch: int,
+    notify: Optional[Callable[[str, pd.DataFrame], None]] = None,
 ) -> None:
     """Flush as many full ``batch``-sized groups as are ready; keep the remainder buffered."""
     pending = buffers.get(partition_name) or []
@@ -95,6 +97,8 @@ def _flush_ready(
             sink.ensure_partition(partition_name, binding)
             seen_partitions.add(partition_name)
         sink.write_batch(partition_name, binding, to_write)
+        if notify is not None:
+            notify(partition_name, to_write)
         written[partition_name] = written.get(partition_name, 0) + batch
         combined = combined.iloc[batch:].reset_index(drop=True)
     buffers[partition_name] = [combined] if len(combined) else []
@@ -107,6 +111,7 @@ def _flush_remainder(
     seen_partitions: Set[str],
     written: Dict[str, int],
     sink: DbmsSink,
+    notify: Optional[Callable[[str, pd.DataFrame], None]] = None,
 ) -> None:
     pending = buffers.get(partition_name) or []
     total = sum(len(d) for d in pending)
@@ -118,6 +123,8 @@ def _flush_remainder(
         sink.ensure_partition(partition_name, binding)
         seen_partitions.add(partition_name)
     sink.write_batch(partition_name, binding, combined)
+    if notify is not None:
+        notify(partition_name, combined)
     written[partition_name] = written.get(partition_name, 0) + len(combined)
     buffers[partition_name] = []
 
@@ -187,12 +194,15 @@ def run_stream_import(
     source_overrides: Optional[Dict[str, str]] = None,
     chunksize: int = READ_CHUNK,
     batch: int = BATCH,
+    on_batch: Optional[Callable[[str, str, pd.DataFrame], None]] = None,
 ) -> Dict[str, int]:
     """Stream every configured DBMS's entities through a ``DbmsSink`` in bounded memory.
 
     Returns ``{partition_name: rows_written}`` aggregated across every
     processed DBMS (a partition name written by more than one DBMS sums its
     counts).
+
+    ``on_batch(dbms, partition, frame)`` is called after every node batch is written; the data display (``data_preview``) hangs off it.
     """
     base_dir = Path(base_dir)
     dbms_names = _dbms_names(config, only)
@@ -208,6 +218,7 @@ def run_stream_import(
     for dbms in dbms_names:
         bcfg = config[dbms]
         entities: Dict[str, Any] = bcfg.get("entities") or {}
+        notify = partial(on_batch, dbms) if on_batch is not None else None
 
         sink = sink_factories[dbms](bcfg)
         if create_schema:
@@ -248,12 +259,14 @@ def run_stream_import(
                     _flush_ready(
                         partition_name, buffers, partition_binding,
                         seen_partitions, written, sink, batch,
+                        notify=notify,
                     )
 
         for partition_name in list(buffers.keys()):
             _flush_remainder(
                 partition_name, buffers, partition_binding,
                 seen_partitions, written, sink,
+                notify=notify,
             )
 
         write_rels = getattr(sink, "write_relationships", None)
