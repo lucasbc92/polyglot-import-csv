@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import IO, Any, Callable, Dict, Iterator, Mapping, Optional, Sequence
 
+from rich import box
 from rich.console import Console
 from rich.json import JSON
 from rich.logging import RichHandler
@@ -289,8 +290,19 @@ def metrics_table(records: Sequence[Dict[str, Any]]) -> Table:
 
     Phases in ``metrics.EXCLUDED_PHASES`` are left out, matching the consolidated
     benchmark report.
+
+    ``box=box.SQUARE`` is explicit: rich's default ``HEAVY_HEAD`` box only
+    gets swapped for a light one (``box.Box.substitute``'s
+    ``LEGACY_WINDOWS_SUBSTITUTIONS``) when the console is
+    ``legacy_windows``. Task 3 made the GUI's console ``legacy_windows=False``
+    (so ANSI reaches the pipe at all), which left the heavy glyphs
+    (``┏━┳┃┡╇``) in place; the console panel's monospace font lacks them, Qt
+    falls back to a different font with different advance widths for those
+    codepoints, and the columns misalign (found 2026-09-26, round 2). Every
+    console this table can be printed to has ``┌─┬│├┼`` (SQUARE), so asking
+    for it directly avoids the substitution question entirely.
     """
-    table = Table(title="Import metrics", header_style="bold")
+    table = Table(title="Import metrics", header_style="bold", box=box.SQUARE)
     table.add_column("backend")
     table.add_column("entity")
     table.add_column("phase")

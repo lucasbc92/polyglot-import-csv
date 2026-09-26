@@ -1,5 +1,6 @@
 """Reporting core: terminal level vs always-DEBUG session file (spec §4.2)."""
 
+import io
 import logging
 import os
 import subprocess
@@ -7,6 +8,7 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+from rich.console import Console
 
 from polyglotimportcsv import reporting
 
@@ -193,3 +195,30 @@ def test_forced_colour_reaches_a_pipe_as_ansi():
         [sys.executable, "-c", script], capture_output=True, env=env, check=True
     )
     assert b"\x1b[" in result.stdout, result.stdout
+
+
+def test_metrics_table_never_uses_heavy_box_glyphs():
+    """Round 2, finding #2: the GUI console's font lacks the heavy glyphs.
+
+    rich only substitutes ``HEAVY_HEAD`` (the table's default box) for a
+    light one when the console is ``legacy_windows`` (see
+    ``rich.box.Box.substitute`` / ``LEGACY_WINDOWS_SUBSTITUTIONS``). Task 3
+    made the GUI's console ``legacy_windows=False`` so ANSI would reach the
+    pipe at all, which left the heavy glyphs (``┏━┳┃┡╇┗┻``) in place; the
+    console panel's monospace font has no glyphs for them, Qt falls back to
+    a different font with different advance widths, and the table's columns
+    visibly misalign. ``metrics_table`` now asks for ``box.SQUARE``
+    explicitly, so this holds on every console regardless of
+    ``legacy_windows``.
+    """
+    table = reporting.metrics_table(
+        [{"backend": "postgres", "entity": "items", "phase": "write", "rows": 100, "seconds": 2.0,
+          "rows_per_second": 50.0}]
+    )
+    console = Console(file=io.StringIO(), force_terminal=True, legacy_windows=False, width=100)
+    console.print(table)
+    text = console.file.getvalue()
+    for glyph in "┏━┳┃┡╇┗┻":
+        assert glyph not in text, "heavy box glyph {0!r} leaked into the table".format(glyph)
+    assert "┌" in text
+    assert "│" in text
