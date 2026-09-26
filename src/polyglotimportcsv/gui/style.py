@@ -91,6 +91,10 @@ QFrame#consolePanel QPushButton {
     border-color: #4A5261;
     color: #D6DCE5;
 }
+QFrame#consolePanel QPushButton:disabled {
+    color: #5C6675;
+    border-color: #363C46;
+}
 QFrame#consolePanel QPushButton#runButton {
     background-color: #2F6FE0;
     border-color: #2F6FE0;

@@ -68,6 +68,36 @@ def test_selected_rows_stay_highlighted_without_focus():
     assert "QTableWidget::item:selected:!active" in STYLESHEET
 
 
+def test_disabled_console_buttons_are_visibly_muted():
+    """A disabled "Salvar log…" must not look identical to an enabled one.
+
+    ``QFrame#consolePanel QPushButton`` sets ``color: #D6DCE5`` (an ID
+    selector), which beats the generic ``QPushButton:disabled`` rule's
+    specificity, so a disabled button inside the console panel kept the
+    enabled text colour with no visual cue at all. The fix is a rule scoped
+    to the same selector, ``QFrame#consolePanel QPushButton:disabled``, with
+    ``::indicator`` still forbidden (test above).
+    """
+    rules = stylesheet_rules()
+    match = re.search(
+        r"QFrame#consolePanel\s+QPushButton:disabled\s*\{([^}]*)\}", rules
+    )
+    assert match is not None, (
+        "no QFrame#consolePanel QPushButton:disabled rule: a disabled button "
+        "in the console (e.g. \"Salvar log…\") looks identical to an enabled one"
+    )
+    body = match.group(1)
+    color_match = re.search(r"color:\s*(#[0-9A-Fa-f]{6})", body)
+    assert color_match is not None, "the disabled rule must set a muted text colour"
+    enabled_match = re.search(
+        r"QFrame#consolePanel\s+QPushButton\s*\{[^}]*color:\s*(#[0-9A-Fa-f]{6})", rules
+    )
+    assert enabled_match is not None
+    assert color_match.group(1).upper() != enabled_match.group(1).upper(), (
+        "the disabled console button colour must differ from the enabled one"
+    )
+
+
 def test_every_painted_token_is_a_colour_of_the_stylesheet():
     """The painter and the rules around it must not drift apart.
 
