@@ -42,11 +42,12 @@ The window builds the command for you, shows it before running, and streams the
 CLI's output into an integrated console. The command shown is the command that
 runs — you can switch the panel to edit mode and type it yourself.
 
-On Windows the integrated console is monochrome. `rich` detects a legacy
-Windows console (`color_system='windows'`) and drives colour through Win32
-console calls instead of ANSI escapes; those calls have no effect on the pipe
-the GUI reads from, so no colour codes ever reach the console. Text, tables and
-progress bars all arrive correctly — only the colour is missing.
+The integrated console shows the CLI's colours: with `FORCE_COLOR` set, the CLI
+writes ANSI escapes even into a pipe. The GUI does not offer `--strategy` (it
+always runs `optimized`) nor `--benchmark`; both remain available in the CLI.
+Before a run, the GUI validates both configurations and the CSV headers with
+the CLI's own code. After a run, **Salvar log…** copies the session log, and
+clicking the log path in the status bar opens its folder.
 
 ### Usage
 
@@ -76,6 +77,7 @@ Options:
 - `--only postgres,redis` — run only listed backends.
 - `--log-level DEBUG|INFO|WARNING|ERROR` — terminal verbosity (default `INFO`); the session log file under `logs/` always records `DEBUG`.
 - `--show-data` / `--no-data` — force or suppress the per-entity record dump (default: entities with up to 50 rows are dumped).
+- `--sample N` — show the first N rows of each entity (default 50), in both execution modes. `--show-data` shows every row; `--no-data` none. `--sample` cannot be combined with either.
 - `--benchmark` — write per-phase metrics to `benchmarks/benchmark_<timestamp>.json` and append `benchmarks/benchmark_history.csv` (implies `--no-data`).
 - `--execution stream|materialize` — write path (default `stream`). `stream` imports in bounded memory (~one read chunk, roughly constant in file size); `materialize` loads each source fully (the phase-measured baseline). Streaming supports union (`"source": [...]`) entities: it samples one first chunk per source to build the shared superset, then widens each chunk to it. `--dry-run` and `--benchmark` always use `materialize`. Neo4j relationships are streamed too, in a bounded second pass over the relationship sources after all nodes are written.
 - `--no-create-schema` — skip DDL where applicable.
@@ -227,12 +229,13 @@ A janela monta o comando, mostra-o antes de executar e transmite a saída da CLI
 para um console integrado. O comando exibido é o comando executado — o painel
 pode ser colocado em modo de edição para digitá-lo à mão.
 
-No Windows o console integrado é monocromático. O `rich` identifica um console
-legado do Windows (`color_system='windows'`) e produz cor por chamadas Win32 de
-console, não por sequências ANSI; essas chamadas não têm efeito sobre o *pipe*
-que a GUI lê, de modo que nenhum código de cor chega ao console. O texto, as
-tabelas e as barras de progresso continuam chegando corretamente — falta apenas
-a cor.
+O console integrado mostra as cores da CLI: com `FORCE_COLOR` definido, a CLI
+escreve sequências ANSI mesmo dentro de um *pipe*. A GUI não oferece
+`--strategy` (executa sempre em `optimized`) nem `--benchmark`; ambos continuam
+disponíveis na CLI. Antes de executar, a GUI valida as duas configurações e os
+cabeçalhos dos CSVs com o próprio código da CLI. Depois de executar,
+**Salvar log…** copia o log da sessão, e clicar no caminho do log na barra de
+status abre a pasta correspondente.
 
 ### Uso
 
@@ -262,6 +265,7 @@ Opções úteis:
 - `--only postgres,redis` — executa só os backends listados.
 - `--log-level DEBUG|INFO|WARNING|ERROR` — verbosidade do terminal (padrão `INFO`); o arquivo de log de sessão em `logs/` sempre grava `DEBUG`.
 - `--show-data` / `--no-data` — força ou suprime a exibição dos registros por entidade (padrão: entidades com até 50 linhas são exibidas).
+- `--sample N` — mostra as primeiras N linhas de cada entidade (padrão 50), nos dois modos de execução. `--show-data` mostra todas as linhas; `--no-data`, nenhuma. `--sample` não se combina com nenhuma das duas.
 - `--benchmark` — grava métricas por fase em `benchmarks/benchmark_<timestamp>.json` e acrescenta `benchmarks/benchmark_history.csv` (implica `--no-data`).
 - `--execution stream|materialize` — caminho de escrita (padrão `stream`). `stream` importa com memória limitada (~um bloco de leitura, praticamente constante no tamanho do arquivo); `materialize` carrega cada origem por completo (a linha de base medida por fase). O modo `stream` também aceita entidades de união (`"source": [...]`): amostra o primeiro bloco de cada origem para montar o superconjunto de colunas e então alarga cada bloco para ele. `--dry-run` e `--benchmark` usam sempre `materialize`. Os relacionamentos do Neo4j também são transmitidos, em uma segunda passagem de memória limitada sobre as origens dos relacionamentos, após a escrita de todos os nós.
 - `--no-create-schema` — não emite DDL de criação (quando aplicável).

@@ -285,3 +285,16 @@ ausente ou inconsistente não impede a escolha de fontes.
   antigo (`tests/test_reporting.py`) são atualizados, e nenhum script de
   `scripts/` depende da ausência de linhas (os benchmarks usam `--no-data`
   implícito).
+
+## 8. Decisões tomadas no plano
+
+- `RunOptions` manteve `show_data: Optional[bool]` (tri-estado da CLI) em vez
+  de `data_mode: str`: o mesmo comportamento com uma mudança menor.
+- A validação por cabeçalho usa `resolve_backend_entities` +
+  `validate_backend_entities` sobre fontes de zero linhas, não
+  `stream_binding`: verificado em 26/09, isso reproduz a mensagem exata da CLI
+  ("references unknown column"), e `stream_binding` sozinho não a produz.
+- A linha selecionada na tabela de fontes tem fundo de destaque, sem borda à
+  esquerda: no QSS, uma borda em `::item` aparece em todas as células.
+- A cor no Windows foi medida: `legacy_windows=False` faz o `rich` emitir ANSI
+  num *pipe* (0 → 4 bytes ESC num teste mínimo).

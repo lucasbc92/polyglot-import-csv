@@ -88,7 +88,7 @@ def new_window(app: QApplication, settings_path: Path, config: Path) -> MainWind
     window.config_panel.set_paths(config, SGBD)
     window._on_config_changed()
     window.options_panel.dry_run_box.setChecked(True)
-    window.options_panel.show_data_buttons["never"].setChecked(True)
+    window.options_panel.show_data_buttons["none"].setChecked(True)
     window.resize(*SIZE)
     window.splitter.setSizes(SPLIT)
     window.show()
