@@ -172,6 +172,63 @@ def test_block_count_matches_rendered_lines(qtbot):
     assert panel.log_view.document().blockCount() == panel._rendered_lines
 
 
+def test_a_line_finished_mid_chunk_gets_its_own_block(qtbot):
+    """Regression: a coloured run merged the "Import metrics" table's border.
+
+    Root cause (found 2026-09-26, controller round 1): ``_replace_from``
+    walked ``first`` blocks from the document start to find where to resume
+    rendering. Whenever ``first`` named a line never rendered before —
+    ``first == document().blockCount()``, the ordinary case for reporting a
+    brand-new line for the first time — the walk could not reach it (every
+    existing block index is smaller), fell back to ``QTextCursor.End``, and
+    then (since ``offset == 0`` skipped ``insertBlock()``) spliced the new
+    line's HTML onto the end of the *previous* line's block instead of
+    starting a fresh one.
+
+    This reliably fires whenever one ``append_output`` chunk ends a line
+    without a trailing newline and the next chunk both terminates it and
+    starts writing the following line — exactly what happens when a real
+    ``QProcess`` delivers rich's output as it streams the child's stdout:
+    confirmed in the evidence capture by feeding the CLI's actual
+    ``--dry-run`` bytes (``FORCE_COLOR=1``) through ``ConsolePanel`` in
+    small, unaligned chunks, which merged the table's top border into its
+    header-separator line, identically to
+    ``evidence/task10-e-dry-run-coloured.png``.
+
+    The two lines below are the real box-drawing bytes rich emits for the
+    "Import metrics" table's top border and header separator (captured via
+    ``python -m polyglotimportcsv --config data/ecommerce/import_config.json
+    --dry-run`` with ``FORCE_COLOR=1``), split at the exact chunk boundary
+    that reproduces the bug: the first call ends the border line without a
+    trailing newline, and the second terminates it and writes the whole next
+    line in one shot.
+    """
+    panel = ConsolePanel()
+    qtbot.addWidget(panel)
+    top_border = (
+        "┏" + "━" * 11 + "┳" + "━" * 8 + "┳" + "━" * 7
+        + "┳" + "━" * 6 + "┳" + "━" * 9 + "┳" + "━" * 8
+        + "┓"
+    )
+    header_separator = (
+        "┡" + "━" * 11 + "╇" + "━" * 8 + "╇" + "━" * 7
+        + "╇" + "━" * 6 + "╇" + "━" * 9 + "╇" + "━" * 8
+        + "┩"
+    )
+    panel.append_output("Import metrics\n" + top_border)
+    panel.append_output("\n" + header_separator + "\n")
+
+    document = panel.log_view.document()
+    assert document.blockCount() == panel._rendered_lines
+    # Spaces render as U+00A0 (_render's &nbsp; substitution keeps runs from
+    # collapsing); normalize back to compare against the plain source text.
+    rendered = [
+        document.findBlockByNumber(i).text().replace(" ", " ")
+        for i in range(document.blockCount())
+    ]
+    assert rendered == ["Import metrics", top_border, header_separator, " "]
+
+
 def test_set_running_false_respects_run_enabled_false(qtbot):
     panel = ConsolePanel()
     qtbot.addWidget(panel)

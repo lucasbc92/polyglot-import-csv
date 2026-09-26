@@ -250,16 +250,41 @@ class ConsolePanel(QFrame):
         self._replace_from(first, lines)
 
     def _replace_from(self, first: int, lines: List[str]) -> None:
+        """Replace every rendered line from index ``first`` onward.
+
+        ``first`` names a line by index into the renderer's own line list,
+        not a block that is guaranteed to already exist in ``log_view``: the
+        very common case of reporting brand-new lines for the first time has
+        ``first == document().blockCount()`` (nothing beyond the last
+        existing block has ever been rendered). The block walk below can then
+        never reach ``first`` — every existing block index is smaller — and
+        ``reached`` records that. Bug found in review: the walk used to
+        fall back silently to ``QTextCursor.End`` in that case and then
+        (because ``offset == 0`` skipped ``insertBlock()``) inserted the new
+        first line's HTML straight onto the end of the *previous*, unrelated
+        line's block, splicing the two together. One coloured run reached
+        this exact path while streaming the per-entity JSON dump (any two
+        ``append_output`` calls where the first ends mid-line and the second
+        both terminates it and starts writing the next line already do it),
+        and every following call inherited the same one-line shortfall,
+        eventually merging pieces of the "Import metrics" table's border
+        into one QTextEdit line. ``reached is False`` now forces an
+        ``insertBlock()`` before the first line too, so a truly new line
+        always gets its own block instead of merging into the last one.
+        """
         cursor = self.log_view.textCursor()
         cursor.movePosition(QTextCursor.Start)
+        reached = True
         for _ in range(first):
             if not cursor.movePosition(QTextCursor.NextBlock):
-                cursor.movePosition(QTextCursor.End)
+                reached = False
                 break
+        if not reached:
+            cursor.movePosition(QTextCursor.End)
         cursor.movePosition(QTextCursor.End, QTextCursor.KeepAnchor)
         cursor.removeSelectedText()
         for offset, line in enumerate(lines):
-            if offset:
+            if offset or not reached:
                 cursor.insertBlock()
             cursor.insertHtml(line)
         self._rendered_lines = first + len(lines)
