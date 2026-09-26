@@ -348,3 +348,40 @@ def test_clicking_save_log_emits_the_request(qtbot):
     panel.set_log_available(True)
     with qtbot.waitSignal(panel.save_log_requested, timeout=1000):
         panel.save_log_button.click()
+
+
+def test_a_disabled_run_button_does_not_look_enabled(qtbot):
+    """The run button's own ID rule outranks every ``:disabled`` rule.
+
+    ``QFrame#consolePanel QPushButton#runButton`` paints the button accent
+    blue with white text, and it is more specific than
+    ``QFrame#consolePanel QPushButton:disabled``, so a run blocked by the
+    pre-run validation still looked like a button ready to be pressed. Checked
+    on the rendered pixels, not on the stylesheet text, because specificity is
+    exactly what a text check cannot see.
+    """
+    from PySide6.QtWidgets import QApplication
+
+    from polyglotimportcsv.gui.style import STYLESHEET
+
+    app = QApplication.instance()
+    previous = app.styleSheet()
+    app.setStyleSheet(STYLESHEET)
+    try:
+        panel = ConsolePanel()
+        qtbot.addWidget(panel)
+        panel.show()
+        button = panel.run_button
+
+        def fill():
+            image = button.grab().toImage()
+            return image.pixelColor(6, image.height() // 2).name()
+
+        panel.set_run_enabled(True)
+        enabled = fill()
+        panel.set_run_enabled(False)
+        assert not button.isEnabled()
+        disabled = fill()
+    finally:
+        app.setStyleSheet(previous)
+    assert enabled != disabled, "a disabled run button must not keep the accent fill"

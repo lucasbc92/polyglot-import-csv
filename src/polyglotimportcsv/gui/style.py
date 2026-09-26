@@ -100,6 +100,19 @@ QFrame#consolePanel QPushButton#runButton {
     border-color: #2F6FE0;
     color: #FFFFFF;
 }
+/* The run button's ID rules outrank every generic :disabled rule, so a run
+   blocked by the pre-run validation kept the accent fill and looked ready to
+   press. Each ID rule needs its own :disabled twin, declared after it. */
+QPushButton#runButton:disabled {
+    background-color: #EDF0F4;
+    border-color: #D9DFE7;
+    color: #9AA4B2;
+}
+QFrame#consolePanel QPushButton#runButton:disabled {
+    background-color: #1E242D;
+    border-color: #363C46;
+    color: #5C6675;
+}
 QPlainTextEdit#commandEdit {
     background-color: #1E242D;
     border: none;
