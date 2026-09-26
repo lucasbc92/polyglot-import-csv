@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from polyglotimportcsv.gui.command import build_argv, is_program_token, to_display
+from polyglotimportcsv.gui.command import build_argv, classify, is_program_token, to_display
 from polyglotimportcsv.gui.state import RunOptions
 
 CFG = Path("/proj/import_config.json")
@@ -22,6 +22,7 @@ def test_the_default_state_spells_every_option_out():
         "--execution", "stream",
         "--create-schema",
         "--log-level", "INFO",
+        "--sample", "50",
     ]
 
 
@@ -37,23 +38,20 @@ def test_only_is_comma_joined():
     assert argv[argv.index("--only") + 1] == "postgres,redis"
 
 
-def test_default_strategy_and_execution_are_emitted_too():
-    argv = build_argv(RunOptions(config_path=CFG, strategy="optimized", execution="stream"))
+def test_strategy_is_always_optimized_and_execution_follows_the_form():
+    argv = build_argv(RunOptions(config_path=CFG, execution="materialize"))
     assert argv[argv.index("--strategy") + 1] == "optimized"
-    assert argv[argv.index("--execution") + 1] == "stream"
-
-
-def test_non_default_strategy_and_execution_are_emitted():
-    argv = build_argv(RunOptions(config_path=CFG, strategy="naive", execution="materialize"))
-    assert argv[argv.index("--strategy") + 1] == "naive"
     assert argv[argv.index("--execution") + 1] == "materialize"
 
 
+def test_benchmark_is_never_emitted():
+    assert "--benchmark" not in build_argv(RunOptions(config_path=CFG, dry_run=True))
+
+
 def test_boolean_flags():
-    argv = build_argv(RunOptions(config_path=CFG, dry_run=True, create_schema=False, benchmark=True))
+    argv = build_argv(RunOptions(config_path=CFG, dry_run=True, create_schema=False))
     assert "--dry-run" in argv
     assert "--no-create-schema" in argv
-    assert "--benchmark" in argv
 
 
 def test_create_schema_emits_one_of_its_two_forms():
@@ -69,11 +67,14 @@ def test_log_level_is_always_emitted():
     assert argv[argv.index("--log-level") + 1] == "DEBUG"
 
 
-def test_show_data_tri_state():
-    assert "--show-data" not in build_argv(RunOptions(config_path=CFG, show_data=None))
-    assert "--no-data" not in build_argv(RunOptions(config_path=CFG, show_data=None))
-    assert "--show-data" in build_argv(RunOptions(config_path=CFG, show_data=True))
-    assert "--no-data" in build_argv(RunOptions(config_path=CFG, show_data=False))
+def test_data_display_modes():
+    sample = build_argv(RunOptions(config_path=CFG, show_data=None, sample_size=7))
+    assert sample[sample.index("--sample") + 1] == "7"
+    assert "--show-data" not in sample and "--no-data" not in sample
+    everything = build_argv(RunOptions(config_path=CFG, show_data=True))
+    assert "--show-data" in everything and "--sample" not in everything
+    nothing = build_argv(RunOptions(config_path=CFG, show_data=False))
+    assert "--no-data" in nothing and "--sample" not in nothing
 
 
 def test_sources_are_repeated_pairs():
@@ -100,11 +101,9 @@ def test_argv_follows_the_order_of_the_spec_table():
         config_path=CFG,
         sgbd_config_path=sgbd,
         only=("postgres", "redis"),
-        strategy="naive",
         execution="materialize",
         dry_run=True,
         create_schema=False,
-        benchmark=True,
         log_level="DEBUG",
         show_data=True,
         sources=(("clientes", source),),
@@ -113,11 +112,10 @@ def test_argv_follows_the_order_of_the_spec_table():
         "--config", str(CFG),
         "--sgbd-config", str(sgbd),
         "--only", "postgres,redis",
-        "--strategy", "naive",
+        "--strategy", "optimized",
         "--execution", "materialize",
         "--dry-run",
         "--no-create-schema",
-        "--benchmark",
         "--log-level", "DEBUG",
         "--show-data",
         "--source", "clientes={0}".format(source),
@@ -133,15 +131,14 @@ def test_every_option_changes_the_command_when_toggled():
     """
     base = RunOptions(config_path=CFG)
     flipped = (
-        RunOptions(config_path=CFG, strategy="naive"),
         RunOptions(config_path=CFG, execution="materialize"),
         RunOptions(config_path=CFG, dry_run=True),
         RunOptions(config_path=CFG, create_schema=False),
-        RunOptions(config_path=CFG, benchmark=True),
         RunOptions(config_path=CFG, log_level="DEBUG"),
         RunOptions(config_path=CFG, show_data=True),
         RunOptions(config_path=CFG, show_data=False),
         RunOptions(config_path=CFG, only=("redis",)),
+        RunOptions(config_path=CFG, sample_size=10),
     )
     for options in flipped:
         assert build_argv(options) != build_argv(base)
@@ -157,6 +154,7 @@ def test_argv_order_is_stable_when_options_are_at_their_defaults():
         "--execution", "stream",
         "--create-schema",
         "--log-level", "INFO",
+        "--sample", "50",
     ]
 
 
@@ -204,3 +202,36 @@ def test_an_option_is_not_the_program_name():
 def test_another_program_is_not_the_program_name():
     assert not is_program_token("python")
     assert not is_program_token("polyglotimportcsv-gui")
+
+
+# -- I5: classifying tokens for syntax colouring ----------------------------
+
+
+def test_classify_marks_program_options_and_values():
+    text = "polyglotimportcsv --config c.json --dry-run --log-level INFO"
+    kinds = [(text[s:s + n], k) for s, n, k in classify(text)]
+    assert kinds == [
+        ("polyglotimportcsv", "program"),
+        ("--config", "option"),
+        ("c.json", "value"),
+        ("--dry-run", "option"),
+        ("--log-level", "option"),
+        ("INFO", "value"),
+    ]
+
+
+def test_classify_keeps_a_quoted_path_with_spaces_as_one_value():
+    text = 'polyglotimportcsv --config "C:\\meus arquivos\\cfg.json"'
+    spans = classify(text)
+    assert [k for _, _, k in spans] == ["program", "option", "value"]
+    start, length, _ = spans[2]
+    assert text[start:start + length] == '"C:\\meus arquivos\\cfg.json"'
+
+
+def test_classify_without_the_program_name_has_no_program_span():
+    assert [k for _, _, k in classify("--dry-run x")] == ["option", "value"]
+
+
+def test_classify_tolerates_an_unclosed_quote_while_typing():
+    spans = classify('polyglotimportcsv --config "C:\\sem fim')
+    assert [k for _, _, k in spans] == ["program", "option", "value"]

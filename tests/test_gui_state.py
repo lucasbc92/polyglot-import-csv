@@ -11,13 +11,34 @@ from polyglotimportcsv.gui.state import (
 
 def test_defaults_mirror_the_cli_defaults():
     options = RunOptions()
-    assert options.strategy == "optimized"
     assert options.execution == "stream"
     assert options.create_schema is True
     assert options.log_level == "INFO"
     assert options.show_data is None
+    assert options.sample_size == 50
     assert options.only == ()
     assert options.sources == ()
+
+
+def test_strategy_and_benchmark_are_not_form_state():
+    """The GUI always runs optimized and never benchmarks (meeting 25/09)."""
+    options = RunOptions()
+    assert not hasattr(options, "strategy")
+    assert not hasattr(options, "benchmark")
+
+
+@pytest.mark.parametrize("size", [0, -1, 1000001])
+def test_sample_size_out_of_range_is_reported(tmp_path, size):
+    cfg = tmp_path / "import_config.json"
+    cfg.write_text("{}", encoding="utf-8")
+    errors = validate(RunOptions(config_path=cfg, sample_size=size))
+    assert errors["sample_size"] == "O tamanho da amostra deve estar entre 1 e 1000000."
+
+
+def test_sample_size_is_ignored_when_not_sampling(tmp_path):
+    cfg = tmp_path / "import_config.json"
+    cfg.write_text("{}", encoding="utf-8")
+    assert "sample_size" not in validate(RunOptions(config_path=cfg, show_data=True, sample_size=0))
 
 
 def test_missing_config_is_reported():
