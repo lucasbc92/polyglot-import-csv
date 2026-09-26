@@ -1,0 +1,65 @@
+PolyglotImportCSV
+=================
+
+Importa arquivos CSV para PostgreSQL, MongoDB, Cassandra, Redis e Neo4j em uma
+única execução, conforme dois arquivos de configuração em JSON.
+
+Projeto: https://github.com/lucasbc92/polyglot-import-csv
+
+
+Conteúdo do pacote
+------------------
+
+  polyglotimportcsv-gui(.exe)   interface gráfica (também funciona como CLI:
+                                polyglotimportcsv-gui --cli --help)
+  polyglotimportcsv(.exe)       linha de comando (só no pacote da CLI)
+  data/ecommerce/               cenário de exemplo: CSVs e configurações
+  docker-compose.yml            contêineres dos cinco SGBDs do exemplo
+  LICENSE                       licença MIT
+
+
+Primeiro teste, sem banco de dados
+----------------------------------
+
+O modo de simulação valida as configurações e mostra quantos registros iriam
+para cada destino, sem conectar a nenhum SGBD:
+
+  polyglotimportcsv --config data/ecommerce/import_config.json --dry-run
+
+Na interface gráfica: escolha data/ecommerce/import_config.json e
+data/ecommerce/sgbd_config.json, marque "Simulação (--dry-run)" e clique em
+Executar.
+
+
+Importação real
+---------------
+
+1. Instale o Docker e suba os SGBDs do exemplo, nesta pasta:
+
+     docker compose up -d
+
+2. Execute o mesmo comando sem --dry-run:
+
+     polyglotimportcsv --config data/ecommerce/import_config.json
+
+
+Log da execução
+---------------
+
+Cada execução grava um log completo em logs/, a partir da pasta em que o
+programa foi executado. Na interface gráfica, o caminho aparece na barra de
+estado (um clique abre a pasta) e o botão "Salvar log..." copia o arquivo.
+
+
+Windows
+-------
+
+Os executáveis não são assinados digitalmente. Na primeira execução, o
+SmartScreen pode avisar sobre um aplicativo não reconhecido: clique em
+"Mais informações" e depois em "Executar assim mesmo".
+
+
+Linux
+-----
+
+Se necessário, dê permissão de execução: chmod +x polyglotimportcsv*
