@@ -188,6 +188,7 @@ def test_forced_colour_reaches_a_pipe_as_ansi():
         "reporting.print_rich(Text('ok', style='green'))\n"
     )
     env = dict(os.environ, FORCE_COLOR="1", POLYGLOT_NO_LOG="1")
+    env.pop("NO_COLOR", None)  # Rich honors NO_COLOR over FORCE_COLOR; test must not depend on caller's shell
     result = subprocess.run(
         [sys.executable, "-c", script], capture_output=True, env=env, check=True
     )
