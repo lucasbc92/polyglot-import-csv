@@ -353,10 +353,12 @@ class _RowRateColumn(ProgressColumn):
 
 @contextmanager
 def entity_progress(description: str, total: int) -> Iterator[Callable[[int], None]]:
-    """Live progress for entities above the dump threshold (spec §4.4).
+    """Live progress for entities above ``PROGRESS_THRESHOLD`` (spec §4.4).
 
-    No-op (yields a do-nothing advance) when the entity is small enough to
-    be dumped instead, or when stdout is not a terminal.
+    An entity at or below the threshold gets no bar: it is small enough that
+    reporting its count once, when it is written, already says enough.
+    No-op (yields a do-nothing advance) then, and also when stdout is not a
+    terminal, since a live bar has nothing to draw itself against.
     """
     if total <= PROGRESS_THRESHOLD or not _console.is_terminal:
         yield lambda n=1: None

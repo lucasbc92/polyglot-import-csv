@@ -297,6 +297,51 @@ def test_a_combined_config_refuses_a_second_file(qtbot, tmp_path):
     assert panel.error_label.text() == module.ONE_FILE_ERROR
 
 
+def test_dropping_a_folder_on_a_combined_config_is_reported_as_a_folder(qtbot, tmp_path):
+    """A dropped folder is not a non-CSV file: it needs its own message,
+    since a combined config accepts a single file, not a directory of them."""
+    panel = SourcesPanel()
+    qtbot.addWidget(panel)
+    _combined(panel)
+    folder = tmp_path / "csvs"
+    folder.mkdir()
+    added = panel.drop_paths([folder])
+    assert added == 0
+    assert panel.error_label.text() == (
+        "1 pasta ignorada (a configuração combinada aceita um único arquivo)"
+    )
+
+
+def test_dropping_two_folders_on_a_combined_config_pluralizes(qtbot, tmp_path):
+    panel = SourcesPanel()
+    qtbot.addWidget(panel)
+    _combined(panel)
+    first = tmp_path / "a"
+    second = tmp_path / "b"
+    first.mkdir()
+    second.mkdir()
+    added = panel.drop_paths([first, second])
+    assert added == 0
+    assert panel.error_label.text() == (
+        "2 pastas ignoradas (a configuração combinada aceita um único arquivo)"
+    )
+
+
+def test_dropping_a_folder_and_a_non_csv_file_on_a_combined_config_reports_both(
+    qtbot, tmp_path
+):
+    panel = SourcesPanel()
+    qtbot.addWidget(panel)
+    _combined(panel)
+    folder = tmp_path / "csvs"
+    folder.mkdir()
+    added = panel.drop_paths([folder, tmp_path / "notas.txt"])
+    assert added == 0
+    text = panel.error_label.text()
+    assert "1 arquivo ignorado (não é CSV)" in text
+    assert "1 pasta ignorada (a configuração combinada aceita um único arquivo)" in text
+
+
 def test_dropping_files_attaches_the_csv_ones(qtbot, tmp_path):
     panel = SourcesPanel()
     qtbot.addWidget(panel)

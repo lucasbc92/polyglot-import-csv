@@ -186,24 +186,36 @@ class SourcesPanel(QGroupBox):
         if self._kind is None:
             return 0
         files = []  # type: List[Path]
-        ignored = 0
+        ignored_files = 0
+        ignored_folders = 0
         for path in paths:
             if path.is_dir():
                 if self._kind == MULTI:
                     files.extend(self._csvs_in(path))
                 else:
-                    ignored += 1
+                    ignored_folders += 1
             elif path.suffix.lower() == ".csv":
                 files.append(path)
             else:
-                ignored += 1
+                ignored_files += 1
         added = self.attach(files)
-        if ignored and not self.error_label.text():
-            self.error_label.setText(
-                "{0} arquivo ignorado (não é CSV)".format(ignored)
-                if ignored == 1
-                else "{0} arquivos ignorados (não são CSV)".format(ignored)
-            )
+        if (ignored_files or ignored_folders) and not self.error_label.text():
+            messages = []
+            if ignored_files:
+                messages.append(
+                    "{0} arquivo ignorado (não é CSV)".format(ignored_files)
+                    if ignored_files == 1
+                    else "{0} arquivos ignorados (não são CSV)".format(ignored_files)
+                )
+            if ignored_folders:
+                messages.append(
+                    "{0} pasta ignorada (a configuração combinada aceita um único "
+                    "arquivo)".format(ignored_folders)
+                    if ignored_folders == 1
+                    else "{0} pastas ignoradas (a configuração combinada aceita um "
+                    "único arquivo)".format(ignored_folders)
+                )
+            self.error_label.setText("  ·  ".join(messages))
         return added
 
     @staticmethod
