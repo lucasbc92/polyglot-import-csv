@@ -15,6 +15,11 @@ processamento é disparado por um comando de linha de comando (CLI), que primeir
 \textbf{JSON Schema} embutido e, em seguida, contra os próprios CSVs --- e só então
 executa a importação. A \textbf{saída} são os dados persistidos em cada SGBD presente na
 configuração, dentre os suportados: PostgreSQL, MongoDB, Cassandra, Redis e Neo4j.
+A ferramenta é um projeto de código aberto, hospedado no GitHub sob o nome
+\texttt{polyglot-import-csv}\footnote{Disponível em
+\url{https://github.com/lucasbc92/polyglot-import-csv}.}; todos os caminhos de arquivo
+citados neste trabalho, como \texttt{data/\allowbreak ecommerce/} ou
+\texttt{docker-compose.yml}, são relativos à raiz desse repositório.
 
 \begin{figure}[H]
   \centering
@@ -28,8 +33,9 @@ configuração, dentre os suportados: PostgreSQL, MongoDB, Cassandra, Redis e Ne
 Diferentemente de uma importação amarrada a um único arquivo, os dados de entrada são
 declarados em um bloco \texttt{sources} dentro do arquivo de importação, o que habilita
 \textbf{dois modos de uso}: no modo \textbf{multifonte}, cada entidade lê de um CSV
-próprio (um arquivo por assunto); no modo \textbf{combinado}, um único CSV largo carrega
-todos os assuntos, distinguidos por uma coluna de origem. Ambos os modos e o formato
+próprio (um arquivo por conjunto de dados); no modo \textbf{combinado}, um único CSV largo
+carrega todos os conjuntos de dados, distinguidos por uma coluna de origem. Ambos os modos
+e o formato
 completo dos dois arquivos de configuração são detalhados na
 seção~\ref{sec:config-format}; as validações realizadas antes da importação, na
 seção~\ref{sec:validacao}; o algoritmo de importação em si, na
@@ -44,8 +50,10 @@ python -m polyglotimportcsv \
   [--dry-run] \
   [--create-schema / --no-create-schema] \
   [--only postgres,redis] \
+  [--execution stream|materialize] \
+  [--strategy optimized|naive] \
   [--log-level INFO] \
-  [--show-data / --no-data] \
+  [--sample N | --show-data | --no-data] \
   [--benchmark]
 \end{lstlisting}
 
@@ -69,11 +77,14 @@ mapeamento antes da carga real; \texttt{-{}-create-schema} e
 armazenamento necessárias (tabelas no PostgreSQL, \textit{keyspace} e tabelas no
 Cassandra) antes de gravar os dados, sendo a criação ativada por padrão; e
 \texttt{-{}-only} restringe a execução a um subconjunto dos SGBDs configurados (por
-exemplo, \texttt{-{}-only postgres,redis}). O segundo conjunto governa a
+exemplo, \texttt{-{}-only postgres,redis}). As opções \texttt{-{}-execution} e
+\texttt{-{}-strategy} escolhem, respectivamente, o modelo de execução e a estratégia de
+escrita, descritos na seção~\ref{sec:execucao-estrategias}. O segundo conjunto governa a
 \textbf{observabilidade} da execução --- \texttt{-{}-log-level} ajusta o nível de detalhe
-das mensagens no terminal, \texttt{-{}-show-data}/\texttt{-{}-no-data} força ou suprime a
-exibição dos dados materializados e \texttt{-{}-benchmark} registra métricas de
-desempenho por fase ---; essas três opções são descritas em detalhe na
+das mensagens no terminal; \texttt{-{}-sample}~\texttt{N} exibe as primeiras
+\texttt{N} linhas de cada entidade (50, por padrão), enquanto \texttt{-{}-show-data}
+exibe todas as linhas e \texttt{-{}-no-data}, nenhuma; e \texttt{-{}-benchmark} registra
+métricas de desempenho por fase ---; essas opções são descritas em detalhe na
 seção~\ref{sec:observabilidade}.
 
 
@@ -102,11 +113,14 @@ e determina o modo de importação. Cada entrada associa um \textbf{nome de font
 arquivo CSV, em uma de duas formas.
 
 Na primeira, \textbf{multifonte}, o valor é diretamente o caminho de um CSV, e cada fonte
-corresponde a um assunto do domínio, com o seu próprio arquivo. A
-Listagem~\ref{lst:sources-multi} mostra o bloco \texttt{sources} do cenário de e-commerce
-nesse modo: quatro fontes, uma por tipo de evento da loja.
+corresponde a um conjunto de dados do domínio, com o seu próprio arquivo. O exemplo
+adotado ao longo deste capítulo é o cenário de e-commerce apresentado na
+Seção~\ref{sec:persistencia-poliglota} (Figura~\ref{fig:polyglot-ecommerce}), em que cada
+categoria de dado da loja virtual é destinada ao SGBD mais adequado ao seu uso. A
+Listagem~\ref{lst:sources-multi} mostra o bloco \texttt{sources} desse cenário no modo
+multifonte: quatro fontes, uma por tipo de evento da loja.
 
-\begin{lstlisting}[style=jsonstyle,caption={Bloco \texttt{sources} no modo multifonte (um CSV por assunto).},label={lst:sources-multi}]
+\begin{lstlisting}[style=jsonstyle,caption={Bloco \texttt{sources} no modo multifonte (um CSV por conjunto de dados).},label={lst:sources-multi}]
 "sources": {
   "stock":          "ecommerce_stock.csv",
   "purchase":       "ecommerce_purchase.csv",
@@ -117,7 +131,7 @@ nesse modo: quatro fontes, uma por tipo de evento da loja.
 
 Na segunda, \textbf{combinada}, o valor é um objeto \texttt{\{ "file": ...,
 "origin\_column": true \}}, indicando que um \textbf{único} CSV largo reúne todos os
-assuntos, sendo a sua \textbf{primeira coluna} o rótulo de origem de cada linha. A
+conjuntos de dados, sendo a sua \textbf{primeira coluna} o rótulo de origem de cada linha. A
 Listagem~\ref{lst:sources-combined} mostra o mesmo cenário nesse modo: uma só fonte,
 apontando para o arquivo com a coluna de origem.
 
@@ -318,7 +332,7 @@ Cada item exige \texttt{column} e \texttt{operator} (\texttt{==}, \texttt{!=},
 \texttt{each}). O operador \texttt{each} particiona a entidade por valores distintos da
 coluna, gerando múltiplos alvos com sufixo opcional. Diferentemente da seleção da origem
 --- feita pelo bloco \texttt{sources} e pelo campo \texttt{source} ---, os filtros são um
-refinamento adicional; no cenário de e-commerce, em que cada assunto já vem de uma fonte
+refinamento adicional; no cenário de e-commerce, em que cada conjunto de dados já vem de uma fonte
 própria, eles não são necessários e não aparecem na configuração.
 
 \subsection{PostgreSQL}
@@ -748,7 +762,7 @@ Os dados do cenário registram os eventos de uma loja virtual, agrupados por tip
 cada tipo tem o seu próprio CSV (\texttt{ecommerce\_stock.csv},
 \texttt{ecommerce\_purchase.csv}, \texttt{ecommerce\_select\_product.csv} e
 \texttt{ecommerce\_add\_to\_cart.csv}), cada um com oito linhas e as colunas pertinentes
-ao seu assunto. Como alternativa equivalente, o modo combinado reúne os mesmos eventos em
+ao seu conjunto de dados. Como alternativa equivalente, o modo combinado reúne os mesmos eventos em
 um único arquivo largo, \texttt{ecommerce\_join.csv}, cuja primeira coluna
 (\texttt{action}) rotula a origem de cada linha; o Apêndice~\ref{ap:csv} reproduz esse
 arquivo em forma tabular, organizado por ação.
@@ -1031,7 +1045,7 @@ mapeamento antes da carga real.
 Para a importação real, basta subir os contêineres com \texttt{docker compose up -d} e
 repetir o mesmo comando sem a \textit{flag} \texttt{-{}-dry-run}: os mesmos volumes da
 Tabela~\ref{tab:dryrun} são então persistidos nos cinco SGBDs configurados,
-materializando o cenário poliglota da seção 2.1. Alternativamente, o script
+materializando o cenário poliglota da Seção~\ref{sec:persistencia-poliglota}. Alternativamente, o script
 \texttt{run\_example.sh}, na raiz do repositório, automatiza o fluxo completo: lê o
 \texttt{sgbd\_config.json}, sobe apenas os contêineres dos SGBDs ali declarados e, em
 seguida, executa o \textit{dry-run} e a importação real com \texttt{-{}-create-schema}.
@@ -1064,9 +1078,13 @@ terminal, a ferramenta grava um \textbf{arquivo de \textit{log} de sessão} semp
 nível \texttt{DEBUG}, em \texttt{logs/polyglotimportcsv\_\textless carimbo de
 tempo\textgreater.log}, preservando o rastro completo de cada execução para diagnóstico
 posterior; esse comportamento pode ser desativado ou redirecionado por variáveis de
-ambiente. Para inspeção dos dados, a ferramenta exibe uma amostra de cada entidade
-materializada até um limite de 50 linhas --- exibição que \texttt{-{}-show-data} força
-e \texttt{-{}-no-data} suprime.
+ambiente. Para inspeção dos dados, a ferramenta exibe as primeiras linhas de cada
+entidade --- 50, por padrão, número ajustável por \texttt{-{}-sample}~\texttt{N} ---,
+acompanhadas da contagem total; \texttt{-{}-show-data} exibe todas as linhas e
+\texttt{-{}-no-data} suprime a exibição. A amostra vale nos dois modelos de execução da
+seção~\ref{sec:modelos-execucao}: no modelo em fluxo, as linhas são retidas à medida que
+os lotes são gravados, até o tamanho da amostra, de modo que a exibição não compromete o
+consumo limitado de memória.
 
 \textbf{Métricas de desempenho.} Ao longo da execução, a ferramenta coleta métricas por
 \textbf{fase} de processamento de cada entidade, distinguindo quatro fases:
@@ -1124,7 +1142,12 @@ de uma só vez; e no \textbf{Neo4j}, a cláusula \texttt{UNWIND} aplicada a uma 
 registros, seguida de \texttt{MERGE}, sobre um rótulo com restrição de unicidade. Como as
 duas estratégias produzem resultados idênticos, diferindo apenas no custo, a estratégia
 ingênua tem valor sobretudo metodológico: é a \textit{linha de base} contra a qual o ganho
-da via otimizada é medido no Capítulo~\ref{cap:avaliacao}.
+da via otimizada é medido no Capítulo~\ref{cap:avaliacao}. Ela corresponde, de fato, à
+implementação original da ferramenta, desenvolvida na primeira etapa deste Trabalho de
+Conclusão de Curso (TCC1); no TCC2, foi mantida apenas como referência de comparação. Por
+isso, continua acessível pela CLI (\texttt{-{}-strategy naive}), mas não é oferecida na
+interface gráfica (Seção~\ref{sec:interface-grafica}), que emprega sempre a estratégia
+otimizada.
 
 \subsection{Modelos de Execução: Materialização e \textit{Streaming}}
 \label{sec:modelos-execucao}
