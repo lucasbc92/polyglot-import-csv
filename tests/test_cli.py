@@ -205,3 +205,28 @@ def test_cli_sample_cannot_be_combined_with_show_data_or_no_data(tmp_path, monke
         result = CliRunner().invoke(main, ["--config", str(cfg), "--sample", "5", flag])
         assert result.exit_code == 2, flag
         assert "--sample" in result.output
+
+
+def test_cli_survives_a_non_utf8_output_encoding():
+    """Redirected output on a Windows machine uses the ANSI code page (cp1252).
+
+    rich's banner is made of box-drawing characters that cp1252 cannot encode,
+    so ``polyglotimportcsv ... > saida.txt`` crashed with UnicodeEncodeError
+    before doing anything. Found by the release smoke test on a GitHub runner.
+    """
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    env = dict(os.environ, PYTHONIOENCODING="cp1252", POLYGLOT_NO_LOG="1")
+    env.pop("FORCE_COLOR", None)
+    result = subprocess.run(
+        [sys.executable, "-m", "polyglotimportcsv",
+         "--config", str(root / "data" / "ecommerce" / "import_config.json"),
+         "--dry-run", "--no-data"],
+        capture_output=True, env=env, cwd=root,
+    )
+    assert result.returncode == 0, result.stderr.decode("utf-8", "replace")[-800:]
+    assert "Finished dry-run" in result.stdout.decode("utf-8", "replace")

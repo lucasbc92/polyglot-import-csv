@@ -16,6 +16,21 @@ from polyglotimportcsv.runner import run_import
 logger = logging.getLogger(__name__)
 
 
+def _ensure_utf8_output() -> None:
+    """Write UTF-8 when stdout/stderr are a pipe or file in a legacy code page.
+
+    A redirected stream on Windows uses the ANSI code page (cp1252 on a
+    Brazilian machine), which cannot encode the box-drawing characters rich
+    draws its banner and tables with, so ``polyglotimportcsv ... > saida.txt``
+    died with UnicodeEncodeError before importing anything. A real console is
+    already UTF-8 (PEP 528) and is left alone.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        encoding = (getattr(stream, "encoding", None) or "").lower().replace("-", "")
+        if encoding != "utf8" and hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def _parse_source_overrides(pairs: Tuple[str, ...]) -> Dict[str, str]:
     overrides: Dict[str, str] = {}
     for pair in pairs:
@@ -124,6 +139,7 @@ def main(
     benchmark: bool,
 ) -> None:
     """Import CSV sources into multiple databases according to --config."""
+    _ensure_utf8_output()
     if sample_size is not None and show_data is not None:
         raise click.UsageError(
             "--sample only applies to the sample display; "
