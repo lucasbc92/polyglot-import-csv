@@ -6,12 +6,15 @@ import json
 import os
 import re
 import shlex
+import shutil
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
-from PySide6.QtCore import QSettings, QTimer, Qt
+from PySide6.QtCore import QSettings, QTimer, QUrl, Qt, Signal
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
+    QFileDialog,
     QLabel,
     QMainWindow,
     QMessageBox,
@@ -23,6 +26,7 @@ from PySide6.QtWidgets import (
 
 from polyglotimportcsv.gui import command as command_module
 from polyglotimportcsv.gui import launcher
+from polyglotimportcsv.gui import preflight
 from polyglotimportcsv.gui.process import ImportProcess
 from polyglotimportcsv.gui.state import DBMS_NAMES, RunOptions, validate
 from polyglotimportcsv.gui.widgets.config_panel import ConfigPanel
@@ -47,6 +51,17 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 _LOG_SEARCH_LIMIT = 4096
 IDLE_STATUS = "Pronto — nenhuma importação em execução"
 INVALID_EDIT_STATUS = "Comando inválido: aspas não fechadas"
+
+
+class _PathLabel(QLabel):
+    """The status-bar log path: plain text, and a click opens its folder."""
+
+    clicked = Signal()
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 (Qt override)
+        if event.button() == Qt.LeftButton and self.text():
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
 
 class MainWindow(QMainWindow):
@@ -92,13 +107,19 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(container)
 
         self.status_label = QLabel(IDLE_STATUS, self)
-        self.log_path_label = QLabel("", self)
+        self.log_path_label = _PathLabel("", self)
+        self.log_path_label.setCursor(Qt.PointingHandCursor)
+        self.log_path_label.setToolTip("Abrir a pasta do log")
+        self.log_path_label.clicked.connect(self._open_log_folder)
         status = QStatusBar(self)
         status.addWidget(self.status_label, 1)
         status.addPermanentWidget(self.log_path_label)
         self.setStatusBar(status)
 
-        self.process = ImportProcess(Path(os.getcwd()), self)
+        # Guarded here because it is where the CLI resolves "logs/" too: the
+        # child process is spawned with this directory as its own cwd.
+        self._working_dir = Path(os.getcwd())
+        self.process = ImportProcess(self._working_dir, self)
         self.process.output.connect(self._on_output)
         self.process.finished.connect(self._on_finished)
         self.process.failed.connect(self._on_failed)
@@ -109,6 +130,7 @@ class MainWindow(QMainWindow):
         self._started_at = 0.0
         self._log_search_buffer = ""
         self._log_path_found = False
+        self._log_path = None  # type: Optional[Path]
 
         self.config_panel.changed.connect(self._on_config_changed)
         self.options_panel.changed.connect(self.refresh_command)
@@ -116,11 +138,17 @@ class MainWindow(QMainWindow):
         self.console_panel.run_requested.connect(self.on_run)
         self.console_panel.stop_requested.connect(self.on_stop)
         self.console_panel.edit_mode_changed.connect(self._on_edit_mode_changed)
+        self.console_panel.save_log_requested.connect(self._save_log)
 
         # I3 / §6.1: the resolved launcher prefix is the one divergence between
         # the command shown and the process spawned, and the spec mitigates it
         # with a tooltip as well as the "Executando:" log line.
         self.console_panel.set_launcher_prefix(" ".join(launcher.resolve()))
+
+        # Injection points, so tests never open a real dialog or file manager.
+        self.choose_log_destination = self._ask_log_destination  # type: Callable[[Path], str]
+        self.show_error = self._show_error  # type: Callable[[str], None]
+        self.open_folder = self._open_folder_in_file_manager  # type: Callable[[Path], None]
 
         self._settings = settings if settings is not None else QSettings("UFSC", "PolyglotImportCSV")
         self._restore_settings()
@@ -133,20 +161,24 @@ class MainWindow(QMainWindow):
             config_path=self.config_panel.config_path(),
             sgbd_config_path=self.config_panel.sgbd_config_path(),
             only=self.options_panel.only(),
-            strategy=self.options_panel.strategy(),
             execution=self.options_panel.execution(),
             dry_run=self.options_panel.dry_run(),
             create_schema=self.options_panel.create_schema(),
-            benchmark=self.options_panel.benchmark(),
             log_level=self.options_panel.log_level(),
             show_data=self.options_panel.show_data(),
+            sample_size=self.options_panel.sample_size(),
             sources=self.sources_panel.sources(),
         )
 
     def refresh_command(self) -> None:
         """Rebuild the command text and the validation state from scratch."""
         options = self.options()
-        errors = validate(options)
+        checked = preflight.check(options)
+        # Local errors win: they describe the form itself (a missing path, a
+        # repeated name), and the preflight skips whatever they already cover.
+        errors = dict(checked.errors)
+        errors.update(validate(options))
+        self.sources_panel.set_source_kind(checked.kind, checked.declared)
         self.config_panel.set_errors(errors)
         self.options_panel.set_errors(errors)
         self.sources_panel.set_errors(errors)
@@ -187,6 +219,8 @@ class MainWindow(QMainWindow):
         self.log_path_label.setText("")
         self._log_search_buffer = ""
         self._log_path_found = False
+        self._log_path = None
+        self.console_panel.set_log_available(False)
         self._started_at = time.monotonic()
         self._elapsed_timer.start()
         self.status_label.setText("Executando — 00:00 decorridos")
@@ -223,7 +257,10 @@ class MainWindow(QMainWindow):
         # once something follows it — normally the line's own newline —
         # otherwise keep buffering.
         if match and match.end() < len(stripped):
-            self.log_path_label.setText(match.group(1))
+            text = match.group(1)
+            self.log_path_label.setText(text)
+            path = Path(text)
+            self._log_path = path if path.is_absolute() else self._working_dir / path
             self._log_path_found = True
             self._log_search_buffer = ""
         else:
@@ -237,6 +274,7 @@ class MainWindow(QMainWindow):
         # argv_for_run() still executes whatever text is typed.
         self._set_form_enabled(not self.console_panel.is_editing())
         self.console_panel.set_running(False)
+        self.console_panel.set_log_available(self._log_path is not None)
         # Ruling 1: a lone trailing partial escape sequence must not be
         # stranded inside the renderer forever, so flush before reporting
         # the final status.
@@ -252,6 +290,7 @@ class MainWindow(QMainWindow):
         # I2: same invariant as _on_finished.
         self._set_form_enabled(not self.console_panel.is_editing())
         self.console_panel.set_running(False)
+        self.console_panel.set_log_available(self._log_path is not None)
         # Ruling 1: same as _on_finished — flush before the final append and
         # status, so nothing withheld by the renderer is lost.
         self.console_panel.flush_output()
@@ -265,7 +304,6 @@ class MainWindow(QMainWindow):
 
     def _on_config_changed(self) -> None:
         self.options_panel.set_available_dbms(self._declared_dbms())
-        self.sources_panel.set_known_sources(self._declared_sources())
         self.refresh_command()
 
     def _tick(self) -> None:
@@ -280,37 +318,6 @@ class MainWindow(QMainWindow):
         for panel in (self.config_panel, self.options_panel, self.sources_panel):
             panel.setEnabled(enabled)
 
-    def _declared_sources(self) -> Optional[Dict[str, str]]:
-        """``{source name: declared file name}`` from the chosen import config.
-
-        Lets the sources panel name a chosen file the way the configuration
-        does. ``--source`` overrides a source *declared in the config*, so a
-        name invented from the file's own stem would be rejected by the CLI.
-        Unreadable or unexpected JSON simply means "unknown": the panel falls
-        back to the stem and the person can correct the cell.
-        """
-        path = self.config_panel.config_path()
-        if path is None or not path.is_file():
-            return None
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (ValueError, OSError):
-            return None
-        if not isinstance(data, dict):
-            return None
-        declared = data.get("sources")
-        if not isinstance(declared, dict):
-            return None
-        names = {}  # type: Dict[str, str]
-        for name, value in declared.items():
-            if isinstance(value, str):
-                names[name] = value
-            elif isinstance(value, dict) and isinstance(value.get("file"), str):
-                # A combined source: one CSV whose column 0 names each row's
-                # origin. It still has exactly one file behind it.
-                names[name] = value["file"]
-        return names or None
-
     def _declared_dbms(self) -> Optional[List[str]]:
         """Names declared in the chosen sgbd_config.json, or None if unreadable."""
         path = self.config_panel.sgbd_config_path()
@@ -324,6 +331,44 @@ class MainWindow(QMainWindow):
             return None
         declared = [name for name in DBMS_NAMES if name in data]
         return declared or None
+
+    def log_path(self) -> Optional[Path]:
+        """The session log of the last run, once the CLI has announced it."""
+        return self._log_path
+
+    def _save_log(self) -> None:
+        source = self._log_path
+        if source is None:
+            return
+        target = self.choose_log_destination(source)
+        if not target:
+            return
+        try:
+            shutil.copyfile(str(source), target)
+        except OSError as exc:
+            self.show_error("Não foi possível salvar o log: {0}".format(exc))
+            return
+        self.status_label.setText("Log salvo em {0}".format(target))
+
+    def _ask_log_destination(self, suggested: Path) -> str:
+        chosen, _ = QFileDialog.getSaveFileName(
+            self, "Salvar log", suggested.name, "Log (*.log);;Todos (*)"
+        )
+        return chosen
+
+    def _show_error(self, message: str) -> None:
+        QMessageBox.warning(self, "Salvar log", message)
+
+    def _open_log_folder(self) -> None:
+        text = self.log_path_label.text()
+        if text:
+            path = Path(text)
+            path = path if path.is_absolute() else self._working_dir / path
+            self.open_folder(path.parent)
+
+    @staticmethod
+    def _open_folder_in_file_manager(folder: Path) -> None:
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
 
     def _restore_settings(self) -> None:
         geometry = self._settings.value("geometry")

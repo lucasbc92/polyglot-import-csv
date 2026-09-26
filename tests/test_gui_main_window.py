@@ -1,5 +1,6 @@
 """Wiring: form -> command -> process -> console."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -11,15 +12,32 @@ from polyglotimportcsv.gui import launcher  # noqa: E402
 from polyglotimportcsv.gui.widgets.main_window import MainWindow  # noqa: E402
 
 
-from PySide6.QtCore import QSettings  # noqa: E402
+from PySide6.QtCore import QSettings, Qt  # noqa: E402
 
 
 @pytest.fixture()
 def config_files(tmp_path):
+    """A minimal configuration the CLI's own dry-run accepts (checked 26/09)."""
+    (tmp_path / "items.csv").write_text("id,name\n1,a\n", encoding="utf-8")
     cfg = tmp_path / "import_config.json"
-    cfg.write_text("{}", encoding="utf-8")
+    cfg.write_text(
+        json.dumps({
+            "sources": {"items": "items.csv"},
+            "postgres": {"entities": {"items": {"columns": {"id": {"is_key": True}, "name": {}}}}},
+            "redis": {"entities": {"items": {"columns": {"id": {"is_key": True}, "name": {}}}}},
+        }),
+        encoding="utf-8",
+    )
     sgbd = tmp_path / "sgbd_config.json"
-    sgbd.write_text('{"postgres": {}, "redis": {}}', encoding="utf-8")
+    sgbd.write_text(
+        json.dumps({
+            "version": 1,
+            "postgres": {"connection": {"host": "localhost", "port": 5432, "database": "d",
+                                        "user": "u", "password": "p"}},
+            "redis": {"connection": {"host": "localhost", "port": 6379, "db": 0}},
+        }),
+        encoding="utf-8",
+    )
     return cfg, sgbd
 
 
@@ -41,7 +59,7 @@ def test_window_opens_showing_the_defaults_it_would_run_with(window):
     """
     assert window.console_panel.command_text() == (
         "polyglotimportcsv --strategy optimized --execution stream "
-        "--create-schema --log-level INFO"
+        "--create-schema --log-level INFO --sample 50"
     )
 
 
@@ -105,8 +123,8 @@ def test_edit_mode_keeps_every_token_when_the_program_name_is_absent(window, con
     cfg, _ = config_files
     window.config_panel.set_paths(cfg, None)
     window.console_panel.set_editing(True)
-    window.console_panel.command_edit.setPlainText("--dry-run --benchmark")
-    assert window.argv_for_run() == launcher.resolve() + ["--dry-run", "--benchmark"]
+    window.console_panel.command_edit.setPlainText("--dry-run --no-data")
+    assert window.argv_for_run() == launcher.resolve() + ["--dry-run", "--no-data"]
 
 
 def test_edit_mode_drops_a_program_name_written_as_a_full_path(window, config_files):
@@ -303,3 +321,127 @@ def test_a_full_run_re_enables_the_form_and_clears_the_running_badge(
     qtbot.waitUntil(lambda: "código de saída 3" in window.status_label.text(), timeout=5000)
     assert window.config_panel.isEnabled()
     assert "Executar" in window.console_panel.run_button.text()
+
+
+# -- Task 9: preflight, source kind, save log, clickable path --------------
+
+
+def test_a_preflight_error_blocks_the_run_and_reaches_the_config_card(window, config_files):
+    cfg, _ = config_files
+    cfg.write_text('{"postgres": {}}', encoding="utf-8")  # no "sources": schema error
+    window.config_panel.set_paths(cfg, None)
+    assert "sources" in window.config_panel.error_label.text()
+    assert not window.console_panel.run_button.isEnabled()
+
+
+def test_choosing_a_config_tells_the_sources_card_its_kind(window, config_files):
+    cfg, _ = config_files
+    assert not window.sources_panel.add_button.isEnabled()
+    window.config_panel.set_paths(cfg, None)
+    assert window.sources_panel.add_button.isEnabled()
+    assert "multifonte" in window.sources_panel.kind_label.text()
+
+
+def test_switching_to_a_combined_config_keeps_rows_and_blocks_the_run(
+    window, config_files, tmp_path
+):
+    cfg, _ = config_files
+    window.config_panel.set_paths(cfg, None)
+    other = tmp_path / "items_b.csv"
+    other.write_text("id,name\n2,b\n", encoding="utf-8")
+    # Two distinct names, so the local "repeated name" rule stays out of the way.
+    window.sources_panel.add_row("items", str(tmp_path / "items.csv"))
+    window.sources_panel.add_row("outra", str(other))
+    combined = tmp_path / "combinada.json"
+    combined.write_text(
+        json.dumps({
+            "sources": {"tudo": {"file": "items.csv", "origin_column": True}},
+            "postgres": {"entities": {"items": {"columns": {"name": {"is_key": True}}}}},
+        }),
+        encoding="utf-8",
+    )
+    window.config_panel.set_paths(combined, None)
+    assert window.sources_panel.table.rowCount() == 2, "nothing is thrown away"
+    assert not window.sources_panel.add_button.isEnabled()
+    assert window.sources_panel.error_label.text() == (
+        "A configuração combinada aceita um único arquivo CSV."
+    )
+    assert not window.console_panel.run_button.isEnabled()
+
+
+def test_the_sample_size_reaches_the_command(window, config_files):
+    cfg, _ = config_files
+    window.config_panel.set_paths(cfg, None)
+    window.options_panel.sample_spin.setValue(7)
+    assert "--sample 7" in window.console_panel.command_text()
+
+
+def test_save_log_offers_the_log_after_a_run(window, tmp_path):
+    log = tmp_path / "logs" / "polyglotimportcsv_20260926_101010.log"
+    log.parent.mkdir()
+    log.write_text("conteudo do log", encoding="utf-8")
+    window._on_output("    Log file: {0}\n".format(log))
+    window._on_finished(0)
+    assert window.console_panel.save_log_button.isEnabled()
+
+    target = tmp_path / "copia.log"
+    suggested = []
+
+    def choose(path):
+        suggested.append(path)
+        return str(target)
+
+    window.choose_log_destination = choose
+    window.console_panel.save_log_button.click()
+    assert suggested and suggested[0].name == log.name
+    assert target.read_text(encoding="utf-8") == "conteudo do log"
+    assert str(target) in window.status_label.text()
+
+
+def test_cancelling_save_log_writes_nothing(window, tmp_path):
+    log = tmp_path / "sessao.log"
+    log.write_text("x", encoding="utf-8")
+    window._on_output("    Log file: {0}\n".format(log))
+    window._on_finished(0)
+    window.choose_log_destination = lambda path: ""
+    window.console_panel.save_log_button.click()
+    assert list(tmp_path.iterdir()) == [log]
+
+
+def test_a_failed_copy_is_reported(window, tmp_path):
+    log = tmp_path / "sessao.log"
+    log.write_text("x", encoding="utf-8")
+    window._on_output("    Log file: {0}\n".format(log))
+    window._on_finished(0)
+    errors = []
+    window.show_error = errors.append
+    window.choose_log_destination = lambda path: str(tmp_path / "nao" / "existe" / "x.log")
+    window.console_panel.save_log_button.click()
+    assert errors and "log" in errors[0].lower()
+
+
+def test_no_log_means_nothing_to_save(window):
+    window._on_finished(0)
+    assert not window.console_panel.save_log_button.isEnabled()
+
+
+def test_a_new_run_withdraws_the_previous_log(window, config_files, tmp_path, monkeypatch):
+    cfg, _ = config_files
+    log = tmp_path / "sessao.log"
+    log.write_text("x", encoding="utf-8")
+    window.config_panel.set_paths(cfg, None)
+    window._on_output("    Log file: {0}\n".format(log))
+    window._on_finished(0)
+    monkeypatch.setattr(window.process, "start", lambda *a, **k: None)
+    window.on_run()
+    assert not window.console_panel.save_log_button.isEnabled()
+    assert window.log_path() is None
+
+
+def test_clicking_the_log_path_opens_its_folder(window, qtbot, tmp_path):
+    log = tmp_path / "logs" / "sessao.log"
+    window._on_output("    Log file: {0}\n".format(log))
+    opened = []
+    window.open_folder = opened.append
+    qtbot.mouseClick(window.log_path_label, Qt.LeftButton)
+    assert opened == [log.parent]
