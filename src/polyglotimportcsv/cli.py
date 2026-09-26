@@ -10,7 +10,7 @@ from typing import Dict, Optional, Tuple
 import click
 
 from polyglotimportcsv.business_exception import BusinessException
-from polyglotimportcsv.reporting import error, kv, setup_reporting
+from polyglotimportcsv.reporting import DEFAULT_SAMPLE_SIZE, error, kv, setup_reporting
 from polyglotimportcsv.runner import run_import
 
 logger = logging.getLogger(__name__)
@@ -93,7 +93,16 @@ def _parse_source_overrides(pairs: Tuple[str, ...]) -> Dict[str, str]:
     "--show-data/--no-data",
     "show_data",
     default=None,
-    help="Force or suppress per-entity data dumps (default: dump entities up to 50 rows).",
+    help="Show every row (--show-data) or none (--no-data) of each entity. "
+    "Default: a sample of the first rows (see --sample).",
+)
+@click.option(
+    "--sample",
+    "sample_size",
+    default=None,
+    type=click.IntRange(min=1),
+    metavar="N",
+    help=f"Rows shown per entity by the default sample display (default: {DEFAULT_SAMPLE_SIZE}).",
 )
 @click.option(
     "--benchmark",
@@ -111,9 +120,15 @@ def main(
     source_pairs: Tuple[str, ...],
     log_level: str,
     show_data: Optional[bool],
+    sample_size: Optional[int],
     benchmark: bool,
 ) -> None:
     """Import CSV sources into multiple databases according to --config."""
+    if sample_size is not None and show_data is not None:
+        raise click.UsageError(
+            "--sample only applies to the sample display; "
+            "do not combine it with --show-data or --no-data."
+        )
     log_path = setup_reporting(getattr(logging, log_level.upper()))
     if log_path is not None:
         kv("Log file", log_path)
@@ -128,6 +143,7 @@ def main(
             only=only_list,
             source_overrides=overrides or None,
             show_data=show_data,
+            sample_size=sample_size if sample_size is not None else DEFAULT_SAMPLE_SIZE,
             benchmark=benchmark,
             strategy=strategy,
             execution=execution,

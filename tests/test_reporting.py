@@ -95,18 +95,46 @@ def test_warn_and_error_route_through_logging(capsys):
     assert "watch out" in out and "it broke" in out
 
 
-def test_dump_entity_frame_threshold_boundary(capsys):
-    reporting.setup_reporting(logging.INFO, no_log=True)
-    at_limit = pd.DataFrame({"id": range(reporting.DATA_DUMP_THRESHOLD)})
-    reporting.dump_entity_frame("postgres", "items", at_limit)
-    out = capsys.readouterr().out
-    assert '"id"' in out
+def test_default_sample_size_is_fifty():
+    assert reporting.DEFAULT_SAMPLE_SIZE == 50
 
-    above = pd.DataFrame({"id": range(reporting.DATA_DUMP_THRESHOLD + 1)})
+
+def test_dump_entity_frame_shows_a_sample_of_a_large_entity(capsys):
+    reporting.setup_reporting(logging.INFO, no_log=True)
+    big = pd.DataFrame({"id": range(120)})
+    reporting.dump_entity_frame("postgres", "items", big, sample_size=5)
+    out = capsys.readouterr().out
+    assert "[5]" in out
+    assert "[6]" not in out
+    assert "5 of 120 row(s)" in out
+
+
+def test_dump_entity_frame_default_sample_is_fifty_rows(capsys):
+    reporting.setup_reporting(logging.INFO, no_log=True)
+    above = pd.DataFrame({"id": range(51)})
     reporting.dump_entity_frame("postgres", "items", above)
     out = capsys.readouterr().out
-    assert '"id"' not in out
-    assert "51 row(s)" in out
+    assert "[50]" in out
+    assert "[51]" not in out
+    assert "50 of 51 row(s)" in out
+
+
+def test_dump_entity_frame_small_entity_is_shown_whole(capsys):
+    reporting.setup_reporting(logging.INFO, no_log=True)
+    small = pd.DataFrame({"id": range(3)})
+    reporting.dump_entity_frame("postgres", "items", small, sample_size=5)
+    out = capsys.readouterr().out
+    assert "[3]" in out
+    assert "3 row(s)" in out
+    assert " of " not in out
+
+
+def test_dump_rows_page_continues_the_numbering(capsys):
+    reporting.setup_reporting(logging.INFO, no_log=True)
+    reporting.dump_rows_page([{"id": 7}, {"id": 8}], start=11)
+    out = capsys.readouterr().out
+    assert "[11]" in out and "[12]" in out
+    assert "[1]" not in out
 
 
 def test_dump_entity_frame_force_flags(capsys):
@@ -121,7 +149,7 @@ def test_dump_entity_frame_force_flags(capsys):
 
 
 def test_entity_progress_noop_at_or_below_threshold(capsys):
-    with reporting.entity_progress("x", reporting.DATA_DUMP_THRESHOLD) as advance:
+    with reporting.entity_progress("x", reporting.PROGRESS_THRESHOLD) as advance:
         assert callable(advance)
         advance(10)
     assert capsys.readouterr().out == ""  # no bar rendered at/below threshold

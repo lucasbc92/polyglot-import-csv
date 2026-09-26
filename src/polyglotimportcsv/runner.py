@@ -18,6 +18,7 @@ from polyglotimportcsv.importers.base import ImporterRegistry
 from polyglotimportcsv.mapping_resolver import resolve_backend_entities
 from polyglotimportcsv.stream_runner import run_stream_import
 from polyglotimportcsv.reporting import (
+    DEFAULT_SAMPLE_SIZE,
     backend_text,
     banner,
     dump_entity_frame,
@@ -52,6 +53,7 @@ def run_import(
     importers: Optional[ImporterRegistry] = None,
     source_overrides: Optional[Dict[str, str]] = None,
     show_data: Optional[bool] = None,
+    sample_size: int = DEFAULT_SAMPLE_SIZE,
     collector: Optional[metrics.MetricsCollector] = None,
     benchmark: bool = False,
     strategy: str = "optimized",
@@ -71,6 +73,10 @@ def run_import(
     a ``--benchmark`` phase capture always uses the materialize path: dry-run
     plans without connecting, and the per-phase benchmark metrics only the
     materialize importers record.
+
+    ``show_data`` and ``sample_size`` choose the per-entity data display:
+    ``True`` shows every row, ``False`` none, and ``None`` (the default) the
+    first ``sample_size`` rows of each entity plus its total.
     """
     if execution not in ("stream", "materialize"):
         raise ValueError(
@@ -108,6 +114,7 @@ def run_import(
             importers=importers,
             source_overrides=source_overrides,
             show_data=False if benchmark else show_data,
+            sample_size=sample_size,
             collector=collector,
             benchmark=benchmark,
             strategy=strategy,
@@ -177,6 +184,7 @@ def _run(
     importers: Optional[ImporterRegistry],
     source_overrides: Optional[Dict[str, str]],
     show_data: Optional[bool],
+    sample_size: int,
     collector: metrics.MetricsCollector,
     benchmark: bool,
     strategy: str,
@@ -239,7 +247,7 @@ def _run(
         for ename, be in bound.items():
             if len(be.df) == 0:
                 logger.warning("entity %s/%s bound to 0 row(s)", backend, ename)
-            dump_entity_frame(backend, ename, be.df, force=show_data)
+            dump_entity_frame(backend, ename, be.df, force=show_data, sample_size=sample_size)
         backend_lines = fn(bcfg, bound, dry_run=dry_run,
                            create_schema=create_schema, strategy=strategy)
         log_lines.extend(backend_lines)

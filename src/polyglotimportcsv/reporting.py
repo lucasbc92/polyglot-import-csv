@@ -36,8 +36,12 @@ from polyglotimportcsv.metrics import EXCLUDED_PHASES
 
 logger = logging.getLogger(__name__)
 
-#: Entities with at most this many rows have their records dumped (spec §4.3).
-DATA_DUMP_THRESHOLD = 50
+#: Rows shown per entity by the default data display (CLI --sample).
+DEFAULT_SAMPLE_SIZE = 50
+#: Entities above this many rows get a live progress bar (spec §4.4). Kept
+#: apart from the sample size so choosing a bigger sample does not change when
+#: the bars appear.
+PROGRESS_THRESHOLD = 50
 
 _FILE_FORMAT = "%(asctime)s %(levelname)-8s %(name)s: %(message)s"
 
@@ -206,33 +210,61 @@ def format_json_row(obj: Any) -> Text:
     return JSON.from_data(obj, indent=None, default=str).text
 
 
-def dump_rows(label: str, rows: Sequence[Dict[str, Any]]) -> None:
+def dump_rows(
+    label: str, rows: Sequence[Dict[str, Any]], *, total: Optional[int] = None
+) -> None:
+    """Print ``rows`` under ``label``; with ``total``, say they are a sample of it."""
     header = Text(f"  {label}: ")
     header.append(str(len(rows)), style="bold yellow")
-    header.append(" row(s)")
+    if total is not None and total > len(rows):
+        header.append(f" of {total} row(s) (sample; --sample N or --show-data shows more)")
+    else:
+        header.append(" row(s)")
     print_rich(header)
     if not rows:
         line = Text("    ")
         line.append_text(empty_label())
         print_rich(line)
         return
-    for i, row in enumerate(rows, start=1):
+    dump_rows_page(rows, start=1)
+
+
+def dump_rows_page(rows: Sequence[Dict[str, Any]], start: int) -> None:
+    """Print ``rows`` numbered from ``start``, with no header.
+
+    The stream path prints an entity batch by batch, so its numbering has to
+    carry on from where the previous batch stopped.
+    """
+    for i, row in enumerate(rows, start=start):
         line = Text(f"    [{i}] ", style="dim")
         line.append_text(format_json_row(row))
         print_rich(line)
 
 
 def dump_entity_frame(
-    backend: str, entity: str, df: Any, *, force: Optional[bool] = None
+    backend: str,
+    entity: str,
+    df: Any,
+    *,
+    force: Optional[bool] = None,
+    sample_size: int = DEFAULT_SAMPLE_SIZE,
 ) -> None:
-    """Dump entity records up to DATA_DUMP_THRESHOLD rows; counts only above (spec §4.3)."""
+    """Dump an entity's records.
+
+    ``force=True`` shows every row (--show-data), ``force=False`` none
+    (--no-data), and the default shows the first ``sample_size`` rows plus
+    the total (--sample N).
+    """
     n = len(df)
-    show = force if force is not None else n <= DATA_DUMP_THRESHOLD
-    if not show:
+    if force is False:
         note(f"{backend} · {entity}: {n} row(s) (data dump suppressed; --show-data forces it)")
         logger.debug("%s · %s: data dump suppressed for %d row(s)", backend, entity, n)
         return
-    dump_rows(f"{backend} · {entity}", df.to_dict(orient="records"))
+    label = f"{backend} · {entity}"
+    if force is True or n <= sample_size:
+        dump_rows(label, df.to_dict(orient="records"))
+        return
+    dump_rows(label, df.head(sample_size).to_dict(orient="records"), total=n)
 
 
 def metrics_table(records: Sequence[Dict[str, Any]]) -> Table:
@@ -297,7 +329,7 @@ def entity_progress(description: str, total: int) -> Iterator[Callable[[int], No
     No-op (yields a do-nothing advance) when the entity is small enough to
     be dumped instead, or when stdout is not a terminal.
     """
-    if total <= DATA_DUMP_THRESHOLD or not _console.is_terminal:
+    if total <= PROGRESS_THRESHOLD or not _console.is_terminal:
         yield lambda n=1: None
         return
     progress = Progress(

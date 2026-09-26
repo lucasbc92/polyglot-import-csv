@@ -45,7 +45,7 @@ def test_run_import_benchmark_writes_files_and_suppresses_dump(tmp_path, monkeyp
     forces = []
     monkeypatch.setattr(
         "polyglotimportcsv.runner.dump_entity_frame",
-        lambda b, e, df, *, force=None: forces.append(force),
+        lambda b, e, df, *, force=None, sample_size=None: forces.append(force),
     )
 
     def stub(cfg, entities, *, dry_run, create_schema, strategy="optimized"):

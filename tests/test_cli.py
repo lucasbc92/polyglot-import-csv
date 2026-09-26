@@ -158,3 +158,50 @@ def test_cli_passes_strategy(monkeypatch):
     ])
     assert res.exit_code == 0, res.output
     assert captured["strategy"] == "naive"
+
+
+def _capture_run_import(monkeypatch):
+    captured = {}
+
+    def fake_run_import(config_path, **kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr("polyglotimportcsv.cli.run_import", fake_run_import)
+    return captured
+
+
+def test_cli_sample_defaults_to_fifty(tmp_path, monkeypatch):
+    captured = _capture_run_import(monkeypatch)
+    cfg = tmp_path / "cfg.json"
+    cfg.write_text("{}", encoding="utf-8")
+    result = CliRunner().invoke(main, ["--config", str(cfg)])
+    assert result.exit_code == 0, result.output
+    assert captured["sample_size"] == 50
+    assert captured["show_data"] is None
+
+
+def test_cli_sample_size_is_passed_through(tmp_path, monkeypatch):
+    captured = _capture_run_import(monkeypatch)
+    cfg = tmp_path / "cfg.json"
+    cfg.write_text("{}", encoding="utf-8")
+    result = CliRunner().invoke(main, ["--config", str(cfg), "--sample", "7"])
+    assert result.exit_code == 0, result.output
+    assert captured["sample_size"] == 7
+
+
+def test_cli_sample_rejects_zero(tmp_path):
+    cfg = tmp_path / "cfg.json"
+    cfg.write_text("{}", encoding="utf-8")
+    result = CliRunner().invoke(main, ["--config", str(cfg), "--sample", "0"])
+    assert result.exit_code == 2
+
+
+def test_cli_sample_cannot_be_combined_with_show_data_or_no_data(tmp_path, monkeypatch):
+    _capture_run_import(monkeypatch)
+    cfg = tmp_path / "cfg.json"
+    cfg.write_text("{}", encoding="utf-8")
+    for flag in ("--show-data", "--no-data"):
+        result = CliRunner().invoke(main, ["--config", str(cfg), "--sample", "5", flag])
+        assert result.exit_code == 2, flag
+        assert "--sample" in result.output
