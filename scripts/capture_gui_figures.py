@@ -7,14 +7,15 @@ never kept. This script makes the set reproducible: every figure is a genuine
 capture of ``MainWindow``, driven through the same signals a person's clicks
 would raise. Nothing is mocked.
 
-All four runs use ``--dry-run``, so no database has to be up.
+Figures 12-14 are one ``--dry-run``, so no database has to be up; figure 15
+never runs at all, because the pre-run validation blocks it.
 
 Usage, from the repository root::
 
     .venv/Scripts/python.exe scripts/capture_gui_figures.py
 
 Run it with the project's own interpreter: the "Executando:" line in figures 13
-and 15 shows whichever Python spawned the importer, and the report's figures
+and 14 shows whichever Python spawned the importer, and the report's figures
 show the project venv.
 """
 
@@ -88,7 +89,6 @@ def new_window(app: QApplication, settings_path: Path, config: Path) -> MainWind
     window.config_panel.set_paths(config, SGBD)
     window._on_config_changed()
     window.options_panel.dry_run_box.setChecked(True)
-    window.options_panel.show_data_buttons["none"].setChecked(True)
     window.resize(*SIZE)
     window.splitter.setSizes(SPLIT)
     window.show()
@@ -137,11 +137,15 @@ def main() -> int:
         window.process.stop()
         window.hide()
 
-        # Figure 15: the same command against a configuration whose "stock"
-        # source is a number, which satisfies neither branch of the schema.
+        # Figure 15: a configuration whose "stock" source is a number, which
+        # satisfies neither branch of the schema. The pre-run validation
+        # rejects it before anything runs: the CLI's own message sits in the
+        # configuration card and the Run button stays disabled, so there is
+        # deliberately no on_run() here.
         failing = new_window(app, settings_path, INVALID)
-        failing.on_run()
-        pump_until_idle(app, failing)
+        pump(app, 0.3)
+        assert not failing.console_panel.run_button.isEnabled(), "run must be blocked"
+        assert failing.config_panel.error_label.text(), "the schema error must be shown"
         grab(failing, "figure15-gui-erro.png")
         failing.hide()
     return 0
