@@ -58,7 +58,7 @@ def _make_console(environ: Optional[Mapping[str, str]] = None) -> Console:
     """
     environ = os.environ if environ is None else environ
     if environ.get("FORCE_COLOR"):
-        return Console(soft_wrap=True, legacy_windows=False, no_color=False)
+        return Console(soft_wrap=True, legacy_windows=False)
     return Console(soft_wrap=True)
 
 
