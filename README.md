@@ -21,6 +21,14 @@ The `sources` block supports two input modes, chosen per config:
 
 Any source's path can be overridden at run time with `--source NAME=PATH` (repeatable), without editing the config.
 
+### Download
+
+Ready-to-run executables for Windows and Linux — the CLI and the GUI, no Python
+needed — are attached to each release on the
+[releases page](https://github.com/lucasbc92/polyglot-import-csv/releases). Every
+package ships the e-commerce example, `docker-compose.yml` and a `LEIAME.txt`
+with the first steps.
+
 ### Requirements
 
 - Python 3.9+ (official Cassandra driver C extensions are easiest on Python ≤3.11; `--dry-run` never opens sockets).
@@ -30,6 +38,24 @@ Any source's path can be overridden at run time with `--source NAME=PATH` (repea
 ```bash
 pip install -e ".[dev]"
 ```
+
+### Graphical interface
+
+```bash
+pip install -e ".[gui]"
+polyglotimportcsv-gui
+```
+
+The window builds the command for you, shows it before running, and streams the
+CLI's output into an integrated console. The command shown is the command that
+runs — you can switch the panel to edit mode and type it yourself.
+
+The integrated console shows the CLI's colours: with `FORCE_COLOR` set, the CLI
+writes ANSI escapes even into a pipe. The GUI does not offer `--strategy` (it
+always runs `optimized`) nor `--benchmark`; both remain available in the CLI.
+Before a run, the GUI validates both configurations and the CSV headers with
+the CLI's own code. After a run, **Salvar log…** copies the session log, and
+clicking the log path in the status bar opens its folder.
 
 ### Usage
 
@@ -58,7 +84,8 @@ Options:
 
 - `--only postgres,redis` — run only listed backends.
 - `--log-level DEBUG|INFO|WARNING|ERROR` — terminal verbosity (default `INFO`); the session log file under `logs/` always records `DEBUG`.
-- `--show-data` / `--no-data` — force or suppress the per-entity record dump (default: entities with up to 50 rows are dumped).
+- `--show-data` — force the per-entity record dump to show every row; `--no-data` suppresses it entirely. The default (neither flag) is `--sample`, below.
+- `--sample N` — show the first N rows of each entity (default 50), in both execution modes. `--show-data` shows every row; `--no-data` none. `--sample` cannot be combined with either.
 - `--benchmark` — write per-phase metrics to `benchmarks/benchmark_<timestamp>.json` and append `benchmarks/benchmark_history.csv` (implies `--no-data`).
 - `--execution stream|materialize` — write path (default `stream`). `stream` imports in bounded memory (~one read chunk, roughly constant in file size); `materialize` loads each source fully (the phase-measured baseline). Streaming supports union (`"source": [...]`) entities: it samples one first chunk per source to build the shared superset, then widens each chunk to it. `--dry-run` and `--benchmark` always use `materialize`. Neo4j relationships are streamed too, in a bounded second pass over the relationship sources after all nodes are written.
 - `--no-create-schema` — skip DDL where applicable.
@@ -189,6 +216,14 @@ O bloco `sources` admite dois modos de entrada, escolhidos por configuração:
 
 O caminho de qualquer origem pode ser sobrescrito em tempo de execução com `--source NOME=CAMINHO` (repetível), sem editar a configuração.
 
+### Download
+
+Executáveis prontos para Windows e Linux — a CLI e a interface gráfica, sem
+precisar de Python — acompanham cada versão na
+[página de releases](https://github.com/lucasbc92/polyglot-import-csv/releases).
+Todo pacote traz o exemplo de e-commerce, o `docker-compose.yml` e um
+`LEIAME.txt` com os primeiros passos.
+
 ### Requisitos
 
 - Python 3.9+ (para o *driver* oficial do Cassandra, versões LTS até 3.11 costumam ser mais simples por causa das extensões C; `--dry-run` não abre conexões).
@@ -198,6 +233,25 @@ O caminho de qualquer origem pode ser sobrescrito em tempo de execução com `--
 ```bash
 pip install -e ".[dev]"
 ```
+
+### Interface gráfica
+
+```bash
+pip install -e ".[gui]"
+polyglotimportcsv-gui
+```
+
+A janela monta o comando, mostra-o antes de executar e transmite a saída da CLI
+para um console integrado. O comando exibido é o comando executado — o painel
+pode ser colocado em modo de edição para digitá-lo à mão.
+
+O console integrado mostra as cores da CLI: com `FORCE_COLOR` definido, a CLI
+escreve sequências ANSI mesmo dentro de um *pipe*. A GUI não oferece
+`--strategy` (executa sempre em `optimized`) nem `--benchmark`; ambos continuam
+disponíveis na CLI. Antes de executar, a GUI valida as duas configurações e os
+cabeçalhos dos CSVs com o próprio código da CLI. Depois de executar,
+**Salvar log…** copia o log da sessão, e clicar no caminho do log na barra de
+status abre a pasta correspondente.
 
 ### Uso
 
@@ -226,7 +280,8 @@ Opções úteis:
 
 - `--only postgres,redis` — executa só os backends listados.
 - `--log-level DEBUG|INFO|WARNING|ERROR` — verbosidade do terminal (padrão `INFO`); o arquivo de log de sessão em `logs/` sempre grava `DEBUG`.
-- `--show-data` / `--no-data` — força ou suprime a exibição dos registros por entidade (padrão: entidades com até 50 linhas são exibidas).
+- `--show-data` — força a exibição de todos os registros de cada entidade; `--no-data` suprime a exibição por completo. O padrão (sem nenhuma das duas flags) é `--sample`, abaixo.
+- `--sample N` — mostra as primeiras N linhas de cada entidade (padrão 50), nos dois modos de execução. `--show-data` mostra todas as linhas; `--no-data`, nenhuma. `--sample` não se combina com nenhuma das duas.
 - `--benchmark` — grava métricas por fase em `benchmarks/benchmark_<timestamp>.json` e acrescenta `benchmarks/benchmark_history.csv` (implica `--no-data`).
 - `--execution stream|materialize` — caminho de escrita (padrão `stream`). `stream` importa com memória limitada (~um bloco de leitura, praticamente constante no tamanho do arquivo); `materialize` carrega cada origem por completo (a linha de base medida por fase). O modo `stream` também aceita entidades de união (`"source": [...]`): amostra o primeiro bloco de cada origem para montar o superconjunto de colunas e então alarga cada bloco para ele. `--dry-run` e `--benchmark` usam sempre `materialize`. Os relacionamentos do Neo4j também são transmitidos, em uma segunda passagem de memória limitada sobre as origens dos relacionamentos, após a escrita de todos os nós.
 - `--no-create-schema` — não emite DDL de criação (quando aplicável).

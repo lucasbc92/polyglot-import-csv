@@ -158,3 +158,75 @@ def test_cli_passes_strategy(monkeypatch):
     ])
     assert res.exit_code == 0, res.output
     assert captured["strategy"] == "naive"
+
+
+def _capture_run_import(monkeypatch):
+    captured = {}
+
+    def fake_run_import(config_path, **kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr("polyglotimportcsv.cli.run_import", fake_run_import)
+    return captured
+
+
+def test_cli_sample_defaults_to_fifty(tmp_path, monkeypatch):
+    captured = _capture_run_import(monkeypatch)
+    cfg = tmp_path / "cfg.json"
+    cfg.write_text("{}", encoding="utf-8")
+    result = CliRunner().invoke(main, ["--config", str(cfg)])
+    assert result.exit_code == 0, result.output
+    assert captured["sample_size"] == 50
+    assert captured["show_data"] is None
+
+
+def test_cli_sample_size_is_passed_through(tmp_path, monkeypatch):
+    captured = _capture_run_import(monkeypatch)
+    cfg = tmp_path / "cfg.json"
+    cfg.write_text("{}", encoding="utf-8")
+    result = CliRunner().invoke(main, ["--config", str(cfg), "--sample", "7"])
+    assert result.exit_code == 0, result.output
+    assert captured["sample_size"] == 7
+
+
+def test_cli_sample_rejects_zero(tmp_path):
+    cfg = tmp_path / "cfg.json"
+    cfg.write_text("{}", encoding="utf-8")
+    result = CliRunner().invoke(main, ["--config", str(cfg), "--sample", "0"])
+    assert result.exit_code == 2
+
+
+def test_cli_sample_cannot_be_combined_with_show_data_or_no_data(tmp_path, monkeypatch):
+    _capture_run_import(monkeypatch)
+    cfg = tmp_path / "cfg.json"
+    cfg.write_text("{}", encoding="utf-8")
+    for flag in ("--show-data", "--no-data"):
+        result = CliRunner().invoke(main, ["--config", str(cfg), "--sample", "5", flag])
+        assert result.exit_code == 2, flag
+        assert "--sample" in result.output
+
+
+def test_cli_survives_a_non_utf8_output_encoding():
+    """Redirected output on a Windows machine uses the ANSI code page (cp1252).
+
+    rich's banner is made of box-drawing characters that cp1252 cannot encode,
+    so ``polyglotimportcsv ... > saida.txt`` crashed with UnicodeEncodeError
+    before doing anything. Found by the release smoke test on a GitHub runner.
+    """
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    env = dict(os.environ, PYTHONIOENCODING="cp1252", POLYGLOT_NO_LOG="1")
+    env.pop("FORCE_COLOR", None)
+    result = subprocess.run(
+        [sys.executable, "-m", "polyglotimportcsv",
+         "--config", str(root / "data" / "ecommerce" / "import_config.json"),
+         "--dry-run", "--no-data"],
+        capture_output=True, env=env, cwd=root,
+    )
+    assert result.returncode == 0, result.stderr.decode("utf-8", "replace")[-800:]
+    assert "Finished dry-run" in result.stdout.decode("utf-8", "replace")

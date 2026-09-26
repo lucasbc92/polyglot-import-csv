@@ -213,3 +213,25 @@ def test_stream_import_writes_relationships_after_all_nodes(tmp_path):
     assert set(rel_df["thing_id"]) == {"t0", "t1", "t2"}
 
     assert fake.closed is True
+
+
+def test_on_batch_sees_every_row_written_with_its_dbms(tmp_path):
+    config = _build_config(tmp_path)
+    fake = _FakeSink()
+    seen = []
+
+    written = sr.run_stream_import(
+        config,
+        tmp_path,
+        sink_factories={"postgres": lambda cfg: fake},
+        chunksize=800,
+        batch=1000,
+        on_batch=lambda dbms, part, frame: seen.append((dbms, part, len(frame))),
+    )
+
+    totals = {}
+    for dbms, part, n in seen:
+        assert dbms == "postgres"
+        totals[part] = totals.get(part, 0) + n
+    assert totals == written
+    assert [n for _, part, n in seen if part == "items"] == [1000, 1000, 500]

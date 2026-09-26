@@ -122,23 +122,35 @@ class RunOptions:
 
 ### 4.2 Regras de montagem (`command.build_argv`)
 
-`build_argv` emite **apenas o que difere do padrão da CLI**, para que o comando
-exibido seja o mais curto possível e legível:
+`build_argv` **escreve toda opção por extenso**, inclusive as que estão no valor
+padrão da CLI:
 
 | Condição | Emite |
 |---|---|
 | sempre | `--config <caminho>` |
 | `sgbd_config_path` definido | `--sgbd-config <caminho>` |
 | `only` não vazio | `--only a,b,c` |
-| `strategy != "optimized"` | `--strategy naive` |
-| `execution != "stream"` | `--execution materialize` |
+| sempre | `--strategy naive\|optimized` |
+| sempre | `--execution stream\|materialize` |
 | `dry_run` verdadeiro | `--dry-run` |
-| `create_schema` falso | `--no-create-schema` |
+| sempre | `--create-schema` ou `--no-create-schema` |
 | `benchmark` verdadeiro | `--benchmark` |
-| `log_level != "INFO"` | `--log-level <nível>` |
+| sempre | `--log-level <nível>` |
 | `show_data is True` | `--show-data` |
 | `show_data is False` | `--no-data` |
 | cada par em `sources` | `--source NOME=CAMINHO` |
+
+A regra anterior — emitir apenas o que difere do padrão, para manter o comando
+curto — foi revertida (Q1). Ela fazia três controles parecerem quebrados:
+`optimized`, `stream` e `Criar esquema` já são o padrão, de modo que selecioná-los
+não mudava nada no texto e o clique parecia ignorado. O comando exibido é material
+didático antes de ser um atalho de digitação, e a correspondência um-para-um entre
+controle e flag vale mais do que a brevidade.
+
+Três estados continuam sem forma escrita, por falta de sintaxe na CLI:
+`--dry-run` e `--benchmark` são interruptores sem forma negativa, e o
+`Automático` da exibição de dados **é** a ausência de `--show-data` e `--no-data`.
+Em todos, a ausência é o próprio padrão, e alternar o controle ainda muda o texto.
 
 `to_display(argv)` produz o texto do painel: `polyglotimportcsv` seguido dos
 argumentos, com aspas apenas onde necessário (`shlex.quote` no POSIX; regra
@@ -194,8 +206,12 @@ painel e é registrado como primeira linha do log de cada execução
   animar as barras mesmo sem TTY), `PYTHONUNBUFFERED=1`,
   `PYTHONIOENCODING=utf-8` e `COLUMNS` igual à largura atual do console em
   caracteres, recalculado a cada execução.
-- Diretório de trabalho: a raiz do projeto, para que `logs/` e `benchmarks/`
-  caiam onde a CLI já os coloca.
+- Diretório de trabalho: **o diretório de trabalho corrente** (`os.getcwd()`),
+  não a raiz do projeto como esta seção afirmava antes de a implementação ser
+  medida. Ao lançar a GUI de dentro do repositório — que é o caso da
+  demonstração — o efeito é o mesmo: `logs/` e `benchmarks/` caem onde a CLI já
+  os coloca. A partir de um executável congelado ou de um atalho, porém, esses
+  diretórios seguem o diretório de trabalho do lançamento, e não o projeto.
 - Interrupção: `terminate()`, espera de 3 s, depois `kill()`. Como `terminate()`
   não atinge processos de console no Windows, o caminho efetivo lá é o `kill()`.
   O botão pede confirmação, avisando que a importação pode parar pela metade e
@@ -218,14 +234,33 @@ Subconjunto suportado:
 
 A saída é um `QTextEdit` em modo HTML, com buffer de linhas limitado (padrão
 5.000 linhas, as mais antigas descartadas). As cores ANSI são mapeadas para os
-mesmos tokens do protótipo, para que o console tenha a aparência do quadro
-`02 · Executando`.
+mesmos tokens do protótipo.
+
+O terminador de linha do Windows é `\r\n`, e por isso o `\r` da tabela acima só
+reinicia a linha corrente quando **não** é seguido de `\n`. Um `\r\n` é fim de
+linha; tratá-lo como reinício apagaria cada linha logo depois de escrevê-la.
+
+**Cor no Windows — medido, não previsto.** Com `FORCE_COLOR=1` e a saída em um
+*pipe*, o console do `rich` usado por `reporting.py` relata
+`legacy_windows=True` e `color_system='windows'`: nessa combinação o `rich` não
+emite sequências ANSI, e sim chamadas Win32 de console, que não têm efeito
+sobre um *pipe*. Numa execução real de 80 KB de saída, o filho não emitiu um
+único byte ESC. **O console da GUI é, portanto, monocromático na plataforma do
+autor**, e a semelhança com o quadro `02 · Executando` do protótipo não se
+verifica ali. O tradutor de ANSI continua correto e exercitado por testes, e a
+cor aparece em plataformas cujo `rich` escolhe `color_system='truecolor'`.
+
+`FORCE_COLOR=1` continua sendo indispensável por outro motivo: `reporting.py`
+desvia de `entity_progress` quando `not _console.is_terminal`, de modo que sem
+essa variável **não há barra de progresso alguma**. Ela não deve ser removida a
+pretexto de "simplificar", mesmo estando claro que não é ela que traz a cor no
+Windows.
 
 **Plano B documentado:** se a animação de progresso se mostrar instável em alguma
 combinação de terminal/versão do `rich`, basta não definir `FORCE_COLOR`. O
-`rich` volta a escrever texto simples, o console fica monocromático e todo o
-restante continua funcionando. A escolha fica exposta como preferência
-(`Console colorido`), com o padrão ligado.
+`rich` volta a escrever texto simples (e sem barras de progresso) e todo o
+restante continua funcionando. A escolha ficaria exposta como preferência
+(`Console colorido`) — ver §14, onde o corte dessa preferência está registrado.
 
 ## 8. Estados da interface
 
@@ -274,7 +309,8 @@ são escritas no console em vermelho e levam ao estado de erro, com o texto de
 
 `QSettings` (organização `UFSC`, aplicação `PolyglotImportCSV`) guarda apenas
 conveniências: geometria da janela, posição do divisor, últimos caminhos usados
-nos dois *file choosers* e a preferência de console colorido. **Nenhuma opção de
+nos dois *file choosers* e a preferência de console colorido (esta última foi
+cortada — ver §14.1). **Nenhuma opção de
 execução é persistida** — cada abertura parte dos padrões da CLI, para que o
 comando exibido corresponda ao que está na tela e não a uma sessão anterior
 esquecida.
@@ -286,8 +322,53 @@ lado do rótulo (`Estratégia (--strategy)`), o que mantém a correspondência c
 CLI visível sem traduzir a flag. Não há mecanismo de i18n: as cadeias ficam
 diretamente no código, como nas demais partes do projeto.
 
-Janela com 1240×1020 px por padrão, como no protótipo, e mínimo de 960×680 px; o divisor entre
-formulário e console é arrastável, e o console tem altura mínima de 160 px.
+Janela com 1240×1020 px por padrão, como no protótipo, e mínimo de 960×820 px (o piso
+vertical é imposto pelos mínimos do formulário e do console, não por 680 px); o divisor
+entre formulário e console é arrastável, e o console tem altura mínima de 160 px.
+
+### 11.1 Indicadores de caixa e de rádio (`gui/indicators.py`)
+
+Os indicadores não vêm da folha de estilo. Uma folha de estilo Qt sabe dar ao
+indicador um tamanho, uma borda e um preenchimento, mas não sabe desenhar um
+tique dentro dele: o único caminho é `image: url(...)`, que exigiria empacotar
+bitmaps. Sem isso, uma caixa marcada vira um quadrado azul maciço e um rádio
+marcado vira um anel grosso — nenhum dos dois se parece com o controle que a
+pessoa conhece do resto do sistema.
+
+Um `QProxyStyle` pinta os dois primitivos: o tique é uma polilinha de três
+pontos e a marca do rádio é um círculo pequeno **dentro** do anel, que continua
+vazado. A cor é a de destaque da própria aplicação, e não a do tema do sistema.
+
+Consequência que precisa ficar registrada: a folha de estilo **não pode** conter
+nenhuma regra `::indicator`. Basta uma para que o Qt retome o primitivo e passe
+a pintá-lo sozinho, desativando o pintor em silêncio.
+`tests/test_gui_style.py` guarda essa condição; `tests/test_gui_indicators.py`
+verifica os pixels — que a caixa marcada tenha pixels claros dentro do
+preenchimento (o tique) e que o rádio marcado produza três trechos de cor de
+destaque ao longo do meio (anel, marca, anel).
+
+### 11.2 Cartão "Fontes CSV"
+
+As linhas nascem da escolha de arquivos, nunca em branco. Uma sobrescrita *é*
+um caminho, e uma linha sem caminho não é uma sobrescrita: inserir uma linha
+vazia e usá-la para abrir o diálogo transformava o diálogo em um segundo passo
+escondido atrás de uma célula que parecia um campo de digitação.
+
+- `+ Adicionar arquivos` abre o seletor de arquivos direto, com seleção
+  múltipla, e cria uma linha por arquivo.
+- `+ Adicionar pasta` anexa de uma vez todos os `.csv` **diretamente** dentro da
+  pasta escolhida, em ordem de nome. Não é recursivo.
+- Caminhos já listados são ignorados, e o lote inteiro emite `changed` uma única
+  vez — uma pasta com vinte arquivos não deve remontar o comando vinte vezes.
+
+O nome da fonte é deduzido do arquivo, porque `--source` sobrescreve uma fonte
+**declarada na configuração**: o conjunto de referência declara `stock` e o
+guarda em `ecommerce_stock.csv`, de modo que o radical do arquivo produziria
+`--source ecommerce_stock=…`, uma sobrescrita de fonte inexistente. A dedução
+tenta, nesta ordem, o nome de arquivo declarado, o nome declarado igual ao
+radical e o nome declarado que o radical termina (o mais longo vence); se nada
+casar, fica o radical e a célula pode ser corrigida. Enquanto não houver
+configuração escolhida, é sempre o radical.
 
 ## 12. Empacotamento
 
@@ -336,6 +417,29 @@ widgets, e por último o empacotamento.
 4. **Prazo.** Três semanas em outubro para implementação. Se apertar, o corte é
    nesta ordem: preferência de console colorido, persistência de `QSettings`,
    leitura do `sgbd_config.json` para filtrar as caixas (§9).
+
+### 14.1 O que foi efetivamente cortado
+
+- **Preferência `Console colorido` (§7 e §10).** Primeiro item da lista de
+  cortes acima, e foi o único acionado: `main_window.py` passa `color=True`
+  incondicionalmente, e nem a caixa de preferência nem a chave correspondente em
+  `QSettings` existem. Dado o que §7 registra sobre a cor no Windows, o controle
+  não mudaria nada na plataforma do autor — desligá-lo apenas suprimiria também
+  as barras de progresso. O corte fica registrado aqui para que a ausência não
+  seja lida como esquecimento.
+
+### 14.2 Riscos conhecidos, ainda não exercitados
+
+- **O desvio `--cli` do executável congelado nunca foi executado.** O alvo da
+  GUI é `console=False`, e `launcher.resolve()` inicia `sys.executable --cli`
+  para que o filho faça toda a escrita em `stdout`. Se o carregador *windowed*
+  do PyInstaller deixa `sys.stdout` utilizável sobre um *handle* redirecionado
+  varia conforme a versão. **Precisa de um teste de fumaça com o PyInstaller
+  antes da defesa**: gerar os dois alvos, abrir a GUI congelada e executar uma
+  importação de ponta a ponta.
+- **O arquivo `.spec` do PyInstaller** herda do alvo de CLI preexistente dois
+  pontos a revisar no mesmo teste de fumaça: o parâmetro `cipher=`, removido no
+  PyInstaller 6.x, e `upx=True`, fonte conhecida de pacotes Qt quebrados.
 
 ## 15. Referências
 

@@ -6,12 +6,14 @@ reúne as atividades que dão continuidade ao trabalho. Elas dividem-se entre a 
 forma de uso, o aprofundamento da avaliação e a extensão das funcionalidades de importação.
 
 \begin{itemize}
-  \item \textbf{Interface gráfica \textit{desktop}.} A ferramenta é hoje operada por uma
-        interface de linha de comando (Seção~\ref{sec:visao-geral}). O próximo passo
-        desejável --- e viável ainda dentro deste ciclo de trabalho --- é uma interface
-        gráfica que monte o comando de importação de forma assistida e permita visualizar e
-        editar os dois arquivos JSON de configuração, reduzindo a barreira de entrada para
-        usuários menos familiarizados com a linha de comando.
+  \item \textbf{Edição assistida da configuração na interface gráfica.} A interface
+        gráfica entregue (Seção~\ref{sec:interface-grafica}) monta e executa o comando de
+        importação, mas não edita os dois arquivos JSON de configuração, que permanecem sob
+        um editor de texto externo. A extensão natural é trazer essa edição para dentro da
+        interface, com validação por \textit{JSON Schema} durante a digitação,
+        pré-visualização do CSV de origem e um editor de mapeamento coluna a coluna,
+        reduzindo ainda mais a barreira de entrada para usuários menos familiarizados com
+        a linha de comando.
 
   \item \textbf{Aprofundamento da avaliação de desempenho.} A avaliação do
         Capítulo~\ref{cap:avaliacao} cobriu volumes de até cem mil linhas em uma única

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "polyglot-import-csv"
-version = "0.1.0"
+version = "1.0.0"
 description = "Importação de CSV para PostgreSQL, Redis, MongoDB, Cassandra e Neo4j"
 requires-python = ">=3.9"
 dependencies = [
@@ -21,13 +21,20 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "pytest-qt"]
+gui = ["PySide6"]
 
 [project.scripts]
 polyglotimportcsv = "polyglotimportcsv.cli:main"
+polyglotimportcsv-gui = "polyglotimportcsv.gui.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
 polyglotimportcsv = ["schemas/*.json"]
+
+[tool.pytest.ini_options]
+markers = [
+    "gui: precisa de PySide6 instalado (pulado quando ausente)",
+]

@@ -128,8 +128,8 @@ def test_run_import_rejects_unknown_execution():
 def test_run_import_dumps_bound_entities(monkeypatch):
     calls = []
 
-    def fake_dump(backend, entity, df, *, force=None):
-        calls.append((backend, entity, len(df), force))
+    def fake_dump(backend, entity, df, *, force=None, sample_size=None):
+        calls.append((backend, entity, len(df), force, sample_size))
 
     monkeypatch.setattr("polyglotimportcsv.runner.dump_entity_frame", fake_dump)
 
@@ -138,4 +138,22 @@ def test_run_import_dumps_bound_entities(monkeypatch):
 
     run_import(CFG, dry_run=True, only=["postgres"], importers={"postgres": stub})
     assert calls, "expected one dump call per bound entity"
-    assert all(backend == "postgres" and force is None for backend, _, _, force in calls)
+    assert all(backend == "postgres" and force is None for backend, _, _, force, _ in calls)
+    assert all(call[4] == 50 for call in calls)
+
+
+def test_run_import_stream_passes_a_preview_to_the_orchestrator(monkeypatch, capsys):
+    """The stream path shows the sample too: run_import wires an on_batch."""
+    import pandas as pd
+
+    def fake_stream(config, base_dir, *, sink_factories, only,
+                    create_schema, source_overrides, on_batch=None, **kw):
+        assert on_batch is not None
+        on_batch("redis", "user_session", pd.DataFrame({"id": range(3)}))
+        return {"user_session": 3}
+
+    monkeypatch.setattr("polyglotimportcsv.runner.run_stream_import", fake_stream)
+    run_import(CFG, execution="stream", only=["redis"], sample_size=2)
+    out = capsys.readouterr().out
+    assert "redis · user_session" in out
+    assert "2 of 3 row(s)" in out
