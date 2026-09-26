@@ -60,6 +60,10 @@ class ConfigPanel(QGroupBox):
         self.config_edit.textChanged.connect(self.changed)
         self.sgbd_edit.textChanged.connect(self.changed)
 
+        # Injection point, so tests never open a real dialog. Same device as
+        # SourcesPanel.choose_files / ConsolePanel.confirm_discard.
+        self.choose_file = self._ask_for_file
+
     # -- reading ----------------------------------------------------------
 
     def config_path(self) -> Optional[Path]:
@@ -88,9 +92,21 @@ class ConfigPanel(QGroupBox):
 
     def _browse(self, edit: QLineEdit, title: str) -> None:
         start = edit.text() or ""
+        chosen = self.choose_file(title, start)
+        if not chosen:
+            return
+        text = str(Path(chosen))
+        if text == edit.text():
+            # setText() below would be a no-op and emit no textChanged, but
+            # the person just confirmed this same file again in "Procurar…"
+            # (e.g. after fixing it externally): the form must still refresh.
+            self.changed.emit()
+        else:
+            edit.setText(text)
+
+    def _ask_for_file(self, title: str, start: str) -> str:
         chosen, _ = QFileDialog.getOpenFileName(self, title, start, "JSON (*.json);;Todos (*)")
-        if chosen:
-            edit.setText(str(Path(chosen)))
+        return chosen
 
 
 def _as_path(text: str) -> Optional[Path]:

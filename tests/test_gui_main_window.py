@@ -1,6 +1,7 @@
 """Wiring: form -> command -> process -> console."""
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,7 @@ from polyglotimportcsv.gui import launcher  # noqa: E402
 from polyglotimportcsv.gui.widgets.main_window import MainWindow  # noqa: E402
 
 
-from PySide6.QtCore import QSettings, Qt  # noqa: E402
+from PySide6.QtCore import QEvent, QSettings, Qt  # noqa: E402
 
 
 @pytest.fixture()
@@ -98,6 +99,74 @@ def test_edit_mode_disables_the_form(window, config_files):
     assert not window.sources_panel.isEnabled()
     window.console_panel.set_editing(False)
     assert window.config_panel.isEnabled()
+
+
+def test_reactivating_the_window_reruns_preflight_after_an_external_fix(window, config_files):
+    """A config fixed in an external editor never changes the QLineEdit text,
+    so no ``changed`` signal fires. Reactivating the window must pick up the
+    fix anyway, instead of leaving Run disabled with the stale error."""
+    cfg, sgbd = config_files
+    good = cfg.read_text(encoding="utf-8")
+    broken = good.replace('"id":', '"id_errado":')
+    cfg.write_text(broken, encoding="utf-8")
+
+    window.config_panel.set_paths(cfg, sgbd)
+    assert not window.console_panel.run_button.isEnabled()
+    assert window.config_panel.error_label.text() != ""
+
+    cfg.write_text(good, encoding="utf-8")
+    stat = cfg.stat()
+    os.utime(cfg, ns=(stat.st_atime_ns, stat.st_mtime_ns + 10_000_000))
+
+    window.isActiveWindow = lambda: True
+    window.changeEvent(QEvent(QEvent.ActivationChange))
+
+    assert window.console_panel.run_button.isEnabled()
+    assert window.config_panel.error_label.text() == ""
+
+
+def test_reactivating_the_window_does_not_refresh_while_a_run_is_in_progress(
+    window, config_files, monkeypatch
+):
+    """The Run button doubles as Interromper while a process runs; a
+    reactivation-triggered refresh must not touch the form then."""
+    cfg, sgbd = config_files
+    window.config_panel.set_paths(cfg, sgbd)
+    monkeypatch.setattr(window.process, "is_running", lambda: True)
+
+    calls = []
+    window.refresh_command = lambda: calls.append(1)
+    window.isActiveWindow = lambda: True
+    window.changeEvent(QEvent(QEvent.ActivationChange))
+
+    assert not calls, "refresh_command must not run while a process is in progress"
+
+
+def test_reactivating_the_window_does_not_refresh_while_editing_the_console(
+    window, config_files
+):
+    cfg, sgbd = config_files
+    window.config_panel.set_paths(cfg, sgbd)
+    window.console_panel.set_editing(True)
+
+    calls = []
+    window.refresh_command = lambda: calls.append(1)
+    window.isActiveWindow = lambda: True
+    window.changeEvent(QEvent(QEvent.ActivationChange))
+
+    assert not calls
+
+
+def test_reactivating_an_inactive_window_does_not_refresh(window, config_files):
+    cfg, sgbd = config_files
+    window.config_panel.set_paths(cfg, sgbd)
+
+    calls = []
+    window.refresh_command = lambda: calls.append(1)
+    window.isActiveWindow = lambda: False
+    window.changeEvent(QEvent(QEvent.ActivationChange))
+
+    assert not calls
 
 
 def test_argv_for_run_uses_the_launcher_prefix(window, config_files):

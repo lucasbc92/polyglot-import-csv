@@ -9,9 +9,9 @@ import shlex
 import shutil
 import time
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Callable, List, Optional
 
-from PySide6.QtCore import QSettings, QTimer, QUrl, Qt, Signal
+from PySide6.QtCore import QEvent, QSettings, QTimer, QUrl, Qt, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -384,6 +384,26 @@ class MainWindow(QMainWindow):
                 Path(last_config) if last_config else None,
                 Path(last_sgbd) if last_sgbd else None,
             )
+
+    def changeEvent(self, event) -> None:  # noqa: N802 (Qt override)
+        """Re-run preflight when the window regains focus (spec §3.2 gap).
+
+        A config or CSV fixed in an external editor never changes the form's
+        own QLineEdit text, so no panel ``changed`` signal fires and Run stays
+        disabled with the stale error. Activation is the moment the person
+        is most likely to switch back after fixing exactly that. Skipped
+        while a run is in progress (nothing here may re-enable the form
+        mid-run) and while the console is being hand-edited (set_command is
+        ignored then anyway, and the form itself is disabled).
+        """
+        super().changeEvent(event)
+        if (
+            event.type() == QEvent.ActivationChange
+            and self.isActiveWindow()
+            and not self.process.is_running()
+            and not self.console_panel.is_editing()
+        ):
+            self.refresh_command()
 
     def closeEvent(self, event) -> None:  # noqa: N802 (Qt override)
         self._settings.setValue("geometry", self.saveGeometry())
