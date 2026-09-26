@@ -1,8 +1,7 @@
 # Local scratch / failed clone dirs (never commit)
 _temp_skills/
 
-# Generated knowledge graph (rebuild with `graphify update .`) and local tooling
-graphify-out/
+# Local tooling
 .rtk/
 
 # Session logs from run_example.sh / CLI (logs/.gitkeep tracks the folder)
