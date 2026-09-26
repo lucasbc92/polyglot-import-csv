@@ -15,7 +15,7 @@ import re
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import IO, Any, Callable, Dict, Iterator, Optional, Sequence
+from typing import IO, Any, Callable, Dict, Iterator, Mapping, Optional, Sequence
 
 from rich.console import Console
 from rich.json import JSON
@@ -45,7 +45,24 @@ PROGRESS_THRESHOLD = 50
 
 _FILE_FORMAT = "%(asctime)s %(levelname)-8s %(name)s: %(message)s"
 
-_console = Console(soft_wrap=True)
+
+def _make_console(environ: Optional[Mapping[str, str]] = None) -> Console:
+    """The terminal console.
+
+    With FORCE_COLOR set (the GUI sets it on the child process), output must
+    be ANSI even into a pipe. On Windows rich otherwise picks the legacy
+    console API, whose colour calls do nothing on a pipe, so not a single
+    escape reached the GUI and its console was monochrome (measured
+    2026-09-20). ``legacy_windows=False`` makes rich write ANSI instead;
+    Windows 10+ terminals understand it too, so a real terminal is unaffected.
+    """
+    environ = os.environ if environ is None else environ
+    if environ.get("FORCE_COLOR"):
+        return Console(soft_wrap=True, legacy_windows=False, no_color=False)
+    return Console(soft_wrap=True)
+
+
+_console = _make_console()
 _terminal_level: int = logging.INFO
 _file_console: Optional[Console] = None
 _file_handle: Optional[IO[str]] = None
