@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Antes de gravar qualquer dado, a ferramenta verifica se os SGBDs de destino respondem e, para os que não respondem, mostra o comando que os inicia (tirado de um bloco `start` opcional do arquivo de conexão), sem nunca executá-lo; `--check-dbms` e o botão "Verificar SGBDs" fazem só a verificação. Junto, `sgbd_config` passa a se chamar `dbms_config`, todos os READMEs ficam bilíngues e sai a release v1.1.0.
+**Goal:** Antes de gravar qualquer dado, a ferramenta verifica se os SGBDs de destino respondem e, para os que não respondem, mostra o comando que os inicia (tirado de um bloco `start` opcional do arquivo de conexão), sem nunca executá-lo; `--check-dbms` e o botão "Verificar SGBDs" fazem só a verificação. Junto, `sgbd_config` passa a se chamar `dbms_config`, todos os READMEs ficam bilíngues, a GUI ganha o ícone `picsv` e sai a release v1.1.0.
 
 **Architecture:** Um módulo novo, `dbms_check.py`, obtém os endereços de cada SGBD com o próprio código dos drivers (`MongoClient(connect=False)`, `GraphDatabase.driver`, `neo4j.Address.parse`, regras do libpq), sonda cada um por TCP em paralelo e devolve um `DbmsCheckReport` sem imprimir nada. O `runner` apresenta o relatório e aborta a importação com `DbmsUnavailableError` antes de ler os CSVs; `run_check` atende `--check-dbms`. Na GUI, o núcleo puro ganha `build_check_argv` e `Preflight.checkable`; a camada Qt ganha o botão e o estado "verificando".
 
@@ -23,7 +23,7 @@
 - **Commits:** um por tarefa, mensagem em português (`feat(cli): ...`, `docs(tcc): ...`), terminando com `Co-Authored-By: Claude <modelo> <noreply@anthropic.com>`. `git push` logo após cada commit (política do projeto: o disco D: já perdeu objetos git).
 - **Branch:** `dbms-check`, criada a partir de `main` na Tarefa 1.
 - **Nenhum teste toca banco de dados.** A sonda é substituída por um fixture `autouse` (Tarefa 4); os testes da sonda real usam um socket local.
-- **Tarefas 11 e 12 precisam do Docker** com a pilha do exemplo no ar, exceto MongoDB e Neo4j (`docker compose up -d --wait` e depois `docker compose stop mongodb neo4j`). Ao final, `docker compose start mongodb neo4j`.
+- **A Tarefa 11 precisa do Docker** com a pilha do exemplo no ar, exceto MongoDB e Neo4j (`docker compose up -d --wait` e depois `docker compose stop mongodb neo4j`). Ao final, `docker compose start mongodb neo4j`.
 - **Desvios deliberados em relação ao spec, já decididos:**
   1. O relatório separa `fixes` (conexões inválidas) de `starts` (comandos) e traz `service_commands: bool` em vez de uma única lista `hints`.
   2. A mensagem de `DbmsUnavailableError` lista os SGBDs e seus estados, mas não repete as dicas, que já saem logo acima.
@@ -2980,7 +2980,173 @@ git push
 
 ---
 
-### Task 12: Versão 1.1.0 e notas da release (sem tag)
+### Task 12: Ícone da GUI (`picsv`)
+
+**Files:**
+- Move: `picsv.ico`, `picsv.png` (hoje soltos e não versionados na raiz) → `src/polyglotimportcsv/gui/assets/picsv.ico`, `src/polyglotimportcsv/gui/assets/picsv.png`
+- Modify: `src/polyglotimportcsv/gui/app.py`
+- Modify: `polyglotimportcsv.spec`, `pyproject.toml`
+- Test: `tests/test_gui_entry_point.py`
+
+**Interfaces:**
+- Consumes: nada das tarefas anteriores.
+- Produces:
+  - `gui.app.ICON_PNG: Path`, `gui.app.ICON_ICO: Path`
+  - `gui.app.APP_USER_MODEL_ID = "UFSC.PolyglotImportCSV"`
+  - o executável `polyglotimportcsv-gui` com o ícone `picsv.ico`
+
+Hoje a janela e a barra de tarefas mostram o ícone do Python. São três fontes, e as três mudam nesta tarefa:
+1. O ícone da janela (`QApplication.setWindowIcon`). Usa o PNG, que o Qt lê sem plugin.
+2. O ícone do executável congelado (`icon=` no `EXE` do PyInstaller). Usa o ICO.
+3. No Windows, rodando por `python -m …`, a barra de tarefas agrupa a janela sob o `python.exe`, com o ícone dele, a menos que o processo declare um *AppUserModelID* próprio.
+
+O executável da CLI continua com o ícone padrão do PyInstaller: o pedido foi só para a GUI.
+
+- [ ] **Step 1: Escrever os testes que falham**
+
+Em `tests/test_gui_entry_point.py`:
+
+```python
+def test_the_icon_files_ship_with_the_package():
+    from polyglotimportcsv.gui.app import ICON_ICO, ICON_PNG
+
+    assert ICON_PNG.is_file() and ICON_PNG.suffix == ".png"
+    assert ICON_ICO.is_file() and ICON_ICO.suffix == ".ico"
+    text = Path("pyproject.toml").read_text(encoding="utf-8")
+    assert '"gui/assets/*"' in text
+
+
+def test_the_frozen_gui_carries_the_icon():
+    text = Path("polyglotimportcsv.spec").read_text(encoding="utf-8")
+    assert "icon='src/polyglotimportcsv/gui/assets/picsv.ico'" in text
+    assert "('src/polyglotimportcsv/gui/assets', 'polyglotimportcsv/gui/assets')" in text
+
+
+def test_the_window_icon_loads(qapp):
+    from PySide6.QtGui import QIcon
+
+    from polyglotimportcsv.gui.app import ICON_PNG
+
+    assert not QIcon(str(ICON_PNG)).isNull()
+```
+
+`qapp` é o fixture do pytest-qt. Se o arquivo de testes marca os testes de GUI com `pytestmark`/`importorskip`, aplique a mesma marcação só ao último teste: `pytest.importorskip("PySide6")` dentro dele.
+
+Run: `$PY -m pytest tests/test_gui_entry_point.py -q -p no:cacheprovider`
+Expected: FAIL (`ImportError: cannot import name 'ICON_ICO'`).
+
+- [ ] **Step 2: Mover os arquivos**
+
+```bash
+mkdir -p src/polyglotimportcsv/gui/assets
+mv picsv.ico picsv.png src/polyglotimportcsv/gui/assets/
+git add src/polyglotimportcsv/gui/assets
+```
+
+Não crie `__init__.py` em `assets/`: os caminhos vêm de `Path(__file__)`, não de `importlib.resources`.
+
+- [ ] **Step 3: `app.py`**
+
+Em `src/polyglotimportcsv/gui/app.py`:
+
+(a) Imports e constantes, depois de `from polyglotimportcsv.gui.launcher import CLI_FLAG`:
+
+```python
+from pathlib import Path
+
+_ASSETS = Path(__file__).resolve().parent / "assets"
+#: Window icon; PNG needs no Qt image-format plugin.
+ICON_PNG = _ASSETS / "picsv.png"
+#: Executable icon, used by polyglotimportcsv.spec.
+ICON_ICO = _ASSETS / "picsv.ico"
+#: Without its own AppUserModelID, a GUI started with "python -m ..." is grouped
+#: under python.exe on the Windows taskbar and shows Python's icon there.
+APP_USER_MODEL_ID = "UFSC.PolyglotImportCSV"
+```
+
+Mova `from pathlib import Path` para junto dos outros imports da biblioteca padrão.
+
+(b) Função nova, antes de `main`:
+
+```python
+def _claim_taskbar_identity() -> None:
+    """Group the window under its own taskbar entry on Windows (no-op elsewhere)."""
+    if sys.platform != "win32":
+        return
+    import ctypes
+
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
+    except (AttributeError, OSError):
+        pass  # an old shell without the call: the window icon still applies
+```
+
+(c) Em `main`, no ramo da GUI:
+- **antes** de `app = QApplication(...)`, chame `_claim_taskbar_identity()`;
+- **depois** de `app.setOrganizationName("UFSC")`, acrescente:
+
+```python
+    from PySide6.QtGui import QIcon
+
+    app.setWindowIcon(QIcon(str(ICON_PNG)))
+```
+
+Nada disso pode ficar antes do `if arguments and arguments[0] == CLI_FLAG:`. O teste `test_cli_flag_never_imports_pyside6` garante que o ramo `--cli` não carrega o Qt.
+
+- [ ] **Step 4: Empacotamento**
+
+`pyproject.toml`, em `[tool.setuptools.package-data]`:
+
+```toml
+polyglotimportcsv = ["schemas/*.json", "gui/assets/*"]
+```
+
+`polyglotimportcsv.spec`, em `gui_a = Analysis(...)`, troque `datas=` por:
+
+```python
+    datas=[
+        ('src/polyglotimportcsv/schemas', 'polyglotimportcsv/schemas'),
+        ('src/polyglotimportcsv/gui/assets', 'polyglotimportcsv/gui/assets'),
+    ],
+```
+
+E em `gui_exe = EXE(...)`, depois de `name='polyglotimportcsv-gui',`:
+
+```python
+    icon='src/polyglotimportcsv/gui/assets/picsv.ico',
+```
+
+- [ ] **Step 5: Rodar os testes**
+
+Run: `$PY -m pytest tests/test_gui_entry_point.py -q -p no:cacheprovider`, depois a suíte inteira.
+Expected: tudo verde.
+
+- [ ] **Step 6: Conferência visual e build**
+
+1. Run: `$PY -m polyglotimportcsv.gui.app`. A barra de título e a barra de tarefas mostram o ícone `picsv`, e não o do Python.
+2. Run: `$PY -m pip install pyinstaller` (se ainda não estiver no venv) e depois `$PY -m PyInstaller polyglotimportcsv.spec --noconfirm`.
+3. Confira que `dist/polyglotimportcsv-gui.exe` aparece com o ícone `picsv` no Explorer e, ao abrir, também na barra de tarefas.
+4. Apague `build/` e `dist/`, que não são versionados.
+
+O `picsv.ico` só traz a imagem de 256 px. O Windows a reduz para os tamanhos pequenos. Se no Explorer ou na barra de tarefas o ícone ficar borrado em 16/32 px, **relate ao autor** em vez de gerar outro `.ico`.
+
+- [ ] **Step 7: Commit e push**
+
+```bash
+git add -A
+git commit -m "feat(gui): icone picsv na janela, na barra de tarefas e no executavel
+
+A janela usa picsv.png, o executavel da GUI embute picsv.ico, e no Windows um
+AppUserModelID proprio impede que a janela seja agrupada sob o icone do
+python.exe quando a GUI roda pelo Python.
+
+Co-Authored-By: Claude <modelo> <noreply@anthropic.com>"
+git push
+```
+
+---
+
+### Task 13: Versão 1.1.0 e notas da release (sem tag)
 
 **Files:**
 - Modify: `pyproject.toml`, `src/polyglotimportcsv/__init__.py`
@@ -3036,6 +3202,7 @@ you how to start the ones that are down.
   `dbms_config_linux.json`, next to the Docker one.
 - **Bilingual READMEs**, including the one inside each package (`README.md`,
   which replaces `LEIAME.txt`).
+- **Its own icon** for the GUI, on the window, the taskbar and the executable.
 
 ### Breaking change
 
@@ -3080,6 +3247,7 @@ diz como subir os que estiverem fora do ar.
   `dbms_config_linux.json`, ao lado do arquivo para Docker.
 - **READMEs bilíngues**, inclusive o que vai em cada pacote (`README.md`, no
   lugar do `LEIAME.txt`).
+- **Ícone próprio** da interface gráfica, na janela, na barra de tarefas e no executável.
 
 ### Mudança incompatível
 
@@ -3117,7 +3285,7 @@ Co-Authored-By: Claude <modelo> <noreply@anthropic.com>"
 git push
 ```
 
-Expected da suíte: verde, com a contagem somando todos os testes novos das Tarefas 2 a 9.
+Expected da suíte: verde, com a contagem somando todos os testes novos das Tarefas 2 a 9 e 12.
 
 - [ ] **Step 5: Parar e perguntar**
 
