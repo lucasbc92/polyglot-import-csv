@@ -151,10 +151,16 @@ já é dependência). Não imprime nada: devolve dados, e quem chama apresenta.
 | neo4j | `uri` via `urllib.parse` | `bolt://127.0.0.1:7687`; porta ausente → `7687` |
 | mongodb | `uri` via `pymongo.uri_parser.parse_uri` (`nodelist`) | `mongodb://127.0.0.1:27017` |
 
-Uma URI `mongodb+srv://` depende de resolução DNS e não é testada: `endpoints`
-devolve lista vazia e o estado vira `unverifiable`. Uma URI que não se deixa
-analisar (Mongo ou Neo4j) também vira `unverifiable`; o erro de fato continua
-sendo relatado pelo importador, como hoje.
+Uma URI `mongodb+srv://` é resolvida pelo próprio `parse_uri`, que consulta o
+registro SRV por DNS (o `dnspython` já vem com o pymongo) e devolve os nós reais,
+que são sondados como os demais.
+
+Quando não é possível obter endereços — URI que não se deixa analisar (porta não
+numérica, esquema desconhecido no Neo4j, host ausente) ou falha de DNS numa
+`+srv` —, `endpoints` lança `InvalidConnectionError` com a mensagem original. Uma
+conexão que não se consegue nem interpretar também não vai conectar na
+importação, então isso é um erro de configuração e **bloqueia** a execução
+(estado `invalid`, seção 5.3).
 
 ### 5.2 Sonda
 
@@ -167,8 +173,10 @@ que em série daria cerca de 10 s com cinco SGBDs fora.
 ### 5.3 Estado por DBMS
 
 - `up`: pelo menos um endereço responde. No Cassandra, basta um nó, como no driver.
-- `down`: nenhum responde.
-- `unverifiable`: sem endereços testáveis (`+srv`).
+- `down`: nenhum responde. Bloqueia; a dica é o comando de `start`.
+- `invalid`: `endpoints` lançou `InvalidConnectionError`. Bloqueia; a dica é
+  `<dbms>: invalid connection (<mensagem original>). Fix "connection" for it in dbms_config.json`.
+  Não há sonda nem dica de `start` para esse DBMS.
 
 ### 5.4 Dicas de inicialização
 
@@ -186,14 +194,15 @@ que em série daria cerca de 10 s com cinco SGBDs fora.
 class DbmsStatus:
     dbms: str
     endpoints: List[Tuple[str, int]]
-    state: str  # "up" | "down" | "unverifiable"
+    state: str  # "up" | "down" | "invalid"
+    error: str = ""  # mensagem original quando "invalid"
 
 @dataclass(frozen=True)
 class DbmsCheckReport:
     statuses: List[DbmsStatus]
-    hints: List[str]
+    hints: List[str]  # correções de "invalid" primeiro, depois os comandos de start
     @property
-    def ok(self) -> bool: ...  # nenhum "down"
+    def ok(self) -> bool: ...  # todos "up"
 
 def check_dbms(targets, dbms_cfg, dbms_config_dir, probe=probe) -> DbmsCheckReport
 ```
@@ -210,8 +219,7 @@ filtrados por `--only`, na ordem de `BACKENDS`.
 - `--config` continua obrigatório: ele define os alvos.
 - Fluxo: banner `mode: check` → `step("Load config")` (valida os dois arquivos e
   o cruzamento, como hoje) → `step("Check DBMS")` → tabela e dicas.
-- Saída do processo: `0` se `report.ok`; `1` caso contrário. `unverifiable` aparece
-  como aviso e não muda o código de saída.
+- Saída do processo: `0` se `report.ok` (todos `up`); `1` caso contrário.
 - Entrada no runner: `run_check(config_path, *, dbms_config_path, only, probe=...)`,
   chamada pela CLI no lugar de `run_import`.
 
@@ -223,7 +231,7 @@ Em `_run_stream` e em `_run` (este apenas quando não é `dry_run`), logo depois
 - `step("Check DBMS")` e mostra a tabela.
 - Se `report.ok` for falso, lança `DbmsUnavailableError` (subclasse de
   `BusinessException`, em `business_exception.py`), cuja mensagem lista os DBMS
-  fora do ar e as dicas. A CLI já converte `BusinessException` em mensagem e
+  fora do ar ou com conexão inválida e as dicas. A CLI já converte `BusinessException` em mensagem e
   saída `1`. Nenhum CSV é lido e nada é gravado.
 
 Para localizar o arquivo de conexão (pasta usada em `compose.file`), o runner usa
@@ -248,7 +256,9 @@ Service commands (net start, systemctl) may need an administrator terminal or su
 ```
 
 A última linha só aparece quando alguma dica é um `command`. No Cassandra com
-vários nós, a coluna Endpoint lista todos, separados por vírgula.
+vários nós, a coluna Endpoint lista todos, separados por vírgula. Um DBMS
+`invalid` aparece com Endpoint `—` e Status `invalid`, e sua correção vem antes
+dos comandos de start, sob "Fix the connection settings in dbms_config.json:".
 
 ### 6.4 Testes
 
@@ -256,8 +266,9 @@ vários nós, a coluna Endpoint lista todos, separados por vírgula.
   "sempre no ar", para que os testes existentes do runner, com importadores e
   sinks falsos, não abram sockets. Os testes da verificação sobrescrevem esse fixture.
 - `test_dbms_check.py`: padrões e URIs de `endpoints` (incluindo Mongo com vários
-  hosts, `+srv` e Neo4j sem porta); estados; agrupamento das dicas `compose` por
-  arquivo; caminho relativo resolvido; SGBD sem `start`; sonda real contra um
+  hosts, `+srv` com a resolução DNS simulada, Neo4j sem porta); `invalid` para
+  porta não numérica, esquema Neo4j desconhecido e falha de DNS numa `+srv`,
+  bloqueando o `ok` e sem sonda; agrupamento das dicas `compose` por arquivo; caminho relativo resolvido; SGBD sem `start`; sonda real contra um
   `socket` local aberto e contra uma porta fechada.
 - Esquema: `command` válido; `compose` válido; os dois juntos são inválidos;
   campo extra é inválido; `command` vazio é inválido.
