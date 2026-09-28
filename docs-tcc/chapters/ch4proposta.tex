@@ -236,12 +236,12 @@ reutilizando o mesmo \texttt{columnSpec} para eventuais propriedades.
 
 \textbf{O arquivo de conexão.} Na Figura~\ref{fig:dbms-schema}, cada bloco de
 SGBD de \texttt{dbms\_config} carrega um descritor
-\texttt{connection} com os parâmetros de acesso pertinentes àquela tecnologia e,
-opcionalmente, um descritor \texttt{start}, que diz como iniciá-lo
-(Seção~\ref{sec:inicializacao-sgbds}) (por
+\texttt{connection} com os parâmetros de acesso pertinentes àquela tecnologia (por
 exemplo, \texttt{uri} para MongoDB e Neo4j; \texttt{hosts} e \texttt{keyspace} para
-Cassandra). É uma estrutura deliberadamente rasa: indica \textit{onde} alcançar cada
-SGBD, sem nenhuma informação de mapeamento.
+Cassandra) e, opcionalmente, um descritor \texttt{start}, que diz como iniciá-lo
+(Seção~\ref{sec:inicializacao-sgbds}). É uma estrutura deliberadamente rasa: indica
+\textit{onde} alcançar cada SGBD e, opcionalmente, \textit{como} iniciá-lo, sem
+nenhuma informação de mapeamento.
 
 As subseções seguintes percorrem essa estrutura na ordem em que as duas figuras são
 lidas: primeiro a raiz e os elementos comuns a todos os SGBDs
@@ -854,8 +854,9 @@ o Neo4j fora do ar.
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{table}
 
-Abaixo da tabela, a ferramenta lista os comandos que iniciam os dois SGBDs fora do ar,
-retirados dos descritores \texttt{start} do arquivo de conexão:
+A Listagem~\ref{lst:check-dbms} mostra os comandos que a ferramenta lista abaixo da
+tabela para iniciar os dois SGBDs fora do ar, retirados dos descritores
+\texttt{start} do arquivo de conexão.
 
 \begin{lstlisting}[style=textstyle,caption={Comandos de inicialização mostrados por \texttt{-{}-check-dbms}.},label={lst:check-dbms}]
 To start the DBMS that are down, run in a terminal:

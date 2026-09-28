@@ -13,7 +13,7 @@ from rich.table import Table
 from rich.text import Text
 
 from polyglotimportcsv import metrics
-from polyglotimportcsv.business_exception import DbmsUnavailableError
+from polyglotimportcsv.business_exception import ConfigError, DbmsUnavailableError
 from polyglotimportcsv.config_parser import load_config, load_dbms_config, resolve_dbms_config_path
 from polyglotimportcsv.data_preview import StreamDataPreview
 from polyglotimportcsv.dbms_check import (
@@ -63,6 +63,15 @@ def _dbms_targets(config: Dict, only: Optional[Iterable[str]]) -> List[str]:
     """The DBMS the import would write to: those configured, narrowed by --only."""
     only_set = {x.strip().lower() for x in only if x and str(x).strip()} if only else set()
     return [b for b in BACKENDS if b in config and (not only_set or b in only_set)]
+
+
+def _no_target_dbms_message(config: Dict, only: Optional[Iterable[str]]) -> str:
+    declared = [b for b in BACKENDS if b in config]
+    msg = f"No target DBMS to check: the import configuration declares {', '.join(declared) or 'none'}"
+    if only:
+        selected = [str(x).strip() for x in only if x and str(x).strip()]
+        msg += f"; --only selected {', '.join(selected)}"
+    return msg + "."
 
 
 def _print_command(line: str) -> None:
@@ -129,6 +138,8 @@ def run_check(
     banner("Polyglot Import CSV", subtitle="mode: check")
     step("Load config", str(config_path))
     config = load_config(config_path, dbms_config_path)
+    if not _dbms_targets(config, only):
+        raise ConfigError(_no_target_dbms_message(config, only))
     report = _check_dbms_step(config_path, dbms_config_path, config, only)
     if report.ok:
         success("All target DBMS are up")

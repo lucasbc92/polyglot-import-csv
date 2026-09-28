@@ -49,8 +49,19 @@ def _read_json(path: Union[str, Path], label: str) -> Dict[str, Any]:
             raise ConfigError(f"Invalid JSON in {label} ({p}): {e}") from e
 
 
+#: Name of the pre-1.1.0 DBMS config file. Never loaded, only used to hint at
+#: the rename when ``dbms_config.json`` is missing.
+_LEGACY_DBMS_CONFIG_NAME = "sgbd_config.json"
+
+
 def load_dbms_config(path: Union[str, Path]) -> Dict[str, Any]:
     """Load and validate the DBMS connection configuration."""
+    p = Path(path)
+    if not p.is_file() and p.with_name(_LEGACY_DBMS_CONFIG_NAME).is_file():
+        raise ConfigError(
+            f"DBMS config file not found: {p} "
+            f"({_LEGACY_DBMS_CONFIG_NAME} was renamed to dbms_config.json in 1.1.0)"
+        )
     data = _read_json(path, "DBMS config")
     validate_dbms_config(data)
     return data

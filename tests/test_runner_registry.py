@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from polyglotimportcsv.business_exception import BusinessException, DbmsUnavailableError
+from polyglotimportcsv.business_exception import BusinessException, ConfigError, DbmsUnavailableError
 from polyglotimportcsv.runner import run_check, run_import
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -212,6 +212,15 @@ def test_run_check_prints_the_table_and_the_start_command(monkeypatch, capsys):
     assert "sudo systemctl start redis-server" in out
     assert "sudo systemctl start neo4j" in out
     assert "administrator terminal or sudo" in out
+
+
+def test_run_check_raises_when_only_matches_no_declared_dbms(monkeypatch):
+    def must_not_probe(*a, **k):
+        raise AssertionError("probe must not run when there is no target DBMS")
+
+    monkeypatch.setattr("polyglotimportcsv.dbms_check.probe", must_not_probe)
+    with pytest.raises(ConfigError, match=r"No target DBMS to check"):
+        run_check(CFG, only=["postgre"])
 
 
 def test_start_commands_are_never_wrapped(monkeypatch, capsys):

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from polyglotimportcsv.business_exception import BusinessException
+from polyglotimportcsv.business_exception import BusinessException, ConfigError
 from polyglotimportcsv.config_parser import (
     load_config,
     load_dbms_config,
@@ -91,6 +91,20 @@ def test_load_config_rejects_missing_file():
     missing = Path(__file__).resolve().parents[1] / "data" / "nonexistent_config.json"
     with pytest.raises(BusinessException):
         load_config(missing)
+
+
+def test_load_dbms_config_hints_at_the_1_1_0_rename(tmp_path):
+    (tmp_path / "sgbd_config.json").write_text("{}", encoding="utf-8")
+    missing = tmp_path / "dbms_config.json"
+    with pytest.raises(ConfigError, match=r"sgbd_config\.json was renamed to dbms_config\.json in 1\.1\.0"):
+        load_dbms_config(missing)
+
+
+def test_load_dbms_config_missing_without_legacy_file_has_no_hint(tmp_path):
+    missing = tmp_path / "dbms_config.json"
+    with pytest.raises(ConfigError, match="not found") as excinfo:
+        load_dbms_config(missing)
+    assert "sgbd_config.json" not in str(excinfo.value)
 
 
 def test_import_schema_rejects_version_field():
