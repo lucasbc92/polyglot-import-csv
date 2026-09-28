@@ -135,37 +135,45 @@ não o usam.
 
 ## 5. Fase 2 — Módulo `dbms_check.py`
 
-Módulo novo, sem dependência de drivers além do `pymongo.uri_parser` (o pymongo
-já é dependência). Não imprime nada: devolve dados, e quem chama apresenta.
+Módulo novo. Não imprime nada: devolve dados, e quem chama apresenta.
 
 ### 5.1 Endereços
 
-`endpoints(dbms, entry) -> List[Tuple[str, int]]` lê `entry["connection"]` com os
-**mesmos padrões dos importadores**:
+**Princípio: nenhum analisador de URI próprio.** Os endereços saem do mesmo
+código que os drivers usam para interpretar a configuração, de modo que uma
+configuração que o driver aceita nunca é recusada pela verificação, e uma que o
+driver recusa nunca passa. Isso foi conferido nas versões instaladas
+(pymongo 4.17, neo4j 6.2) e fica preso pelo teste de consistência da seção 6.4.
 
-| DBMS | Origem | Padrões |
+`endpoints(dbms, entry) -> List[Endpoint]` lê `entry["connection"]` com os
+**mesmos padrões dos importadores**. Um `Endpoint` é `(host, port)` TCP ou um
+caminho de socket Unix.
+
+| DBMS | Como obtém os endereços | Padrões |
 |---|---|---|
-| postgres | `host`, `port` | `127.0.0.1`, `5432` |
-| redis | `host`, `port` | `127.0.0.1`, `6379` |
+| mongodb | `MongoClient(uri, connect=False)` — interpreta a URI sem abrir conexão, inclusive vários hosts, IPv6, socket Unix (`%2F…sock`) e `+srv` (resolvida por DNS pelo próprio cliente, com o `dnspython` que já vem com o pymongo); os endereços são as chaves de `client.topology_description.server_descriptions()`; depois `client.close()` | `mongodb://127.0.0.1:27017` |
+| neo4j | `GraphDatabase.driver(uri, auth=(user, password))` — valida esquema e URI sem conectar, e é fechado em seguida; host e porta vêm de `neo4j.Address.parse(netloc, default_host="localhost", default_port=7687)`, a mesma função e os mesmos padrões do driver | `bolt://127.0.0.1:7687` |
+| postgres | regras do libpq: `host` com vírgulas é lista de hosts; `host` começando com `/` é diretório de socket Unix (sonda `<dir>/.s.PGSQL.<porta>`); `host` vazio é o padrão do libpq (`localhost` no Windows; `/var/run/postgresql` ou `/tmp` nos demais, basta um responder) | `127.0.0.1`, `5432` |
+| redis | `host`, `port` (TCP, como o `redis.Redis(host=, port=)` do importador) | `127.0.0.1`, `6379` |
 | cassandra | `hosts` × `port` | `["127.0.0.1"]`, `9042` |
-| neo4j | `uri` via `urllib.parse` | `bolt://127.0.0.1:7687`; porta ausente → `7687` |
-| mongodb | `uri` via `pymongo.uri_parser.parse_uri` (`nodelist`) | `mongodb://127.0.0.1:27017` |
 
-Uma URI `mongodb+srv://` é resolvida pelo próprio `parse_uri`, que consulta o
-registro SRV por DNS (o `dnspython` já vem com o pymongo) e devolve os nós reais,
-que são sondados como os demais.
+**`invalid`**: quando o próprio cliente do MongoDB ou do Neo4j rejeita a
+configuração ao ser construído (porta não numérica, esquema desconhecido,
+usuário na URI do Neo4j, falha de DNS numa `+srv` etc.), `endpoints` lança
+`InvalidConnectionError` com a mensagem original do driver. O importador
+falharia do mesmo jeito, então isso **bloqueia** a execução (seção 5.3).
+Postgres, Redis e Cassandra não têm URI e nunca ficam `invalid`.
 
-Quando não é possível obter endereços — URI que não se deixa analisar (porta não
-numérica, esquema desconhecido no Neo4j, host ausente) ou falha de DNS numa
-`+srv` —, `endpoints` lança `InvalidConnectionError` com a mensagem original. Uma
-conexão que não se consegue nem interpretar também não vai conectar na
-importação, então isso é um erro de configuração e **bloqueia** a execução
-(estado `invalid`, seção 5.3).
+**Fora da garantia**: um hostname que não resolve (`bolt://nao-existe`) é
+aceito pelo driver na construção e só falha ao conectar; a verificação trata
+esse caso como `down`, como o driver.
 
 ### 5.2 Sonda
 
-`probe(host, port, timeout=2.0) -> bool`: `socket.create_connection` seguido de
-fechamento; qualquer `OSError` é `False`. Todas as sondas de uma verificação
+`probe(endpoint, timeout=2.0) -> bool`: para `(host, port)`,
+`socket.create_connection` seguido de fechamento; para socket Unix, conexão
+`AF_UNIX` quando a plataforma a oferece e, no Windows (sem `AF_UNIX` no Python),
+a existência do arquivo. Qualquer `OSError` é `False`. Todas as sondas de uma verificação
 rodam em paralelo (`ThreadPoolExecutor`): no Windows, conectar a uma porta
 fechada de `127.0.0.1` demora cerca de 2 s por causa das retentativas do TCP, o
 que em série daria cerca de 10 s com cinco SGBDs fora.
@@ -265,10 +273,17 @@ dos comandos de start, sob "Fix the connection settings in dbms_config.json:".
 - Um fixture `autouse` em `tests/conftest.py` troca `dbms_check.probe` por
   "sempre no ar", para que os testes existentes do runner, com importadores e
   sinks falsos, não abram sockets. Os testes da verificação sobrescrevem esse fixture.
-- `test_dbms_check.py`: padrões e URIs de `endpoints` (incluindo Mongo com vários
-  hosts, `+srv` com a resolução DNS simulada, Neo4j sem porta); `invalid` para
-  porta não numérica, esquema Neo4j desconhecido e falha de DNS numa `+srv`,
-  bloqueando o `ok` e sem sonda; agrupamento das dicas `compose` por arquivo; caminho relativo resolvido; SGBD sem `start`; sonda real contra um
+- **Teste de consistência com os drivers** (`test_dbms_check.py`): uma tabela de
+  URIs **válidas** — Mongo com credenciais, opções, vários hosts, IPv6, socket
+  Unix e `+srv` (DNS simulado); Neo4j nos seis esquemas, sem porta, IPv6 e com
+  contexto de roteamento — em que o cliente real aceita **e** `endpoints` não
+  lança; e uma tabela de URIs **inválidas** — porta não numérica, esquema
+  desconhecido, `bolt+routing`, usuário na URI do Neo4j, `+srv` com DNS falhando
+  — em que os dois rejeitam. O teste falha se driver e verificação discordarem,
+  o que também pega mudanças de regra numa atualização de driver.
+- `test_dbms_check.py`: padrões de `endpoints`; regras do libpq (lista com
+  vírgulas, diretório de socket, host vazio); `invalid` bloqueando o `ok` e sem
+  sonda; agrupamento das dicas `compose` por arquivo; caminho relativo resolvido; SGBD sem `start`; sonda real contra um
   `socket` local aberto e contra uma porta fechada.
 - Esquema: `command` válido; `compose` válido; os dois juntos são inválidos;
   campo extra é inválido; `command` vazio é inválido.
