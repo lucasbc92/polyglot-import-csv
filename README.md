@@ -26,7 +26,7 @@ Any source's path can be overridden at run time with `--source NAME=PATH` (repea
 Ready-to-run executables for Windows and Linux — the CLI and the GUI, no Python
 needed — are attached to each release on the
 [releases page](https://github.com/lucasbc92/polyglot-import-csv/releases). Every
-package ships the e-commerce example, `docker-compose.yml` and a `LEIAME.txt`
+package ships the e-commerce example, `docker-compose.yml` and a `README.md`
 with the first steps.
 
 ### Requirements
@@ -89,6 +89,36 @@ Options:
 - `--benchmark` — write per-phase metrics to `benchmarks/benchmark_<timestamp>.json` and append `benchmarks/benchmark_history.csv` (implies `--no-data`).
 - `--execution stream|materialize` — write path (default `stream`). `stream` imports in bounded memory (~one read chunk, roughly constant in file size); `materialize` loads each source fully (the phase-measured baseline). Streaming supports union (`"source": [...]`) entities: it samples one first chunk per source to build the shared superset, then widens each chunk to it. `--dry-run` and `--benchmark` always use `materialize`. Neo4j relationships are streamed too, in a bounded second pass over the relationship sources after all nodes are written.
 - `--no-create-schema` — skip DDL where applicable.
+- `--check-dbms` — only check that the target DBMS answer and exit (see "Checking the DBMS").
+
+### Checking the DBMS
+
+Before reading any CSV, a real import checks that every target DBMS (those in
+the import configuration, narrowed by `--only`) answers on its address, and
+stops before writing anything if one does not. `--check-dbms` runs only that
+check and exits, with code 0 when all are up:
+
+```bash
+python -m polyglotimportcsv --config data/ecommerce/import_config.json \
+  --dbms-config data/ecommerce/dbms_config_windows.json --check-dbms
+```
+
+For each DBMS that is down, the output shows how to start it, taken from the
+optional `start` block of that DBMS in the connection file: a command for a
+DBMS installed on the machine, or a Docker Compose service (the file path is
+relative to the connection file).
+
+```json
+"postgres":  { "connection": { "...": "..." }, "start": { "command": "net start postgresql-x64-16" } },
+"cassandra": { "connection": { "...": "..." }, "start": { "compose": { "file": "../../docker-compose.yml", "service": "cassandra" } } }
+```
+
+The tool never runs these commands: copy them into a terminal (service commands
+usually need an administrator terminal or `sudo`). `data/ecommerce/` ships three
+connection files with the same connections and different `start` blocks:
+`dbms_config.json` (Docker Compose, the default), `dbms_config_windows.json` and
+`dbms_config_linux.json`. Service names vary between installations; adjust them
+to yours. In the GUI, the "Verificar SGBDs" button runs the same check.
 
 ### Architecture
 
@@ -101,7 +131,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (English + PT) for layering, SO
 | `src/polyglotimportcsv/` | CLI, validation, filters, runner |
 | `src/polyglotimportcsv/importers/` | One module per backend + `base.py` protocol |
 | `src/polyglotimportcsv/schemas/` | Bundled JSON Schemas (`import_config`, `dbms_config`) |
-| `data/ecommerce/` | Sample CSVs + `import_config.json` + `dbms_config.json` |
+| `data/ecommerce/` | Sample CSVs + `import_config.json` + `dbms_config*.json` |
 | `logs/` | Session logs from `run_example.sh` and direct CLI runs (gitignored) |
 | `tests/` | `pytest` (stubs for I/O per TDD skill) |
 | `docs-tcc/` | TCC I report (Markdown, BibTeX); `docs-tcc/scripts/` for Pandoc PDF/ODT |
@@ -222,7 +252,7 @@ Executáveis prontos para Windows e Linux — a CLI e a interface gráfica, sem
 precisar de Python — acompanham cada versão na
 [página de releases](https://github.com/lucasbc92/polyglot-import-csv/releases).
 Todo pacote traz o exemplo de e-commerce, o `docker-compose.yml` e um
-`LEIAME.txt` com os primeiros passos.
+`README.md` com os primeiros passos.
 
 ### Requisitos
 
@@ -285,6 +315,37 @@ Opções úteis:
 - `--benchmark` — grava métricas por fase em `benchmarks/benchmark_<timestamp>.json` e acrescenta `benchmarks/benchmark_history.csv` (implica `--no-data`).
 - `--execution stream|materialize` — caminho de escrita (padrão `stream`). `stream` importa com memória limitada (~um bloco de leitura, praticamente constante no tamanho do arquivo); `materialize` carrega cada origem por completo (a linha de base medida por fase). O modo `stream` também aceita entidades de união (`"source": [...]`): amostra o primeiro bloco de cada origem para montar o superconjunto de colunas e então alarga cada bloco para ele. `--dry-run` e `--benchmark` usam sempre `materialize`. Os relacionamentos do Neo4j também são transmitidos, em uma segunda passagem de memória limitada sobre as origens dos relacionamentos, após a escrita de todos os nós.
 - `--no-create-schema` — não emite DDL de criação (quando aplicável).
+- `--check-dbms` — só verifica se os SGBDs de destino respondem e sai (veja "Verificação dos SGBDs").
+
+### Verificação dos SGBDs
+
+Antes de ler qualquer CSV, uma importação real verifica se cada SGBD de destino
+(os presentes na configuração de importação, filtrados por `--only`) responde
+no seu endereço, e para sem gravar nada se algum não responder. `--check-dbms`
+faz só essa verificação e sai, com código 0 quando todos respondem:
+
+```bash
+python -m polyglotimportcsv --config data/ecommerce/import_config.json \
+  --dbms-config data/ecommerce/dbms_config_windows.json --check-dbms
+```
+
+Para cada SGBD fora do ar, a saída mostra como subi-lo, a partir do bloco
+opcional `start` daquele SGBD no arquivo de conexão: um comando, para um SGBD
+instalado na máquina, ou um serviço do Docker Compose (o caminho do arquivo é
+relativo ao arquivo de conexão).
+
+```json
+"postgres":  { "connection": { "...": "..." }, "start": { "command": "net start postgresql-x64-16" } },
+"cassandra": { "connection": { "...": "..." }, "start": { "compose": { "file": "../../docker-compose.yml", "service": "cassandra" } } }
+```
+
+A ferramenta nunca executa esses comandos: copie-os para um terminal (comandos
+de serviço costumam exigir um terminal de administrador ou `sudo`). A pasta
+`data/ecommerce/` traz três arquivos de conexão com as mesmas conexões e blocos
+`start` diferentes: `dbms_config.json` (Docker Compose, o padrão),
+`dbms_config_windows.json` e `dbms_config_linux.json`. Os nomes de serviço
+variam de uma instalação para outra; ajuste-os à sua. Na interface gráfica, o
+botão "Verificar SGBDs" faz a mesma verificação.
 
 ### Arquitetura
 
@@ -297,7 +358,7 @@ Consulte [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (inglês + PT) para camada
 | `src/polyglotimportcsv/` | CLI, validação, filtros, *runner* |
 | `src/polyglotimportcsv/importers/` | Um módulo por backend + `base.py` (contrato) |
 | `src/polyglotimportcsv/schemas/` | JSON Schemas embutidos (`import_config`, `dbms_config`) |
-| `data/ecommerce/` | CSVs de exemplo + `import_config.json` + `dbms_config.json` |
+| `data/ecommerce/` | CSVs de exemplo + `import_config.json` + `dbms_config*.json` |
 | `tests/` | `pytest` (stubs, sem I/O real) |
 | `docs-tcc/` | Relatório TCC I (Markdown + BibTeX); `docs-tcc/scripts/` para PDF/ODT via Pandoc |
 

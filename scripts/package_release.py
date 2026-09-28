@@ -3,7 +3,7 @@
 Each platform gets two archives, one per executable: the CLI
 (``polyglotimportcsv``) and the GUI (``polyglotimportcsv-gui``, which is also a
 complete CLI when started with ``--cli``). Both carry the e-commerce example,
-``docker-compose.yml``, the licence and a short LEIAME, so the tool can be tried
+``docker-compose.yml``, the licence and a bilingual README, so the tool can be tried
 right after download. The spreadsheet in ``data/ecommerce/`` is a working file
 of the author and is left out.
 
@@ -34,7 +34,7 @@ def _payload(repo: Path) -> Iterator[Tuple[Path, str]]:
             yield path, path.relative_to(repo).as_posix()
     yield repo / "docker-compose.yml", "docker-compose.yml"
     yield repo / "LICENSE", "LICENSE"
-    yield repo / "packaging" / "LEIAME.txt", "LEIAME.txt"
+    yield repo / "packaging" / "README.md", "README.md"
 
 
 def build_zip(repo: Path, executable: Path, out_dir: Path, name: str) -> Path:
