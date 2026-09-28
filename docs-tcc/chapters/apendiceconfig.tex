@@ -7,7 +7,7 @@ ferramenta: o arquivo de importação no modo multifonte \texttt{import\_config.
 (Listagem~\ref{lst:import-config-full}), cujos fragmentos por SGBD ilustraram a
 seção~\ref{sec:config-format}; a sua variante para o modo combinado
 \texttt{import\_config\_combined.json} (Listagem~\ref{lst:import-combined-sources}); e o
-arquivo de conexão \texttt{sgbd\_config.json} (Listagem~\ref{lst:sgbd-config-full}). Junto
+arquivo de conexão \texttt{dbms\_config.json} (Listagem~\ref{lst:dbms-config-full}). Junto
 com o arquivo de dados reproduzido no Apêndice~\ref{ap:csv}, eles constituem as entradas
 completas do exemplo, e neles podem ser conferidas as entidades, fontes e chaves que
 fundamentam as saídas materializadas da seção~\ref{sec:importacao-sgbds} e as contagens
@@ -213,9 +213,9 @@ igual ao já apresentado.
 }
 \end{lstlisting}
 
-\section{Arquivo de Conexão (\texttt{sgbd\_config.json})}
+\section{Arquivo de Conexão (\texttt{dbms\_config.json})}
 
-\begin{lstlisting}[style=jsonstyle,caption={Arquivo de conexão completo do cenário e-commerce (\texttt{sgbd\_config.json}).},label={lst:sgbd-config-full}]
+\begin{lstlisting}[style=jsonstyle,caption={Arquivo de conexão completo do cenário e-commerce (\texttt{dbms\_config.json}).},label={lst:dbms-config-full}]
 {
   "version": 1,
 
@@ -227,14 +227,16 @@ igual ao já apresentado.
       "user": "postgres",
       "password": "postgres"
     },
-    "schema": "public"
+    "schema": "public",
+    "start": { "compose": { "file": "../../docker-compose.yml", "service": "postgres" } }
   },
 
   "mongodb": {
     "connection": {
       "uri": "mongodb://127.0.0.1:27017",
       "database": "ecommerce"
-    }
+    },
+    "start": { "compose": { "file": "../../docker-compose.yml", "service": "mongodb" } }
   },
 
   "cassandra": {
@@ -242,11 +244,13 @@ igual ao já apresentado.
       "hosts": ["127.0.0.1"],
       "port": 9042,
       "keyspace": "ecommerce"
-    }
+    },
+    "start": { "compose": { "file": "../../docker-compose.yml", "service": "cassandra" } }
   },
 
   "redis": {
-    "connection": { "host": "127.0.0.1", "port": 6379, "db": 0 }
+    "connection": { "host": "127.0.0.1", "port": 6379, "db": 0 },
+    "start": { "compose": { "file": "../../docker-compose.yml", "service": "redis" } }
   },
 
   "neo4j": {
@@ -255,7 +259,8 @@ igual ao já apresentado.
       "user": "neo4j",
       "password": "password",
       "database": "neo4j"
-    }
+    },
+    "start": { "compose": { "file": "../../docker-compose.yml", "service": "neo4j" } }
   }
 }
 \end{lstlisting}

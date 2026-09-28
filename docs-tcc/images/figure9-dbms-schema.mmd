@@ -1,5 +1,5 @@
 flowchart LR
-    ROOT["sgbd_config (raiz)\nversion*, additionalProperties: false"]
+    ROOT["dbms_config (raiz)\nversion*, additionalProperties: false"]
     ROOT --> PG[postgres]
     ROOT --> MG[mongodb]
     ROOT --> CS[cassandra]
@@ -12,9 +12,17 @@ flowchart LR
     RD --> RDC["connection(host, port, db, password)"]
     NJ --> NJC["connection(uri*, user*,\npassword*, database)"]
 
+    PG -.-> ST
+    MG -.-> ST
+    CS -.-> ST
+    RD -.-> ST
+    NJ -.-> ST
+    ST["start (opcional), um de:\ncommand*\nou compose(file*, service*)"]
+
     style ROOT fill:#dbeafe,stroke:#2563eb,color:#1e293b
     style PGC fill:#fef3c7,stroke:#d97706,color:#1e293b
     style MGC fill:#fef3c7,stroke:#d97706,color:#1e293b
     style CSC fill:#fef3c7,stroke:#d97706,color:#1e293b
     style RDC fill:#fef3c7,stroke:#d97706,color:#1e293b
     style NJC fill:#fef3c7,stroke:#d97706,color:#1e293b
+    style ST fill:#dcfce7,stroke:#16a34a,color:#1e293b

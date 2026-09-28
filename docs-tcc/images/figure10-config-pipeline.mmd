@@ -1,17 +1,17 @@
 flowchart TD
     A["📄 import_config.json\nfontes + mapeamento"] -->|"jsonschema.validate()\nimport_config.schema.json"| B{schema\nválido?}
-    C["📄 sgbd_config.json\ncredenciais e\nendereços"] -->|"jsonschema.validate()\nsgbd_config.schema.json"| D{schema\nválido?}
+    C["📄 dbms_config.json\ncredenciais e\nendereços"] -->|"jsonschema.validate()\ndbms_config.schema.json"| D{schema\nválido?}
 
     B -->|não| E(["❌ ConfigError\nerro de sintaxe ou tipo"])
     D -->|não| E
 
     B -->|sim| F["import_map\n(sources, entidades,\ncolunas, relacionamentos)"]
-    D -->|sim| G["sgbd_map\n(connection, schema/uri...)"]
+    D -->|sim| G["dbms_map\n(connection, schema/uri...)"]
 
-    F --> H["merge_configs()\ntodo SGBD em import_map\nestá declarado em sgbd_map?"]
+    F --> H["merge_configs()\ntodo SGBD em import_map\nestá declarado em dbms_map?"]
     G --> H
 
-    H -->|não| I(["❌ ConfigError\nSGBD não declarado\nem sgbd_config.json"])
+    H -->|não| I(["❌ ConfigError\nSGBD não declarado\nem dbms_config.json"])
     H -->|sim| J["config unificada\n(importação + conexão\npor SGBD)"]
 
     K["📋 CSV(s)"] -->|"load_sources()\ndtype=str + kinds\n(+ fatias por origem)"| L["fontes carregadas\n(DataFrames + _source)"]
