@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 
 def test_cli_flag_hands_over_without_importing_qt(monkeypatch):
     calls = {}
@@ -70,3 +72,27 @@ def test_cli_flag_never_imports_pyside6():
     assert result.returncode == 0, (
         f"stdout={result.stdout!r} stderr={result.stderr!r}"
     )
+
+
+def test_the_icon_files_ship_with_the_package():
+    from polyglotimportcsv.gui.app import ICON_ICO, ICON_PNG
+
+    assert ICON_PNG.is_file() and ICON_PNG.suffix == ".png"
+    assert ICON_ICO.is_file() and ICON_ICO.suffix == ".ico"
+    text = Path("pyproject.toml").read_text(encoding="utf-8")
+    assert '"gui/assets/*"' in text
+
+
+def test_the_frozen_gui_carries_the_icon():
+    text = Path("polyglotimportcsv.spec").read_text(encoding="utf-8")
+    assert "icon='src/polyglotimportcsv/gui/assets/picsv.ico'" in text
+    assert "('src/polyglotimportcsv/gui/assets', 'polyglotimportcsv/gui/assets')" in text
+
+
+def test_the_window_icon_loads(qapp):
+    pytest.importorskip("PySide6")
+    from PySide6.QtGui import QIcon
+
+    from polyglotimportcsv.gui.app import ICON_PNG
+
+    assert not QIcon(str(ICON_PNG)).isNull()

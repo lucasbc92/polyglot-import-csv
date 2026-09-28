@@ -32,7 +32,7 @@ polyglotimportcsv-gui = "polyglotimportcsv.gui.app:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-polyglotimportcsv = ["schemas/*.json"]
+polyglotimportcsv = ["schemas/*.json", "gui/assets/*"]
 
 [tool.pytest.ini_options]
 markers = [
