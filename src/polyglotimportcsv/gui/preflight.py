@@ -62,6 +62,11 @@ class Preflight:
     kind: Optional[str] = None
     declared: Optional[Dict[str, str]] = None
     errors: Dict[str, str] = field(default_factory=dict)
+    #: True when both configuration files are valid and agree with each other,
+    #: which is all ``--check-dbms`` needs: the check reads no CSV. The error
+    #: keys cannot say this, because a CSV header problem is filed under
+    #: "config_path" when no source is overridden.
+    checkable: bool = False
 
 
 def clear_cache() -> None:
@@ -115,7 +120,11 @@ def check(options: RunOptions) -> Preflight:
         if message:
             errors[key] = message
 
-    return Preflight(kind=kind, declared=declared, errors=errors)
+    checkable = not dbms_error and (
+        options.dbms_config_path is None or options.dbms_config_path.is_file()
+    )
+
+    return Preflight(kind=kind, declared=declared, errors=errors, checkable=checkable)
 
 
 # -- steps ----------------------------------------------------------------

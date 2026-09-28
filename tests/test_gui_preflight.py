@@ -313,3 +313,38 @@ def test_the_pure_core_never_imports_qt():
     )
     result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+# -- Preflight.checkable tests -----------------------------------------------
+
+
+def test_a_valid_pair_of_configs_is_checkable(ecommerce):
+    assert _check(ecommerce).checkable
+
+
+def test_a_csv_problem_does_not_block_the_check(ecommerce):
+    (ecommerce / "ecommerce_stock.csv").unlink()
+    result = _check(ecommerce)
+    assert result.errors  # the header check still reports the missing CSV
+    assert result.checkable
+
+
+def test_an_import_config_that_fails_its_schema_is_not_checkable(ecommerce):
+    (ecommerce / "import_config.json").write_text('{"postgres": {}}', encoding="utf-8")
+    assert not _check(ecommerce).checkable
+
+
+def test_a_dbms_config_that_misses_a_target_is_not_checkable(ecommerce):
+    path = ecommerce / "dbms_config.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    del data["neo4j"]
+    path.write_text(json.dumps(data), encoding="utf-8")
+    assert not _check(ecommerce).checkable
+
+
+def test_a_missing_explicit_dbms_config_is_not_checkable(ecommerce):
+    result = preflight.check(RunOptions(
+        config_path=ecommerce / "import_config.json",
+        dbms_config_path=ecommerce / "nao_existe.json",
+    ))
+    assert not result.checkable

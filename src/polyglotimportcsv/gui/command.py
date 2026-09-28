@@ -52,6 +52,20 @@ def build_argv(options: RunOptions) -> List[str]:
     return argv
 
 
+def build_check_argv(options: RunOptions) -> List[str]:
+    """Arguments of "Verificar SGBDs": what ``--check-dbms`` reads, nothing else."""
+    argv = []  # type: List[str]
+    if options.config_path is not None:
+        argv += ["--config", str(options.config_path)]
+    if options.dbms_config_path is not None:
+        argv += ["--dbms-config", str(options.dbms_config_path)]
+    if options.only:
+        argv += ["--only", ",".join(options.only)]
+    argv.append("--check-dbms")
+    argv += ["--log-level", options.log_level]
+    return argv
+
+
 def is_program_token(token: str) -> bool:
     """True when ``token`` names this program rather than one of its options.
 
