@@ -51,6 +51,11 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 _LOG_SEARCH_LIMIT = 4096
 IDLE_STATUS = "Pronto — nenhuma importação em execução"
 INVALID_EDIT_STATUS = "Comando inválido: aspas não fechadas"
+CHECK_OK_STATUS = "Todos os SGBDs estão respondendo"
+CHECK_FAILED_STATUS = "Verificação não passou — veja o console"
+#: Form fields whose errors block "Verificar SGBDs"; the other fields concern
+#: the CSV sources, which the check does not read.
+CHECK_FIELDS = ("config_path", "dbms_config_path", "only")
 
 
 class _PathLabel(QLabel):
@@ -131,11 +136,13 @@ class MainWindow(QMainWindow):
         self._log_search_buffer = ""
         self._log_path_found = False
         self._log_path = None  # type: Optional[Path]
+        self._checking = False
 
         self.config_panel.changed.connect(self._on_config_changed)
         self.options_panel.changed.connect(self.refresh_command)
         self.sources_panel.changed.connect(self.refresh_command)
         self.console_panel.run_requested.connect(self.on_run)
+        self.console_panel.check_requested.connect(self.on_check)
         self.console_panel.stop_requested.connect(self.on_stop)
         self.console_panel.edit_mode_changed.connect(self._on_edit_mode_changed)
         self.console_panel.save_log_requested.connect(self._save_log)
@@ -159,7 +166,7 @@ class MainWindow(QMainWindow):
     def options(self) -> RunOptions:
         return RunOptions(
             config_path=self.config_panel.config_path(),
-            sgbd_config_path=self.config_panel.sgbd_config_path(),
+            dbms_config_path=self.config_panel.dbms_config_path(),
             only=self.options_panel.only(),
             execution=self.options_panel.execution(),
             dry_run=self.options_panel.dry_run(),
@@ -176,14 +183,18 @@ class MainWindow(QMainWindow):
         checked = preflight.check(options)
         # Local errors win: they describe the form itself (a missing path, a
         # repeated name), and the preflight skips whatever they already cover.
+        local = validate(options)
         errors = dict(checked.errors)
-        errors.update(validate(options))
+        errors.update(local)
         self.sources_panel.set_source_kind(checked.kind, checked.declared)
         self.config_panel.set_errors(errors)
         self.options_panel.set_errors(errors)
         self.sources_panel.set_errors(errors)
         self.console_panel.set_command(command_module.to_display(command_module.build_argv(options)))
         self.console_panel.set_run_enabled(not errors)
+        self.console_panel.set_check_enabled(
+            checked.checkable and not any(field in local for field in CHECK_FIELDS)
+        )
 
     def argv_for_run(self) -> List[str]:
         """Full argv to spawn: launcher prefix plus the arguments."""
@@ -198,6 +209,10 @@ class MainWindow(QMainWindow):
             return prefix + [token.strip('"') for token in tokens]
         return prefix + command_module.build_argv(self.options())
 
+    def argv_for_check(self) -> List[str]:
+        """Full argv of "Verificar SGBDs": launcher prefix plus the check arguments."""
+        return launcher.resolve() + command_module.build_check_argv(self.options())
+
     # -- running ----------------------------------------------------------
 
     def on_run(self) -> None:
@@ -210,10 +225,18 @@ class MainWindow(QMainWindow):
         except ValueError:
             self.status_label.setText(INVALID_EDIT_STATUS)
             return
+        self._checking = False
+        self._start(argv, "Executando: {0} …\n".format(" ".join(launcher.resolve())))
+
+    def on_check(self) -> None:
+        argv = self.argv_for_check()
+        shown = command_module.to_display(command_module.build_check_argv(self.options()))
+        self._checking = True
+        self._start(argv, "Verificando: {0}\n".format(shown))
+
+    def _start(self, argv: List[str], header: str) -> None:
         self.console_panel.clear_output()
-        self.console_panel.append_output(
-            "Executando: {0} …\n".format(" ".join(launcher.resolve()))
-        )
+        self.console_panel.append_output(header)
         self._set_form_enabled(False)
         self.console_panel.set_running(True)
         self.log_path_label.setText("")
@@ -223,10 +246,14 @@ class MainWindow(QMainWindow):
         self.console_panel.set_log_available(False)
         self._started_at = time.monotonic()
         self._elapsed_timer.start()
-        self.status_label.setText("Executando — 00:00 decorridos")
+        self._tick()
         self.process.start(argv, self.console_panel.console_columns(), True)
 
     def on_stop(self) -> None:
+        if self._checking:
+            # A check writes nothing: there is nothing to leave half-done.
+            self.process.stop()
+            return
         confirmed = QMessageBox.question(
             self,
             "Interromper a importação",
@@ -280,12 +307,16 @@ class MainWindow(QMainWindow):
         # the final status.
         self.console_panel.flush_output()
         elapsed = time.monotonic() - self._started_at if self._started_at else 0.0
-        if code == 0:
+        if self._checking:
+            self._checking = False
+            self.status_label.setText(CHECK_OK_STATUS if code == 0 else CHECK_FAILED_STATUS)
+        elif code == 0:
             self.status_label.setText("Concluído — {0:.2f} s".format(elapsed))
         else:
             self.status_label.setText("Falhou — código de saída {0}".format(code))
 
     def _on_failed(self, message: str) -> None:
+        self._checking = False
         self._elapsed_timer.stop()
         # I2: same invariant as _on_finished.
         self._set_form_enabled(not self.console_panel.is_editing())
@@ -308,8 +339,9 @@ class MainWindow(QMainWindow):
 
     def _tick(self) -> None:
         elapsed = int(time.monotonic() - self._started_at)
+        verb = "Verificando" if self._checking else "Executando"
         self.status_label.setText(
-            "Executando — {0:02d}:{1:02d} decorridos".format(elapsed // 60, elapsed % 60)
+            "{0} — {1:02d}:{2:02d} decorridos".format(verb, elapsed // 60, elapsed % 60)
         )
 
     # -- internals --------------------------------------------------------
@@ -319,8 +351,8 @@ class MainWindow(QMainWindow):
             panel.setEnabled(enabled)
 
     def _declared_dbms(self) -> Optional[List[str]]:
-        """Names declared in the chosen sgbd_config.json, or None if unreadable."""
-        path = self.config_panel.sgbd_config_path()
+        """Names declared in the chosen dbms_config.json, or None if unreadable."""
+        path = self.config_panel.dbms_config_path()
         if path is None or not path.is_file():
             return None
         try:
@@ -378,11 +410,11 @@ class MainWindow(QMainWindow):
         if splitter_state is not None:
             self.splitter.restoreState(splitter_state)
         last_config = self._settings.value("last_config")
-        last_sgbd = self._settings.value("last_sgbd")
-        if last_config or last_sgbd:
+        last_dbms = self._settings.value("last_dbms")
+        if last_config or last_dbms:
             self.config_panel.set_paths(
                 Path(last_config) if last_config else None,
-                Path(last_sgbd) if last_sgbd else None,
+                Path(last_dbms) if last_dbms else None,
             )
 
     def changeEvent(self, event) -> None:  # noqa: N802 (Qt override)
@@ -409,9 +441,9 @@ class MainWindow(QMainWindow):
         self._settings.setValue("geometry", self.saveGeometry())
         self._settings.setValue("splitter", self.splitter.saveState())
         config = self.config_panel.config_path()
-        sgbd = self.config_panel.sgbd_config_path()
+        dbms = self.config_panel.dbms_config_path()
         self._settings.setValue("last_config", str(config) if config else "")
-        self._settings.setValue("last_sgbd", str(sgbd) if sgbd else "")
+        self._settings.setValue("last_dbms", str(dbms) if dbms else "")
         if self.process.is_running():
             self.process.stop()
         super().closeEvent(event)

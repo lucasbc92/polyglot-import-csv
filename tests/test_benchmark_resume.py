@@ -27,7 +27,7 @@ def _labeled(size, mode, execution, repetition, *, strategy="optimized", seconds
 
 
 def _matrix(tmp_path, seen, **kwargs):
-    def fake_importer(config_path, *, sgbd_config_path, collector, show_data,
+    def fake_importer(config_path, *, dbms_config_path, collector, show_data,
                       only, create_schema, source_overrides, strategy, execution):
         seen.append(execution)
         collector.record("postgres", "products", "write", rows=10, seconds=0.1)
@@ -36,7 +36,7 @@ def _matrix(tmp_path, seen, **kwargs):
     return brun.run_matrix(
         sizes=[1000], modes=["multi"], repetitions=2,
         executions=["materialize", "stream"],
-        sgbd_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+        dbms_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
         seed=1, only=["postgres"], cleaners={},
         importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
         generate=lambda out_dir, rows, seed, mode: None,

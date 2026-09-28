@@ -11,3 +11,13 @@ def _quiet_reporting(monkeypatch):
     yield
     reporting.reset()
     metrics.set_current(None)
+
+
+@pytest.fixture(autouse=True)
+def _dbms_always_up(monkeypatch):
+    """Runner and CLI tests use fake importers and sinks: the DBMS check that
+    precedes every real import must not open sockets. test_dbms_check.py
+    overrides this fixture to exercise the real probe."""
+    from polyglotimportcsv import dbms_check
+
+    monkeypatch.setattr(dbms_check, "probe", lambda endpoint, timeout=2.0: True)

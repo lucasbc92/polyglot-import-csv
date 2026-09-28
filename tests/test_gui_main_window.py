@@ -29,8 +29,8 @@ def config_files(tmp_path):
         }),
         encoding="utf-8",
     )
-    sgbd = tmp_path / "sgbd_config.json"
-    sgbd.write_text(
+    dbms = tmp_path / "dbms_config.json"
+    dbms.write_text(
         json.dumps({
             "version": 1,
             "postgres": {"connection": {"host": "localhost", "port": 5432, "database": "d",
@@ -39,7 +39,7 @@ def config_files(tmp_path):
         }),
         encoding="utf-8",
     )
-    return cfg, sgbd
+    return cfg, dbms
 
 
 @pytest.fixture()
@@ -105,12 +105,12 @@ def test_reactivating_the_window_reruns_preflight_after_an_external_fix(window, 
     """A config fixed in an external editor never changes the QLineEdit text,
     so no ``changed`` signal fires. Reactivating the window must pick up the
     fix anyway, instead of leaving Run disabled with the stale error."""
-    cfg, sgbd = config_files
+    cfg, dbms = config_files
     good = cfg.read_text(encoding="utf-8")
     broken = good.replace('"id":', '"id_errado":')
     cfg.write_text(broken, encoding="utf-8")
 
-    window.config_panel.set_paths(cfg, sgbd)
+    window.config_panel.set_paths(cfg, dbms)
     assert not window.console_panel.run_button.isEnabled()
     assert window.config_panel.error_label.text() != ""
 
@@ -130,8 +130,8 @@ def test_reactivating_the_window_does_not_refresh_while_a_run_is_in_progress(
 ):
     """The Run button doubles as Interromper while a process runs; a
     reactivation-triggered refresh must not touch the form then."""
-    cfg, sgbd = config_files
-    window.config_panel.set_paths(cfg, sgbd)
+    cfg, dbms = config_files
+    window.config_panel.set_paths(cfg, dbms)
     monkeypatch.setattr(window.process, "is_running", lambda: True)
 
     calls = []
@@ -145,8 +145,8 @@ def test_reactivating_the_window_does_not_refresh_while_a_run_is_in_progress(
 def test_reactivating_the_window_does_not_refresh_while_editing_the_console(
     window, config_files
 ):
-    cfg, sgbd = config_files
-    window.config_panel.set_paths(cfg, sgbd)
+    cfg, dbms = config_files
+    window.config_panel.set_paths(cfg, dbms)
     window.console_panel.set_editing(True)
 
     calls = []
@@ -158,8 +158,8 @@ def test_reactivating_the_window_does_not_refresh_while_editing_the_console(
 
 
 def test_reactivating_an_inactive_window_does_not_refresh(window, config_files):
-    cfg, sgbd = config_files
-    window.config_panel.set_paths(cfg, sgbd)
+    cfg, dbms = config_files
+    window.config_panel.set_paths(cfg, dbms)
 
     calls = []
     window.refresh_command = lambda: calls.append(1)
@@ -223,13 +223,13 @@ def test_launcher_prefix_tooltip_is_installed_on_the_console_panel(window):
 
 
 def test_declared_dbms_filter_the_checkboxes(window, config_files):
-    cfg, sgbd = config_files
-    window.config_panel.set_paths(cfg, sgbd)
+    cfg, dbms = config_files
+    window.config_panel.set_paths(cfg, dbms)
     assert window.options_panel.dbms_boxes["postgres"].isEnabled()
     assert not window.options_panel.dbms_boxes["neo4j"].isEnabled()
 
 
-def test_unreadable_sgbd_config_leaves_every_checkbox_enabled(window, tmp_path, config_files):
+def test_unreadable_dbms_config_leaves_every_checkbox_enabled(window, tmp_path, config_files):
     cfg, _ = config_files
     broken = tmp_path / "quebrado.json"
     broken.write_text("{ nao e json", encoding="utf-8")
@@ -514,3 +514,83 @@ def test_clicking_the_log_path_opens_its_folder(window, qtbot, tmp_path):
     window.open_folder = opened.append
     qtbot.mouseClick(window.log_path_label, Qt.LeftButton)
     assert opened == [log.parent]
+
+
+def test_check_is_available_with_valid_configs_even_when_a_csv_is_missing(
+    window, config_files, tmp_path
+):
+    cfg, dbms = config_files
+    (tmp_path / "items.csv").unlink()
+    window.config_panel.set_paths(cfg, dbms)
+    assert not window.console_panel.run_button.isEnabled()
+    assert window.console_panel.check_button.isEnabled()
+
+
+def test_check_is_unavailable_without_a_valid_import_config(window, tmp_path):
+    assert not window.console_panel.check_button.isEnabled()
+    window.config_panel.set_paths(tmp_path / "ausente.json", None)
+    assert not window.console_panel.check_button.isEnabled()
+
+
+def test_argv_for_check_uses_the_launcher_prefix(window, config_files):
+    cfg, dbms = config_files
+    window.config_panel.set_paths(cfg, dbms)
+    argv = window.argv_for_check()
+    prefix = launcher.resolve()
+    assert argv[:len(prefix)] == prefix
+    assert argv[len(prefix):len(prefix) + 2] == ["--config", str(cfg)]
+    assert argv[-3:] == ["--check-dbms", "--log-level", "INFO"]
+
+
+def _run_fake_check(qtbot, window, monkeypatch, exit_code):
+    import sys
+
+    fake_cli = Path(__file__).parent / "gui_fake_cli.py"
+    monkeypatch.setattr(
+        window, "argv_for_check", lambda: [sys.executable, str(fake_cli), str(exit_code)]
+    )
+    with qtbot.waitSignal(window.process.finished, timeout=15000):
+        window.on_check()
+
+
+def test_a_passing_check_says_so_in_the_status_bar(qtbot, window, config_files, monkeypatch):
+    cfg, dbms = config_files
+    window.config_panel.set_paths(cfg, dbms)
+    _run_fake_check(qtbot, window, monkeypatch, 0)
+    qtbot.waitUntil(lambda: "Todos os SGBDs estão respondendo" in window.status_label.text(),
+                    timeout=5000)
+    text = window.console_panel.log_view.toPlainText()
+    assert text.startswith("Verificando: polyglotimportcsv")
+    assert "--check-dbms" in text.splitlines()[0]
+    assert "primeira linha" in text  # the child's own output follows
+
+
+def test_a_failing_check_says_so_in_the_status_bar(qtbot, window, config_files, monkeypatch):
+    cfg, dbms = config_files
+    window.config_panel.set_paths(cfg, dbms)
+    _run_fake_check(qtbot, window, monkeypatch, 1)
+    qtbot.waitUntil(lambda: "Verificação não passou" in window.status_label.text(), timeout=5000)
+    assert window.config_panel.isEnabled()
+    assert "Executar" in window.console_panel.run_button.text()
+
+
+def test_a_run_after_a_check_reports_like_a_run(window, config_files):
+    cfg, _ = config_files
+    window.config_panel.set_paths(cfg, None)
+    window._checking = True
+    window._on_finished(1)
+    assert "Verificação não passou" in window.status_label.text()
+    window._on_finished(0)
+    assert "Concluído" in window.status_label.text()
+
+
+def test_stopping_a_check_does_not_ask_for_confirmation(window, monkeypatch):
+    window._checking = True
+    monkeypatch.setattr(
+        "polyglotimportcsv.gui.widgets.main_window.QMessageBox.question",
+        lambda *a, **k: pytest.fail("a check writes nothing: no confirmation"),
+    )
+    stopped = []
+    monkeypatch.setattr(window.process, "stop", lambda: stopped.append(1))
+    window.on_stop()
+    assert stopped == [1]

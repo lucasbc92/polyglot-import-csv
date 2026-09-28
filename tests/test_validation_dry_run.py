@@ -39,7 +39,7 @@ def test_unknown_source_raises(tmp_path):
         '{"sources": {"s": "missing.csv"}, "redis": {"entities": {"x": {}}}}',
         encoding="utf-8",
     )
-    (tmp_path / "sgbd_config.json").write_text(
+    (tmp_path / "dbms_config.json").write_text(
         '{"version": 1, "redis": {"connection": {"host": "h"}}}', encoding="utf-8"
     )
     with pytest.raises(SourceError):
@@ -54,7 +54,7 @@ def test_unresolvable_entity_raises(tmp_path):
         '{"sources": {"s": "s.csv"}, "redis": {"entities": {"nomatch": {}}}}',
         encoding="utf-8",
     )
-    (tmp_path / "sgbd_config.json").write_text(
+    (tmp_path / "dbms_config.json").write_text(
         '{"version": 1, "redis": {"connection": {"host": "h"}}}', encoding="utf-8"
     )
     with pytest.raises(MappingError):

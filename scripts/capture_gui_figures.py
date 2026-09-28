@@ -1,4 +1,4 @@
-"""Recapture the four GUI figures of the TCC report, from the real window.
+"""Recapture the five GUI figures of the TCC report, from the real window.
 
 The first round of figures was captured by hand, which is why they kept a
 rendering defect (checkbox and radio indicators painted as nothing) long after
@@ -9,6 +9,10 @@ would raise. Nothing is mocked.
 
 Figures 12-14 are one ``--dry-run``, so no database has to be up; figure 15
 never runs at all, because the pre-run validation blocks it.
+
+Figure 16 is a real ``--check-dbms`` run from the "Verificar SGBDs" button,
+with the example stack up except MongoDB and Neo4j
+(``docker compose stop mongodb neo4j``); the script refuses to run otherwise.
 
 Usage, from the repository root::
 
@@ -29,6 +33,8 @@ from pathlib import Path
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication
 
+from polyglotimportcsv.config_parser import load_dbms_config
+from polyglotimportcsv.dbms_check import check_dbms
 from polyglotimportcsv.gui import indicators
 from polyglotimportcsv.gui.style import STYLESHEET
 from polyglotimportcsv.gui.widgets.main_window import MainWindow
@@ -38,7 +44,11 @@ DATA = REPO / "data" / "ecommerce"
 IMAGES = REPO / "docs-tcc" / "images"
 CONFIG = DATA / "import_config.json"
 INVALID = DATA / "import_config_invalido.json"
-SGBD = DATA / "sgbd_config.json"
+DBMS = DATA / "dbms_config.json"
+DBMS_WINDOWS = DATA / "dbms_config_windows.json"
+#: Stopped on purpose for figure 16: docker compose stop mongodb neo4j.
+STOPPED = {"mongodb", "neo4j"}
+TARGETS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
 SIZE = (1240, 1020)
 #: Form/console split of the published figures. A fresh QSettings has no saved
 #: splitter position, and the default one leaves the console too short to show
@@ -76,7 +86,7 @@ def pump_until_idle(app: QApplication, window: MainWindow, limit: float = 90.0) 
     pump(app, 0.4)  # let the final chunk render and the status settle
 
 
-def new_window(app: QApplication, settings_path: Path, config: Path) -> MainWindow:
+def new_window(app: QApplication, settings_path: Path, config: Path, dbms: Path = DBMS) -> MainWindow:
     """A window in the state shared by every figure, minus the run itself.
 
     The throwaway QSettings keeps the capture independent of whatever paths the
@@ -86,7 +96,7 @@ def new_window(app: QApplication, settings_path: Path, config: Path) -> MainWind
     settings = QSettings(str(settings_path), QSettings.IniFormat)
     settings.clear()
     window = MainWindow(settings=settings)
-    window.config_panel.set_paths(config, SGBD)
+    window.config_panel.set_paths(config, dbms)
     window._on_config_changed()
     window.options_panel.dry_run_box.setChecked(True)
     window.resize(*SIZE)
@@ -107,11 +117,27 @@ def grab(window: MainWindow, name: str) -> None:
     print("  {0} — {1}".format(name, window.status_label.text()))
 
 
+def ready_for_figure_16() -> bool:
+    """Figure 16 needs the example stack up with exactly STOPPED down."""
+    report = check_dbms(TARGETS, load_dbms_config(DBMS_WINDOWS), DBMS_WINDOWS)
+    down = {status.dbms for status in report.statuses if status.state != "up"}
+    return down == STOPPED
+
+
 def main() -> int:
-    for path in (CONFIG, INVALID, SGBD):
+    for path in (CONFIG, INVALID, DBMS, DBMS_WINDOWS):
         if not path.is_file():
             print("missing: {0}".format(path), file=sys.stderr)
             return 1
+
+    if not ready_for_figure_16():
+        print(
+            "figure 16 needs the example stack up with only MongoDB and Neo4j stopped:\n"
+            "  docker compose up -d --wait\n"
+            "  docker compose stop mongodb neo4j",
+            file=sys.stderr,
+        )
+        return 1
 
     app = QApplication([sys.argv[0]])
     indicators.install(app)
@@ -148,6 +174,19 @@ def main() -> int:
         assert failing.config_panel.error_label.text(), "the schema error must be shown"
         grab(failing, "figure15-gui-erro.png")
         failing.hide()
+
+        # Figure 16: "Verificar SGBDs" with the Windows connection file while
+        # MongoDB and Neo4j are stopped: the states, the net start commands and
+        # the status bar saying the check did not pass.
+        checking = new_window(app, settings_path, CONFIG, DBMS_WINDOWS)
+        checking.options_panel.dry_run_box.setChecked(False)
+        app.processEvents()
+        assert checking.console_panel.check_button.isEnabled(), "the check must be offered"
+        checking.on_check()
+        pump_until_idle(app, checking)
+        assert "Verificação não passou" in checking.status_label.text()
+        grab(checking, "figure16-gui-verificacao.png")
+        checking.hide()
     return 0
 
 

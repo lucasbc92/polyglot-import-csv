@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from polyglotimportcsv.gui.command import build_argv, classify, is_program_token, to_display
+from polyglotimportcsv.gui.command import build_argv, build_check_argv, classify, is_program_token, to_display
 from polyglotimportcsv.gui.state import RunOptions
 
 CFG = Path("/proj/import_config.json")
@@ -26,10 +26,10 @@ def test_the_default_state_spells_every_option_out():
     ]
 
 
-def test_sgbd_config_is_emitted_when_set():
-    sgbd = Path("/proj/sgbd.json")
-    argv = build_argv(RunOptions(config_path=CFG, sgbd_config_path=sgbd))
-    assert argv[2:4] == ["--sgbd-config", str(sgbd)]
+def test_dbms_config_is_emitted_when_set():
+    dbms = Path("/proj/dbms.json")
+    argv = build_argv(RunOptions(config_path=CFG, dbms_config_path=dbms))
+    assert argv[2:4] == ["--dbms-config", str(dbms)]
 
 
 def test_only_is_comma_joined():
@@ -95,11 +95,11 @@ def test_argv_follows_the_order_of_the_spec_table():
     which is true of any deterministic function and would have passed with the
     flags emitted in any order at all.
     """
-    sgbd = Path("/proj/sgbd.json")
+    dbms = Path("/proj/dbms.json")
     source = Path("/proj/dados.csv")
     options = RunOptions(
         config_path=CFG,
-        sgbd_config_path=sgbd,
+        dbms_config_path=dbms,
         only=("postgres", "redis"),
         execution="materialize",
         dry_run=True,
@@ -110,7 +110,7 @@ def test_argv_follows_the_order_of_the_spec_table():
     )
     assert build_argv(options) == [
         "--config", str(CFG),
-        "--sgbd-config", str(sgbd),
+        "--dbms-config", str(dbms),
         "--only", "postgres,redis",
         "--strategy", "optimized",
         "--execution", "materialize",
@@ -235,3 +235,25 @@ def test_classify_without_the_program_name_has_no_program_span():
 def test_classify_tolerates_an_unclosed_quote_while_typing():
     spans = classify('polyglotimportcsv --config "C:\\sem fim')
     assert [k for _, _, k in spans] == ["program", "option", "value"]
+
+
+# -- build_check_argv tests -------------------------------------------------
+
+
+def test_build_check_argv_keeps_only_what_the_check_uses():
+    dbms = Path("/proj/dbms.json")
+    options = RunOptions(
+        config_path=CFG, dbms_config_path=dbms, only=("redis", "neo4j"),
+        dry_run=True, execution="materialize", log_level="DEBUG", show_data=True,
+        sources=(("stock", Path("/x.csv")),),
+    )
+    assert build_check_argv(options) == [
+        "--config", str(CFG), "--dbms-config", str(dbms),
+        "--only", "redis,neo4j", "--check-dbms", "--log-level", "DEBUG",
+    ]
+
+
+def test_build_check_argv_with_defaults():
+    assert build_check_argv(RunOptions(config_path=CFG)) == [
+        "--config", str(CFG), "--check-dbms", "--log-level", "INFO",
+    ]

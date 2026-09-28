@@ -123,7 +123,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--strategy", default="optimized",
                         help="Strategy: naive or optimized (default: optimized).")
     parser.add_argument("--seed", type=int, default=42, help="Generator seed (default: 42).")
-    parser.add_argument("--sgbd-config", type=Path, default=Path("data/ecommerce/sgbd_config.json"))
+    parser.add_argument("--dbms-config", type=Path, default=Path("data/ecommerce/dbms_config.json"))
     parser.add_argument("--config-dir", type=Path, default=Path("data/ecommerce"))
     parser.add_argument("--data-dir", type=Path, default=Path("data/benchmark/generated"))
     parser.add_argument("--log-level", default="WARNING",
@@ -138,7 +138,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return run_matrix(
             sizes=[args.size], modes=[args.mode], repetitions=1,
             strategies=[args.strategy], executions=executions,
-            sgbd_config_path=args.sgbd_config, config_dir=args.config_dir,
+            dbms_config_path=args.dbms_config, config_dir=args.config_dir,
             data_dir=args.data_dir, seed=args.seed, only=only,
             cleaners=CLEANERS, importer=run_import, load_cfg=load_config,
             trace_memory=trace_memory,

@@ -385,3 +385,28 @@ def test_a_disabled_run_button_does_not_look_enabled(qtbot):
     finally:
         app.setStyleSheet(previous)
     assert enabled != disabled, "a disabled run button must not keep the accent fill"
+
+
+def test_check_button_emits_check_requested(qtbot):
+    panel = ConsolePanel()
+    qtbot.addWidget(panel)
+    panel.set_check_enabled(True)
+    with qtbot.waitSignal(panel.check_requested, timeout=1000):
+        panel.check_button.click()
+
+
+def test_check_button_follows_running_editing_and_the_form(qtbot):
+    panel = ConsolePanel()
+    qtbot.addWidget(panel)
+    panel.set_check_enabled(True)
+    assert panel.check_button.isEnabled()
+    panel.set_running(True)
+    assert not panel.check_button.isEnabled()
+    panel.set_running(False)
+    assert panel.check_button.isEnabled()
+    panel.set_editing(True)
+    assert not panel.check_button.isEnabled()
+    panel.set_editing(False)
+    assert panel.check_button.isEnabled()
+    panel.set_check_enabled(False)
+    assert not panel.check_button.isEnabled()

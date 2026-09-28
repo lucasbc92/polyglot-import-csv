@@ -13,7 +13,7 @@ apresentados nas respectivas subseções do capítulo~4.
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://polyglot-import-csv.local/schemas/import_config.schema.json",
   "title": "PolyglotImportCSV import configuration",
-  "description": "Declarative mapping from named CSV sources to entities and relationships of one or more SGBDs. Connection settings live in the separate SGBD configuration.",
+  "description": "Declarative mapping from named CSV sources to entities and relationships of one or more DBMSs. Connection settings live in the separate DBMS configuration.",
   "type": "object",
   "required": ["sources"],
   "properties": {
@@ -36,11 +36,11 @@ apresentados nas respectivas subseções do capítulo~4.
         ]
       }
     },
-    "postgres":  { "$ref": "#/$defs/postgresMapping" },
-    "mongodb":   { "$ref": "#/$defs/mongoMapping" },
+    "postgres": { "$ref": "#/$defs/postgresMapping" },
+    "mongodb": { "$ref": "#/$defs/mongoMapping" },
     "cassandra": { "$ref": "#/$defs/cassandraMapping" },
-    "redis":     { "$ref": "#/$defs/redisMapping" },
-    "neo4j":     { "$ref": "#/$defs/neo4jMapping" }
+    "redis": { "$ref": "#/$defs/redisMapping" },
+    "neo4j": { "$ref": "#/$defs/neo4jMapping" }
   },
   "additionalProperties": false,
   "$defs": {
@@ -55,7 +55,7 @@ apresentados nas respectivas subseções do capítulo~4.
         "csv_column": {
           "description": "CSV header name or 1-based data-column index when it differs from the JSON key.",
           "oneOf": [
-            { "type": "string",  "minLength": 1 },
+            { "type": "string", "minLength": 1 },
             { "type": "integer", "minimum": 1 }
           ]
         },
@@ -87,10 +87,10 @@ apresentados nas respectivas subseções do capítulo~4.
       "description": "Row predicate applied to the full CSV before materialization.",
       "required": ["column", "operator"],
       "properties": {
-        "column":        { "type": "string", "minLength": 1 },
+        "column": { "type": "string", "minLength": 1 },
         "operator": {
           "type": "string",
-          "enum": ["==","!=",">","<",">=","<=","in","not_in","each"]
+          "enum": ["==", "!=", ">", "<", ">=", "<=", "in", "not_in", "each"]
         },
         "value": {},
         "target_suffix": {
@@ -160,11 +160,11 @@ apresentados nas respectivas subseções do capítulo~4.
           "type": "object",
           "additionalProperties": {
             "type": "object",
-            "required": ["from","to","foreign_key"],
+            "required": ["from", "to", "foreign_key"],
             "properties": {
-              "from":           { "type": "string" },
-              "to":             { "type": "string" },
-              "foreign_key":    { "type": "string" },
+              "from": { "type": "string" },
+              "to": { "type": "string" },
+              "foreign_key": { "type": "string" },
               "references_key": { "type": "string" }
             },
             "additionalProperties": false
@@ -218,10 +218,10 @@ apresentados nas respectivas subseções do capítulo~4.
           "type": "object",
           "additionalProperties": {
             "type": "object",
-            "required": ["from","to","type"],
+            "required": ["from", "to", "type"],
             "properties": {
               "from": { "type": "string" },
-              "to":   { "type": "string" },
+              "to": { "type": "string" },
               "type": { "type": "string" },
               "columns": {
                 "type": "object",
@@ -238,14 +238,14 @@ apresentados nas respectivas subseções do capítulo~4.
 }
 \end{lstlisting}
 
-\section{Schema de Conexão (\texttt{sgbd\_config.schema.json})}
+\section{Schema de Conexão (\texttt{dbms\_config.schema.json})}
 
 \begin{lstlisting}[style=jsonstyle]
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://polyglot-import-csv.local/schemas/sgbd_config.schema.json",
-  "title": "PolyglotImportCSV SGBD connection configuration",
-  "description": "Connection settings for each SGBD. Lists which SGBDs are available; the import configuration may only target SGBDs declared here.",
+  "$id": "https://polyglot-import-csv.local/schemas/dbms_config.schema.json",
+  "title": "PolyglotImportCSV DBMS connection configuration",
+  "description": "Connection settings for each DBMS. Lists which DBMSs are available; the import configuration may only target DBMSs declared here.",
   "type": "object",
   "required": ["version"],
   "properties": {
@@ -254,11 +254,11 @@ apresentados nas respectivas subseções do capítulo~4.
       "minimum": 1,
       "description": "Configuration format version."
     },
-    "postgres":  { "$ref": "#/$defs/postgresConnection" },
-    "mongodb":   { "$ref": "#/$defs/mongoConnection" },
+    "postgres": { "$ref": "#/$defs/postgresConnection" },
+    "mongodb": { "$ref": "#/$defs/mongoConnection" },
     "cassandra": { "$ref": "#/$defs/cassandraConnection" },
-    "redis":     { "$ref": "#/$defs/redisConnection" },
-    "neo4j":     { "$ref": "#/$defs/neo4jConnection" }
+    "redis": { "$ref": "#/$defs/redisConnection" },
+    "neo4j": { "$ref": "#/$defs/neo4jConnection" }
   },
   "additionalProperties": false,
   "$defs": {
@@ -268,10 +268,10 @@ apresentados nas respectivas subseções do capítulo~4.
         "connection": {
           "type": "object",
           "properties": {
-            "host":     { "type": "string" },
-            "port":     { "type": "integer" },
+            "host": { "type": "string" },
+            "port": { "type": "integer" },
             "database": { "type": "string" },
-            "user":     { "type": "string" },
+            "user": { "type": "string" },
             "password": { "type": "string" }
           },
           "additionalProperties": false
@@ -280,7 +280,8 @@ apresentados nas respectivas subseções do capítulo~4.
           "type": "string",
           "default": "public",
           "description": "Target schema for created tables."
-        }
+        },
+        "start": { "$ref": "#/$defs/start" }
       },
       "additionalProperties": false
     },
@@ -290,12 +291,13 @@ apresentados nas respectivas subseções do capítulo~4.
         "connection": {
           "type": "object",
           "properties": {
-            "uri":      { "type": "string" },
+            "uri": { "type": "string" },
             "database": { "type": "string" }
           },
-          "required": ["uri","database"],
+          "required": ["uri", "database"],
           "additionalProperties": false
-        }
+        },
+        "start": { "$ref": "#/$defs/start" }
       },
       "additionalProperties": false
     },
@@ -305,16 +307,16 @@ apresentados nas respectivas subseções do capítulo~4.
         "connection": {
           "type": "object",
           "properties": {
-            "hosts":            { "type": "array", "items": { "type": "string" } },
-            "port":             { "type": "integer" },
-            "keyspace":         { "type": "string" },
+            "hosts": { "type": "array", "items": { "type": "string" } },
+            "port": { "type": "integer" },
+            "keyspace": { "type": "string" },
             "protocol_version": { "type": "integer" },
-            "request_timeout":  { "type": "number", "exclusiveMinimum": 0,
-                                  "description": "Client-side request timeout in seconds (default 30); the driver's 10s default is short for a bulk load." }
+            "request_timeout": { "type": "number", "exclusiveMinimum": 0, "description": "Client-side request timeout in seconds (default 30). The driver's own default of 10s is short for a bulk load." }
           },
-          "required": ["hosts","keyspace"],
+          "required": ["hosts", "keyspace"],
           "additionalProperties": false
-        }
+        },
+        "start": { "$ref": "#/$defs/start" }
       },
       "additionalProperties": false
     },
@@ -324,13 +326,14 @@ apresentados nas respectivas subseções do capítulo~4.
         "connection": {
           "type": "object",
           "properties": {
-            "host":     { "type": "string" },
-            "port":     { "type": "integer" },
-            "db":       { "type": "integer" },
+            "host": { "type": "string" },
+            "port": { "type": "integer" },
+            "db": { "type": "integer" },
             "password": { "type": "string" }
           },
           "additionalProperties": false
-        }
+        },
+        "start": { "$ref": "#/$defs/start" }
       },
       "additionalProperties": false
     },
@@ -340,16 +343,46 @@ apresentados nas respectivas subseções do capítulo~4.
         "connection": {
           "type": "object",
           "properties": {
-            "uri":      { "type": "string" },
-            "user":     { "type": "string" },
+            "uri": { "type": "string" },
+            "user": { "type": "string" },
             "password": { "type": "string" },
             "database": { "type": "string" }
           },
-          "required": ["uri","user","password"],
+          "required": ["uri", "user", "password"],
           "additionalProperties": false
-        }
+        },
+        "start": { "$ref": "#/$defs/start" }
       },
       "additionalProperties": false
+    },
+    "start": {
+      "description": "How to start this DBMS when it does not answer. Shown to the user, never executed.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "command": { "type": "string", "minLength": 1, "description": "Command line that starts a DBMS installed on this machine." }
+          },
+          "required": ["command"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "compose": {
+              "type": "object",
+              "properties": {
+                "file": { "type": "string", "minLength": 1, "description": "Docker Compose file, relative to this configuration file's folder." },
+                "service": { "type": "string", "minLength": 1, "description": "Service of that file that runs this DBMS." }
+              },
+              "required": ["file", "service"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["compose"],
+          "additionalProperties": false
+        }
+      ]
     }
   }
 }
