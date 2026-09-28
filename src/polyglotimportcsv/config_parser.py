@@ -108,6 +108,15 @@ def merge_configs(
     return merged
 
 
+def resolve_dbms_config_path(
+    import_path: Union[str, Path], dbms_path: Optional[Union[str, Path]] = None
+) -> Path:
+    """``dbms_path``, or ``dbms_config.json`` next to the import configuration."""
+    if dbms_path is None:
+        return Path(import_path).with_name(DEFAULT_DBMS_CONFIG_NAME)
+    return Path(dbms_path)
+
+
 def load_config(
     import_path: Union[str, Path],
     dbms_path: Optional[Union[str, Path]] = None,
@@ -118,8 +127,7 @@ def load_config(
     import configuration is used.
     """
     import_path = Path(import_path)
-    if dbms_path is None:
-        dbms_path = import_path.with_name(DEFAULT_DBMS_CONFIG_NAME)
+    dbms_path = resolve_dbms_config_path(import_path, dbms_path)
 
     import_cfg = load_import_config(import_path)
     dbms_cfg = load_dbms_config(dbms_path)

@@ -9,6 +9,7 @@ from polyglotimportcsv.config_parser import (
     load_config,
     load_dbms_config,
     merge_configs,
+    resolve_dbms_config_path,
     validate_import_config_schema,
     validate_dbms_config,
 )
@@ -189,3 +190,9 @@ def test_merge_does_not_carry_start_into_the_import_structure():
     merged = merge_configs(import_cfg, dbms_cfg)
     assert "start" not in merged["postgres"]
     assert merged["postgres"]["connection"] == {"host": "h"}
+
+
+def test_resolve_dbms_config_path_defaults_next_to_the_import_config(tmp_path):
+    cfg = tmp_path / "import_config.json"
+    assert resolve_dbms_config_path(cfg) == tmp_path / "dbms_config.json"
+    assert resolve_dbms_config_path(cfg, "other.json") == Path("other.json")

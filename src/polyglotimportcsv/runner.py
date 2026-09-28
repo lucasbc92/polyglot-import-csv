@@ -8,11 +8,23 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 import pandas as pd
+from rich import box
+from rich.table import Table
 from rich.text import Text
 
 from polyglotimportcsv import metrics
-from polyglotimportcsv.config_parser import load_config
+from polyglotimportcsv.business_exception import DbmsUnavailableError
+from polyglotimportcsv.config_parser import load_config, load_dbms_config, resolve_dbms_config_path
 from polyglotimportcsv.data_preview import StreamDataPreview
+from polyglotimportcsv.dbms_check import (
+    DOWN,
+    INVALID,
+    UP,
+    DbmsCheckReport,
+    check_dbms,
+    format_endpoint,
+    not_ready_message,
+)
 from polyglotimportcsv.dbms_sink import SinkFactory
 from polyglotimportcsv.importers import default_importer_registry
 from polyglotimportcsv.importers.base import ImporterRegistry
@@ -42,6 +54,85 @@ def _print_backend_line(line: str) -> None:
     out = Text("  ")
     out.append_text(backend_text(line))
     print_rich(out)
+
+
+_STATE_STYLE = {UP: "green", DOWN: "red", INVALID: "red"}
+
+
+def _dbms_targets(config: Dict, only: Optional[Iterable[str]]) -> List[str]:
+    """The DBMS the import would write to: those configured, narrowed by --only."""
+    only_set = {x.strip().lower() for x in only if x and str(x).strip()} if only else set()
+    return [b for b in BACKENDS if b in config and (not only_set or b in only_set)]
+
+
+def _print_command(line: str) -> None:
+    # Never wrapped: a line break inside a command would be pasted along with it.
+    print_rich(Text("      " + line, style="bold", no_wrap=True, overflow="ignore"))
+
+
+def _print_dbms_check(report: DbmsCheckReport, dbms_config_path: Path) -> None:
+    # box.SQUARE for the same reason as metrics_table: the GUI font lacks the
+    # heavy box glyphs.
+    table = Table(header_style="bold", box=box.SQUARE)
+    table.add_column("DBMS")
+    table.add_column("Endpoint")
+    table.add_column("Status")
+    for status in report.statuses:
+        where = ", ".join(format_endpoint(e) for e in status.endpoints) or "—"
+        table.add_row(status.dbms, where, Text(status.state, style=_STATE_STYLE[status.state]))
+    print_rich(table)
+    if report.fixes:
+        note(f"Fix the connection settings in {dbms_config_path.name}:")
+        for line in report.fixes:
+            _print_command(line)
+    if report.starts:
+        note("To start the DBMS that are down, run in a terminal:")
+        for line in report.starts:
+            _print_command(line)
+        if report.service_commands:
+            note("Service commands (net start, systemctl) may need an administrator terminal or sudo.")
+
+
+def _check_dbms_step(
+    config_path: Path,
+    dbms_config_path: Optional[str | Path],
+    config: Dict,
+    only: Optional[Iterable[str]],
+) -> DbmsCheckReport:
+    step("Check DBMS")
+    path = resolve_dbms_config_path(config_path, dbms_config_path)
+    report = check_dbms(_dbms_targets(config, only), load_dbms_config(path), path)
+    _print_dbms_check(report, path)
+    return report
+
+
+def _require_dbms(
+    config_path: Path,
+    dbms_config_path: Optional[str | Path],
+    config: Dict,
+    only: Optional[Iterable[str]],
+) -> None:
+    """Stop before any CSV is read when a target DBMS is not ready."""
+    report = _check_dbms_step(config_path, dbms_config_path, config, only)
+    if not report.ok:
+        raise DbmsUnavailableError(not_ready_message(report))
+
+
+def run_check(
+    config_path: str | Path,
+    *,
+    dbms_config_path: Optional[str | Path] = None,
+    only: Optional[Iterable[str]] = None,
+) -> DbmsCheckReport:
+    """Check the DBMS the import would use and return the report (CLI --check-dbms)."""
+    config_path = Path(config_path)
+    banner("Polyglot Import CSV", subtitle="mode: check")
+    step("Load config", str(config_path))
+    config = load_config(config_path, dbms_config_path)
+    report = _check_dbms_step(config_path, dbms_config_path, config, only)
+    if report.ok:
+        success("All target DBMS are up")
+    return report
 
 
 def run_import(
@@ -144,6 +235,7 @@ def _run_stream(
     config = load_config(config_path, dbms_config_path)
     backends_in_cfg = [b for b in BACKENDS if b in config]
     note(f"{len(backends_in_cfg)} backend(s) configured: {', '.join(backends_in_cfg)}")
+    _require_dbms(config_path, dbms_config_path, config, only)
 
     if strategy == "naive":
         note("streaming always uses the optimized (vectorized/batched) path; "
@@ -202,6 +294,8 @@ def _run(
     config = load_config(config_path, dbms_config_path)
     backends_in_cfg = [b for b in BACKENDS if b in config]
     note(f"{len(backends_in_cfg)} backend(s) configured: {', '.join(backends_in_cfg)}")
+    if not dry_run:
+        _require_dbms(config_path, dbms_config_path, config, only)
 
     step("Load sources")
     read_start = time.perf_counter()
