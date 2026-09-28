@@ -2,13 +2,32 @@
 
 from __future__ import annotations
 
+import socket
+import time
+
 import pytest
 from neo4j import GraphDatabase
 from pymongo import MongoClient
 from pymongo.errors import ConfigurationError
 
 from polyglotimportcsv import dbms_check
-from polyglotimportcsv.dbms_check import InvalidConnectionError, endpoints, format_endpoint
+from polyglotimportcsv.dbms_check import (
+    DOWN,
+    INVALID,
+    UP,
+    InvalidConnectionError,
+    check_dbms,
+    endpoints,
+    format_endpoint,
+    not_ready_message,
+    probe,
+)
+
+
+@pytest.fixture(autouse=True)
+def _dbms_always_up():
+    """Overrides the conftest stub: this module tests the real probe."""
+    yield
 
 
 def _mongo(uri):
@@ -164,3 +183,127 @@ def test_format_endpoint():
     assert format_endpoint(("127.0.0.1", 5432)) == "127.0.0.1:5432"
     assert format_endpoint(("::1", 27017)) == "[::1]:27017"
     assert format_endpoint("/tmp/mongodb-27017.sock") == "/tmp/mongodb-27017.sock"
+
+
+# -- probe --------------------------------------------------------------------
+
+
+def test_probe_is_true_for_a_listening_socket():
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    try:
+        assert probe(server.getsockname(), timeout=1.0) is True
+    finally:
+        server.close()
+
+
+def test_probe_is_false_for_a_closed_port():
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+    assert probe(("127.0.0.1", port), timeout=0.5) is False
+
+
+def test_probe_is_false_for_an_out_of_range_port():
+    assert probe(("127.0.0.1", 70000), timeout=0.5) is False
+
+
+def test_probe_is_false_for_a_missing_unix_socket(tmp_path):
+    assert probe(str(tmp_path / "none.sock"), timeout=0.5) is False
+
+
+# -- check_dbms ---------------------------------------------------------------
+
+ALL = ["postgres", "mongodb", "cassandra", "redis", "neo4j"]
+
+
+def _cfg():
+    return {
+        "version": 1,
+        "postgres": {"connection": {"host": "127.0.0.1", "port": 5432},
+                     "start": {"command": "net start postgresql-x64-16"}},
+        "mongodb": {"connection": {"uri": "mongodb://127.0.0.1:27017", "database": "d"},
+                    "start": {"compose": {"file": "../docker-compose.yml", "service": "mongodb"}}},
+        "cassandra": {"connection": {"hosts": ["10.0.0.1", "10.0.0.2"], "keyspace": "k"},
+                      "start": {"compose": {"file": "../docker-compose.yml", "service": "cassandra"}}},
+        "redis": {"connection": {}},
+        "neo4j": {"connection": {"uri": "http://h", "user": "u", "password": "p"},
+                  "start": {"command": "net start neo4j"}},
+    }
+
+
+def test_check_reports_each_state_and_what_to_do(tmp_path):
+    path = tmp_path / "cfg" / "dbms_config.json"
+    answering = {("127.0.0.1", 5432), ("10.0.0.2", 9042)}
+    report = check_dbms(ALL, _cfg(), path, probe_fn=lambda ep: ep in answering)
+
+    assert {s.dbms: s.state for s in report.statuses} == {
+        "postgres": UP, "mongodb": DOWN, "cassandra": UP, "redis": DOWN, "neo4j": INVALID,
+    }
+    assert [s.dbms for s in report.statuses] == ALL
+    assert not report.ok
+    compose = (tmp_path / "docker-compose.yml").resolve()
+    assert report.starts == (
+        'docker compose -f "{0}" up -d --wait mongodb'.format(compose),
+        'redis: start the DBMS service, or declare "start" for it in dbms_config.json',
+    )
+    assert len(report.fixes) == 1
+    assert report.fixes[0].startswith("neo4j: invalid connection (")
+    assert report.fixes[0].endswith('Fix "connection" for it in dbms_config.json')
+    # The only command-type start (neo4j) belongs to an INVALID DBMS, not a DOWN one.
+    assert report.service_commands is False
+
+
+def test_compose_services_of_one_file_share_one_command(tmp_path):
+    path = tmp_path / "cfg" / "dbms_config.json"
+    report = check_dbms(["postgres", "mongodb", "cassandra"], _cfg(), path, probe_fn=lambda ep: False)
+    compose = (tmp_path / "docker-compose.yml").resolve()
+    assert report.starts == (
+        "net start postgresql-x64-16",
+        'docker compose -f "{0}" up -d --wait mongodb cassandra'.format(compose),
+    )
+    assert report.service_commands is True
+
+
+def test_hints_name_the_dbms_config_actually_used(tmp_path):
+    path = tmp_path / "dbms_config_windows.json"
+    report = check_dbms(["redis", "neo4j"], _cfg(), path, probe_fn=lambda ep: False)
+    assert report.starts[0].endswith("in dbms_config_windows.json")
+    assert report.fixes[0].endswith("in dbms_config_windows.json")
+
+
+def test_all_up_is_ok_and_has_nothing_to_say(tmp_path):
+    report = check_dbms(["postgres", "redis"], _cfg(), tmp_path / "d.json", probe_fn=lambda ep: True)
+    assert report.ok
+    assert report.not_ready == []
+    assert report.starts == () and report.fixes == ()
+
+
+def test_an_invalid_connection_is_never_probed(tmp_path):
+    seen = []
+    report = check_dbms(["neo4j"], _cfg(), tmp_path / "d.json",
+                        probe_fn=lambda ep: seen.append(ep) or True)
+    assert seen == []
+    assert report.statuses[0].state == INVALID
+    assert report.statuses[0].endpoints == ()
+    assert not report.ok
+
+
+def test_probes_run_in_parallel(tmp_path):
+    def slow(endpoint):
+        time.sleep(0.5)
+        return True
+
+    start = time.monotonic()
+    # postgres 1 + cassandra 2 + redis 1 = four endpoints of 0.5 s each
+    check_dbms(["postgres", "cassandra", "redis"], _cfg(), tmp_path / "d.json", probe_fn=slow)
+    assert time.monotonic() - start < 1.5
+
+
+def test_not_ready_message_lists_each_dbms_and_state(tmp_path):
+    report = check_dbms(ALL, _cfg(), tmp_path / "d.json", probe_fn=lambda ep: False)
+    message = not_ready_message(report)
+    assert message.startswith("DBMS not ready: postgres (down), mongodb (down), cassandra (down),")
+    assert "neo4j (invalid)" in message
