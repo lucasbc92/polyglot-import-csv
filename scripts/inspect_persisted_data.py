@@ -25,7 +25,7 @@ from polyglotimportcsv.reporting import (
 from rich.text import Text
 
 DEFAULT_CONFIG = Path("data/ecommerce/import_config.json")
-DEFAULT_SGBD_CONFIG = Path("data/ecommerce/sgbd_config.json")
+DEFAULT_DBMS_CONFIG = Path("data/ecommerce/dbms_config.json")
 BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
 
 _BACKEND_LABEL = {
@@ -37,11 +37,11 @@ _BACKEND_LABEL = {
 }
 
 
-def _load_config(path: Path, sgbd_path: Optional[Path] = None) -> Dict[str, Any]:
-    """Load and merge the import + SGBD configs into one backend structure."""
+def _load_config(path: Path, dbms_path: Optional[Path] = None) -> Dict[str, Any]:
+    """Load and merge the import + DBMS configs into one backend structure."""
     from polyglotimportcsv.config_parser import load_config
 
-    return load_config(path, sgbd_path)
+    return load_config(path, dbms_path)
 
 
 def _parse_only(raw: str) -> List[str]:
@@ -411,10 +411,10 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
         help=f"Import (mapping) JSON config (default: {DEFAULT_CONFIG})",
     )
     parser.add_argument(
-        "--sgbd-config",
+        "--dbms-config",
         type=Path,
         default=None,
-        help="SGBD connection JSON config (default: sgbd_config.json next to --config)",
+        help="DBMS connection JSON config (default: dbms_config.json next to --config)",
     )
     parser.add_argument(
         "--only",
@@ -441,7 +441,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not config_path.is_file():
         error(f"Config not found: {config_path}")
         return 1
-    sgbd_path = args.sgbd_config.resolve() if args.sgbd_config else None
+    dbms_path = args.dbms_config.resolve() if args.dbms_config else None
 
     if log_path is not None:
         note(f"log file: {log_path}")
@@ -449,7 +449,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     from polyglotimportcsv.business_exception import BusinessException
 
     try:
-        cfg = _load_config(config_path, sgbd_path)
+        cfg = _load_config(config_path, dbms_path)
     except BusinessException as e:
         error(str(e))
         return 1

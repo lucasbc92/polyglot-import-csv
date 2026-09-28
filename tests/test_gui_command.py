@@ -26,10 +26,10 @@ def test_the_default_state_spells_every_option_out():
     ]
 
 
-def test_sgbd_config_is_emitted_when_set():
-    sgbd = Path("/proj/sgbd.json")
-    argv = build_argv(RunOptions(config_path=CFG, sgbd_config_path=sgbd))
-    assert argv[2:4] == ["--sgbd-config", str(sgbd)]
+def test_dbms_config_is_emitted_when_set():
+    dbms = Path("/proj/dbms.json")
+    argv = build_argv(RunOptions(config_path=CFG, dbms_config_path=dbms))
+    assert argv[2:4] == ["--dbms-config", str(dbms)]
 
 
 def test_only_is_comma_joined():
@@ -95,11 +95,11 @@ def test_argv_follows_the_order_of_the_spec_table():
     which is true of any deterministic function and would have passed with the
     flags emitted in any order at all.
     """
-    sgbd = Path("/proj/sgbd.json")
+    dbms = Path("/proj/dbms.json")
     source = Path("/proj/dados.csv")
     options = RunOptions(
         config_path=CFG,
-        sgbd_config_path=sgbd,
+        dbms_config_path=dbms,
         only=("postgres", "redis"),
         execution="materialize",
         dry_run=True,
@@ -110,7 +110,7 @@ def test_argv_follows_the_order_of_the_spec_table():
     )
     assert build_argv(options) == [
         "--config", str(CFG),
-        "--sgbd-config", str(sgbd),
+        "--dbms-config", str(dbms),
         "--only", "postgres,redis",
         "--strategy", "optimized",
         "--execution", "materialize",

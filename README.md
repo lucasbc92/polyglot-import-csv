@@ -8,9 +8,9 @@
 Python CLI that imports CSV data into **PostgreSQL, Redis, MongoDB, Apache Cassandra, and Neo4j** using **two JSON files** validated with **JSON Schema**:
 
 - `import_config.json` — a required `sources` block declaring where to read CSV data from, plus the entity/relationship/column mapping from each source to each backend.
-- `sgbd_config.json` — the connection settings for each backend (which SGBDs are available).
+- `dbms_config.json` — the connection settings for each backend (which DBMSs are available).
 
-The import configuration may only target backends declared in the SGBD configuration; otherwise the run aborts before touching any CSV or database.
+The import configuration may only target backends declared in the DBMS configuration; otherwise the run aborts before touching any CSV or database.
 
 ### Sources
 
@@ -62,11 +62,11 @@ clicking the log path in the status bar opens its folder.
 ```bash
 python -m polyglotimportcsv \
   --config data/ecommerce/import_config.json \
-  --sgbd-config data/ecommerce/sgbd_config.json \
+  --dbms-config data/ecommerce/dbms_config.json \
   --dry-run
 ```
 
-`--sgbd-config` is optional; when omitted it defaults to `sgbd_config.json` next to `--config`. Add `--source NAME=PATH` (repeatable) to override individual source paths without editing the config.
+`--dbms-config` is optional; when omitted it defaults to `dbms_config.json` next to `--config`. Add `--source NAME=PATH` (repeatable) to override individual source paths without editing the config.
 
 **Running example** (single script; use [Git Bash](https://git-scm.com/) on Windows or any Unix shell):
 
@@ -100,8 +100,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (English + PT) for layering, SO
 |------|---------|
 | `src/polyglotimportcsv/` | CLI, validation, filters, runner |
 | `src/polyglotimportcsv/importers/` | One module per backend + `base.py` protocol |
-| `src/polyglotimportcsv/schemas/` | Bundled JSON Schemas (`import_config`, `sgbd_config`) |
-| `data/ecommerce/` | Sample CSVs + `import_config.json` + `sgbd_config.json` |
+| `src/polyglotimportcsv/schemas/` | Bundled JSON Schemas (`import_config`, `dbms_config`) |
+| `data/ecommerce/` | Sample CSVs + `import_config.json` + `dbms_config.json` |
 | `logs/` | Session logs from `run_example.sh` and direct CLI runs (gitignored) |
 | `tests/` | `pytest` (stubs for I/O per TDD skill) |
 | `docs-tcc/` | TCC I report (Markdown, BibTeX); `docs-tcc/scripts/` for Pandoc PDF/ODT |
@@ -163,7 +163,7 @@ switch exists on a single import: `python -m polyglotimportcsv --strategy naive`
 Cassandra absorbs those batched writes at concurrency 64, and a node busy flushing
 or compacting can stop answering for longer than the driver's 10s default request
 timeout. The session therefore uses 30s (`cassandra.connection.request_timeout` in
-`sgbd_config.json` overrides it), and rows a batch reports as failed are retried
+`dbms_config.json` overrides it), and rows a batch reports as failed are retried
 with backoff — retrying is safe because a Cassandra `INSERT` is an upsert on the
 primary key. Without that, one slow response ends the whole matrix.
 
@@ -203,7 +203,7 @@ MIT — see [LICENSE](LICENSE).
 Ferramenta em Python para importar dados de CSV para **vários SGBDs** ao mesmo tempo — PostgreSQL, Redis, MongoDB, Apache Cassandra e Neo4j — com base em **dois arquivos JSON** validados por *JSON Schema*:
 
 - `import_config.json` — um bloco `sources` obrigatório que declara de onde ler os dados CSV, além do mapeamento de entidades, relacionamentos e colunas de cada origem para cada SGBD.
-- `sgbd_config.json` — as configurações de conexão de cada SGBD (quais bancos estão disponíveis).
+- `dbms_config.json` — as configurações de conexão de cada SGBD (quais bancos estão disponíveis).
 
 A configuração de importação só pode referenciar SGBDs declarados na configuração de conexão; caso contrário, a execução é abortada antes de ler qualquer CSV ou conectar a qualquer banco.
 
@@ -258,11 +258,11 @@ status abre a pasta correspondente.
 ```bash
 python -m polyglotimportcsv \
   --config data/ecommerce/import_config.json \
-  --sgbd-config data/ecommerce/sgbd_config.json \
+  --dbms-config data/ecommerce/dbms_config.json \
   --dry-run
 ```
 
-O `--sgbd-config` é opcional; quando omitido, usa-se `sgbd_config.json` ao lado do `--config`. Use `--source NOME=CAMINHO` (repetível) para sobrescrever caminhos de origens individuais sem editar a configuração.
+O `--dbms-config` é opcional; quando omitido, usa-se `dbms_config.json` ao lado do `--config`. Use `--source NOME=CAMINHO` (repetível) para sobrescrever caminhos de origens individuais sem editar a configuração.
 
 **Exemplo de execução** (um único script; no Windows use [Git Bash](https://git-scm.com/) ou WSL):
 
@@ -296,8 +296,8 @@ Consulte [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (inglês + PT) para camada
 |--------|------------|
 | `src/polyglotimportcsv/` | CLI, validação, filtros, *runner* |
 | `src/polyglotimportcsv/importers/` | Um módulo por backend + `base.py` (contrato) |
-| `src/polyglotimportcsv/schemas/` | JSON Schemas embutidos (`import_config`, `sgbd_config`) |
-| `data/ecommerce/` | CSVs de exemplo + `import_config.json` + `sgbd_config.json` |
+| `src/polyglotimportcsv/schemas/` | JSON Schemas embutidos (`import_config`, `dbms_config`) |
+| `data/ecommerce/` | CSVs de exemplo + `import_config.json` + `dbms_config.json` |
 | `tests/` | `pytest` (stubs, sem I/O real) |
 | `docs-tcc/` | Relatório TCC I (Markdown + BibTeX); `docs-tcc/scripts/` para PDF/ODT via Pandoc |
 
@@ -355,7 +355,7 @@ execução (comparação antes/depois); `naive` reproduz o comportamento origina
 a linha. O Cassandra recebe essas escritas em lote com concorrência 64, e um nó
 ocupado com *flush* ou *compaction* pode parar de responder por mais que os 10s de
 timeout padrão do driver. A sessão usa 30s (`cassandra.connection.request_timeout`
-no `sgbd_config.json` sobrescreve), e as linhas que um lote reporta como falhas são
+no `dbms_config.json` sobrescreve), e as linhas que um lote reporta como falhas são
 reenviadas com backoff — reenviar é seguro porque um `INSERT` no Cassandra é um
 upsert pela chave primária. Sem isso, uma resposta lenta derruba a matriz inteira.
 Cassandra, Redis e Neo4j só são lentos sob `naive` — `optimized` agrupa

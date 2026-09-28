@@ -59,11 +59,11 @@ def test_nonexistent_config_is_reported(tmp_path):
     assert errors["config_path"].startswith("Arquivo não encontrado")
 
 
-def test_nonexistent_sgbd_config_is_reported(tmp_path):
+def test_nonexistent_dbms_config_is_reported(tmp_path):
     cfg = tmp_path / "import_config.json"
     cfg.write_text("{}", encoding="utf-8")
-    errors = validate(RunOptions(config_path=cfg, sgbd_config_path=tmp_path / "x.json"))
-    assert errors["sgbd_config_path"].startswith("Arquivo não encontrado")
+    errors = validate(RunOptions(config_path=cfg, dbms_config_path=tmp_path / "x.json"))
+    assert errors["dbms_config_path"].startswith("Arquivo não encontrado")
 
 
 def test_unknown_dbms_is_reported(tmp_path):

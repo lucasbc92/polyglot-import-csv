@@ -1,4 +1,4 @@
-"""Config loading and JSON Schema validation (split import / SGBD configs)."""
+"""Config loading and JSON Schema validation (split import / DBMS configs)."""
 
 from pathlib import Path
 
@@ -9,7 +9,7 @@ from polyglotimportcsv.config_parser import (
     load_config,
     merge_configs,
     validate_import_config_schema,
-    validate_sgbd_config,
+    validate_dbms_config,
 )
 
 
@@ -20,7 +20,7 @@ def test_import_schema_rejects_unknown_top_level_key():
 
 
 def test_import_schema_rejects_connection_block():
-    # Connection settings belong in the SGBD config, not the import config.
+    # Connection settings belong in the DBMS config, not the import config.
     data = {
         "sources": {"s": "s.csv"},
         "mongodb": {
@@ -66,23 +66,23 @@ def test_import_schema_accepts_nested_columns_mongodb():
     validate_import_config_schema(data)
 
 
-def test_sgbd_schema_rejects_entities_block():
-    # Mapping (entities) belongs in the import config, not the SGBD config.
+def test_dbms_schema_rejects_entities_block():
+    # Mapping (entities) belongs in the import config, not the DBMS config.
     data = {
         "postgres": {"connection": {"host": "x"}, "entities": {}},
     }
     with pytest.raises(BusinessException):
-        validate_sgbd_config(data)
+        validate_dbms_config(data)
 
 
-def test_merge_requires_backend_in_sgbd_config():
+def test_merge_requires_backend_in_dbms_config():
     import_cfg = {
         "sources": {"s": "s.csv"},
         "redis": {"entities": {"x": {"columns": {"k": {}}}}},
     }
-    sgbd_cfg = {"sources": {"s": "s.csv"}, "postgres": {"connection": {}}}
-    with pytest.raises(BusinessException, match="not declared in the SGBD config"):
-        merge_configs(import_cfg, sgbd_cfg)
+    dbms_cfg = {"sources": {"s": "s.csv"}, "postgres": {"connection": {}}}
+    with pytest.raises(BusinessException, match="not declared in the DBMS config"):
+        merge_configs(import_cfg, dbms_cfg)
 
 
 def test_load_config_rejects_missing_file():
@@ -108,8 +108,8 @@ def test_merge_injects_connection_and_schema_and_sources():
         "sources": {"t": "t.csv"},
         "postgres": {"entities": {"t": {"columns": {"id": {"is_key": True}}}}},
     }
-    sgbd_cfg = {"postgres": {"connection": {"host": "db"}, "schema": "shop"}}
-    merged = merge_configs(import_cfg, sgbd_cfg)
+    dbms_cfg = {"postgres": {"connection": {"host": "db"}, "schema": "shop"}}
+    merged = merge_configs(import_cfg, dbms_cfg)
     assert merged["sources"] == {"t": "t.csv"}
     assert "version" not in merged
     assert merged["postgres"]["connection"] == {"host": "db"}

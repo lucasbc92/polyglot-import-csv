@@ -159,7 +159,7 @@ class MainWindow(QMainWindow):
     def options(self) -> RunOptions:
         return RunOptions(
             config_path=self.config_panel.config_path(),
-            sgbd_config_path=self.config_panel.sgbd_config_path(),
+            dbms_config_path=self.config_panel.dbms_config_path(),
             only=self.options_panel.only(),
             execution=self.options_panel.execution(),
             dry_run=self.options_panel.dry_run(),
@@ -319,8 +319,8 @@ class MainWindow(QMainWindow):
             panel.setEnabled(enabled)
 
     def _declared_dbms(self) -> Optional[List[str]]:
-        """Names declared in the chosen sgbd_config.json, or None if unreadable."""
-        path = self.config_panel.sgbd_config_path()
+        """Names declared in the chosen dbms_config.json, or None if unreadable."""
+        path = self.config_panel.dbms_config_path()
         if path is None or not path.is_file():
             return None
         try:
@@ -378,11 +378,11 @@ class MainWindow(QMainWindow):
         if splitter_state is not None:
             self.splitter.restoreState(splitter_state)
         last_config = self._settings.value("last_config")
-        last_sgbd = self._settings.value("last_sgbd")
-        if last_config or last_sgbd:
+        last_dbms = self._settings.value("last_dbms")
+        if last_config or last_dbms:
             self.config_panel.set_paths(
                 Path(last_config) if last_config else None,
-                Path(last_sgbd) if last_sgbd else None,
+                Path(last_dbms) if last_dbms else None,
             )
 
     def changeEvent(self, event) -> None:  # noqa: N802 (Qt override)
@@ -409,9 +409,9 @@ class MainWindow(QMainWindow):
         self._settings.setValue("geometry", self.saveGeometry())
         self._settings.setValue("splitter", self.splitter.saveState())
         config = self.config_panel.config_path()
-        sgbd = self.config_panel.sgbd_config_path()
+        dbms = self.config_panel.dbms_config_path()
         self._settings.setValue("last_config", str(config) if config else "")
-        self._settings.setValue("last_sgbd", str(sgbd) if sgbd else "")
+        self._settings.setValue("last_dbms", str(dbms) if dbms else "")
         if self.process.is_running():
             self.process.stop()
         super().closeEvent(event)

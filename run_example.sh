@@ -13,7 +13,7 @@
 #
 # Options:
 #   --config PATH           Import (mapping) JSON config (default: data/ecommerce/import_config.json)
-#   --sgbd-config PATH      SGBD connection JSON config (default: data/ecommerce/sgbd_config.json)
+#   --dbms-config PATH      DBMS connection JSON config (default: data/ecommerce/dbms_config.json)
 #   --dry-run               Validate only (no Docker, no import)
 #   --import                Real import (skip dry-run unless also passed)
 #   --clean                 Empty all configured backends
@@ -43,7 +43,7 @@ if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
 fi
 
 CONFIG="data/ecommerce/import_config.json"
-SGBD_CONFIG="data/ecommerce/sgbd_config.json"
+DBMS_CONFIG="data/ecommerce/dbms_config.json"
 DO_DOCKER=true
 DO_DRY_RUN=false
 DO_IMPORT=false
@@ -70,8 +70,8 @@ while [[ $# -gt 0 ]]; do
       CONFIG="$2"
       shift 2
       ;;
-    --sgbd-config)
-      SGBD_CONFIG="$2"
+    --dbms-config)
+      DBMS_CONFIG="$2"
       shift 2
       ;;
     --dry-run)
@@ -151,8 +151,8 @@ if [[ ! -f "${CONFIG}" ]]; then
   log_err "Config not found: ${CONFIG}"
   exit 1
 fi
-if [[ ! -f "${SGBD_CONFIG}" ]]; then
-  log_err "SGBD config not found: ${SGBD_CONFIG}"
+if [[ ! -f "${DBMS_CONFIG}" ]]; then
+  log_err "DBMS config not found: ${DBMS_CONFIG}"
   exit 1
 fi
 
@@ -182,9 +182,9 @@ fi
 
 DB_SCRIPT="scripts/inspect_persisted_data.py"
 
-# Only the SGBDs declared in the SGBD config are started / waited on / inspected.
+# Only the DBMSs declared in the DBMS config are started / waited on / inspected.
 mapfile -t SELECTED_SERVICES < <(
-  "${PY}" - "${SGBD_CONFIG}" <<'PYEOF'
+  "${PY}" - "${DBMS_CONFIG}" <<'PYEOF'
 import json, sys
 order = ["postgres", "redis", "mongodb", "cassandra", "neo4j"]
 with open(sys.argv[1], encoding="utf-8") as f:
@@ -204,7 +204,7 @@ done
 SELECTED_SERVICES=("${_clean_services[@]+"${_clean_services[@]}"}")
 
 if [[ ${#SELECTED_SERVICES[@]} -eq 0 ]]; then
-  log_err "No SGBD declared in ${SGBD_CONFIG}."
+  log_err "No DBMS declared in ${DBMS_CONFIG}."
   exit 1
 fi
 
@@ -217,11 +217,11 @@ declare -A SERVICE_PORT_META=(
   [neo4j]="7687:120:Neo4j"
 )
 
-# port:timeout_seconds:label — restricted to the selected SGBDs.
+# port:timeout_seconds:label — restricted to the selected DBMSs.
 DATABASE_PORTS=()
 for _svc in "${SELECTED_SERVICES[@]}"; do
   if [[ -z "${SERVICE_PORT_META[${_svc}]:-}" ]]; then
-    log_err "Unknown SGBD '${_svc}' in ${SGBD_CONFIG} (expected: postgres, redis, mongodb, cassandra, neo4j)."
+    log_err "Unknown DBMS '${_svc}' in ${DBMS_CONFIG} (expected: postgres, redis, mongodb, cassandra, neo4j)."
     exit 1
   fi
   DATABASE_PORTS+=("${SERVICE_PORT_META[${_svc}]}")
@@ -273,7 +273,7 @@ docker_compose() {
   run_logged env DOCKER_CLI_HINTS=false docker compose "$@"
 }
 
-# Restricted to the SGBDs declared in the SGBD config (see SELECTED_SERVICES).
+# Restricted to the DBMSs declared in the DBMS config (see SELECTED_SERVICES).
 COMPOSE_SERVICES=("${SELECTED_SERVICES[@]}")
 
 declare -A SERVICE_PORTS=(
@@ -421,7 +421,7 @@ fresh_start_stack() {
 
 run_polyglot() {
   local dry_run="$1"
-  local -a args=(-m polyglotimportcsv --config "${CONFIG}" --sgbd-config "${SGBD_CONFIG}")
+  local -a args=(-m polyglotimportcsv --config "${CONFIG}" --dbms-config "${DBMS_CONFIG}")
   if [[ -n "${ONLY}" ]]; then
     args+=(--only "${ONLY}")
   fi
@@ -446,7 +446,7 @@ fi
 
 log_banner "Polyglot Import CSV · run example"
 log_kv "Config" "${CONFIG}"
-log_kv "SGBD config" "${SGBD_CONFIG}"
+log_kv "DBMS config" "${DBMS_CONFIG}"
 log_kv "Services" "${SELECTED_SERVICES[*]}"
 if [[ -n "${ONLY}" ]]; then
   log_kv "Only" "${ONLY}"
@@ -477,7 +477,7 @@ fi
 
 if [[ "${DO_CLEAN}" == true ]]; then
   log_section "Clean databases"
-  run_logged "${PY}" "${DB_SCRIPT}" clean --config "${CONFIG}" --sgbd-config "${SGBD_CONFIG}"
+  run_logged "${PY}" "${DB_SCRIPT}" clean --config "${CONFIG}" --dbms-config "${DBMS_CONFIG}"
 fi
 
 if [[ "${DO_DRY_RUN}" == true ]]; then
@@ -492,7 +492,7 @@ fi
 
 if [[ "${DO_INSPECT}" == true ]]; then
   log_section "Inspect persisted data"
-  run_logged "${PY}" "${DB_SCRIPT}" inspect --config "${CONFIG}" --sgbd-config "${SGBD_CONFIG}"
+  run_logged "${PY}" "${DB_SCRIPT}" inspect --config "${CONFIG}" --dbms-config "${DBMS_CONFIG}"
 fi
 
 log_done "All requested steps completed"

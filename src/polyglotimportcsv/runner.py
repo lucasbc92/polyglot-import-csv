@@ -47,7 +47,7 @@ def _print_backend_line(line: str) -> None:
 def run_import(
     config_path: str | Path,
     *,
-    sgbd_config_path: Optional[str | Path] = None,
+    dbms_config_path: Optional[str | Path] = None,
     dry_run: bool = False,
     create_schema: bool = True,
     only: Optional[Iterable[str]] = None,
@@ -98,7 +98,7 @@ def run_import(
         if use_stream:
             return _run_stream(
                 config_path,
-                sgbd_config_path=sgbd_config_path,
+                dbms_config_path=dbms_config_path,
                 create_schema=create_schema,
                 only=only,
                 source_overrides=source_overrides,
@@ -110,7 +110,7 @@ def run_import(
             )
         return _run(
             config_path,
-            sgbd_config_path=sgbd_config_path,
+            dbms_config_path=dbms_config_path,
             dry_run=dry_run,
             create_schema=create_schema,
             only=only,
@@ -129,7 +129,7 @@ def run_import(
 def _run_stream(
     config_path: Path,
     *,
-    sgbd_config_path: Optional[str | Path],
+    dbms_config_path: Optional[str | Path],
     create_schema: bool,
     only: Optional[Iterable[str]],
     source_overrides: Optional[Dict[str, str]],
@@ -141,7 +141,7 @@ def _run_stream(
 ) -> List[str]:
     """Bounded-memory streaming path: hand the loaded config to ``run_stream_import``."""
     step("Load config", str(config_path))
-    config = load_config(config_path, sgbd_config_path)
+    config = load_config(config_path, dbms_config_path)
     backends_in_cfg = [b for b in BACKENDS if b in config]
     note(f"{len(backends_in_cfg)} backend(s) configured: {', '.join(backends_in_cfg)}")
 
@@ -185,7 +185,7 @@ def _run_stream(
 def _run(
     config_path: Path,
     *,
-    sgbd_config_path: Optional[str | Path],
+    dbms_config_path: Optional[str | Path],
     dry_run: bool,
     create_schema: bool,
     only: Optional[Iterable[str]],
@@ -199,7 +199,7 @@ def _run(
 ) -> List[str]:
     mode = "dry-run" if dry_run else "import"
     step("Load config", str(config_path))
-    config = load_config(config_path, sgbd_config_path)
+    config = load_config(config_path, dbms_config_path)
     backends_in_cfg = [b for b in BACKENDS if b in config]
     note(f"{len(backends_in_cfg)} backend(s) configured: {', '.join(backends_in_cfg)}")
 

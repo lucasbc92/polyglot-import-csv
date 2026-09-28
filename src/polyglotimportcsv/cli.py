@@ -52,11 +52,11 @@ def _parse_source_overrides(pairs: Tuple[str, ...]) -> Dict[str, str]:
     help="JSON import (mapping) configuration with the 'sources' block.",
 )
 @click.option(
-    "--sgbd-config",
-    "sgbd_config_path",
+    "--dbms-config",
+    "dbms_config_path",
     default=None,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="JSON SGBD connection configuration. Defaults to sgbd_config.json next to --config.",
+    help="JSON DBMS connection configuration. Defaults to dbms_config.json next to --config.",
 )
 @click.option(
     "--dry-run",
@@ -126,7 +126,7 @@ def _parse_source_overrides(pairs: Tuple[str, ...]) -> Dict[str, str]:
 )
 def main(
     config_path: Path,
-    sgbd_config_path: Path,
+    dbms_config_path: Path,
     dry_run: bool,
     create_schema: bool,
     only: str,
@@ -153,7 +153,7 @@ def main(
     try:
         run_import(
             config_path,
-            sgbd_config_path=sgbd_config_path,
+            dbms_config_path=dbms_config_path,
             dry_run=dry_run,
             create_schema=create_schema,
             only=only_list,

@@ -31,9 +31,9 @@ import pandas as pd
 from polyglotimportcsv.business_exception import BusinessException
 from polyglotimportcsv.config_parser import (
     BACKENDS,
-    DEFAULT_SGBD_CONFIG_NAME,
+    DEFAULT_DBMS_CONFIG_NAME,
     load_import_config,
-    load_sgbd_config,
+    load_dbms_config,
     merge_configs,
 )
 from polyglotimportcsv.gui.state import RunOptions
@@ -103,9 +103,9 @@ def check(options: RunOptions) -> Preflight:
     }
     errors = {}  # type: Dict[str, str]
 
-    sgbd_error = _check_sgbd(options, path, import_cfg)
-    if sgbd_error:
-        errors["sgbd_config_path"] = sgbd_error
+    dbms_error = _check_dbms(options, path, import_cfg)
+    if dbms_error:
+        errors["dbms_config_path"] = dbms_error
 
     sources_error = _check_overrides(options, kind, declared)
     if sources_error:
@@ -121,24 +121,24 @@ def check(options: RunOptions) -> Preflight:
 # -- steps ----------------------------------------------------------------
 
 
-def _check_sgbd(options: RunOptions, import_path: Path, import_cfg: Dict[str, Any]) -> str:
-    sgbd_path = options.sgbd_config_path
-    if sgbd_path is None:
-        sgbd_path = import_path.with_name(DEFAULT_SGBD_CONFIG_NAME)
-        if not sgbd_path.is_file():
+def _check_dbms(options: RunOptions, import_path: Path, import_cfg: Dict[str, Any]) -> str:
+    dbms_path = options.dbms_config_path
+    if dbms_path is None:
+        dbms_path = import_path.with_name(DEFAULT_DBMS_CONFIG_NAME)
+        if not dbms_path.is_file():
             return (
                 "Configuração de SGBDs não informada e {0} não encontrado ao lado "
-                "da configuração de importação.".format(DEFAULT_SGBD_CONFIG_NAME)
+                "da configuração de importação.".format(DEFAULT_DBMS_CONFIG_NAME)
             )
-    elif not sgbd_path.is_file():
+    elif not dbms_path.is_file():
         return ""  # state.validate already reports this
     try:
-        sgbd_cfg = _cached("sgbd", sgbd_path, load_sgbd_config)
-        merge_configs(import_cfg, sgbd_cfg)
+        dbms_cfg = _cached("dbms", dbms_path, load_dbms_config)
+        merge_configs(import_cfg, dbms_cfg)
     except BusinessException as exc:
         return str(exc)
     except (OSError, ValueError) as exc:
-        return "Não foi possível ler {0}: {1}".format(sgbd_path, exc)
+        return "Não foi possível ler {0}: {1}".format(dbms_path, exc)
     return ""
 
 

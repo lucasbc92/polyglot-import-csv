@@ -38,7 +38,7 @@ DATA = REPO / "data" / "ecommerce"
 IMAGES = REPO / "docs-tcc" / "images"
 CONFIG = DATA / "import_config.json"
 INVALID = DATA / "import_config_invalido.json"
-SGBD = DATA / "sgbd_config.json"
+DBMS = DATA / "dbms_config.json"
 SIZE = (1240, 1020)
 #: Form/console split of the published figures. A fresh QSettings has no saved
 #: splitter position, and the default one leaves the console too short to show
@@ -86,7 +86,7 @@ def new_window(app: QApplication, settings_path: Path, config: Path) -> MainWind
     settings = QSettings(str(settings_path), QSettings.IniFormat)
     settings.clear()
     window = MainWindow(settings=settings)
-    window.config_panel.set_paths(config, SGBD)
+    window.config_panel.set_paths(config, DBMS)
     window._on_config_changed()
     window.options_panel.dry_run_box.setChecked(True)
     window.resize(*SIZE)
@@ -108,7 +108,7 @@ def grab(window: MainWindow, name: str) -> None:
 
 
 def main() -> int:
-    for path in (CONFIG, INVALID, SGBD):
+    for path in (CONFIG, INVALID, DBMS):
         if not path.is_file():
             print("missing: {0}".format(path), file=sys.stderr)
             return 1

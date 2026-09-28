@@ -18,4 +18,4 @@ class MappingError(BusinessException):
 
 
 class ImportExecutionError(BusinessException):
-    """Failure while connecting to or writing into a target SGBD."""
+    """Failure while connecting to or writing into a target DBMS."""

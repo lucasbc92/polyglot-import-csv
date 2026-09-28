@@ -41,7 +41,7 @@ def test_run_matrix_rejects_unknown_mode(tmp_path):
     with pytest.raises(ValueError, match="unknown mode"):
         brun.run_matrix(
             sizes=[10], modes=["both"], repetitions=1,
-            sgbd_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+            dbms_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
             seed=1, only=["postgres"], cleaners={},
             importer=lambda *a, **k: [], load_cfg=lambda c, s: {"postgres": {}},
             generate=lambda out_dir, rows, seed, mode: None,
@@ -53,7 +53,7 @@ def test_run_matrix_rejects_unknown_strategy(tmp_path):
         brun.run_matrix(
             sizes=[10], modes=["multi"], repetitions=1,
             strategies=["optimised"],  # British-spelling typo: would silently run optimized
-            sgbd_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+            dbms_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
             seed=1, only=["postgres"], cleaners={},
             importer=lambda *a, **k: [], load_cfg=lambda c, s: {"postgres": {}},
             generate=lambda out_dir, rows, seed, mode: None,
@@ -70,13 +70,13 @@ def test_run_matrix_iterates_and_cleans_before_import(tmp_path):
 
     cleaners = {"postgres": make_cleaner("postgres")}
 
-    def fake_importer(config_path, *, sgbd_config_path, collector, show_data,
+    def fake_importer(config_path, *, dbms_config_path, collector, show_data,
                       only, create_schema, source_overrides, strategy, execution="stream"):
         events.append(("import", str(config_path), tuple(sorted(source_overrides))))
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
         return []
 
-    def fake_load_cfg(config_path, sgbd_path):
+    def fake_load_cfg(config_path, dbms_path):
         return {"postgres": {"schema": "public"}}
 
     def fake_generate(out_dir, rows, seed, mode):
@@ -85,7 +85,7 @@ def test_run_matrix_iterates_and_cleans_before_import(tmp_path):
 
     labeled = brun.run_matrix(
         sizes=[1000], modes=["multi", "combined"], repetitions=2,
-        sgbd_config_path="sgbd.json", config_dir="data/ecommerce",
+        dbms_config_path="dbms.json", config_dir="data/ecommerce",
         data_dir=tmp_path, seed=42, only=["postgres"],
         cleaners=cleaners, importer=fake_importer, load_cfg=fake_load_cfg,
         generate=fake_generate,
@@ -115,7 +115,7 @@ def test_repetitions_sweep_the_whole_matrix_instead_of_repeating_one_cell(tmp_pa
     """
     seen = []
 
-    def fake_importer(config_path, *, sgbd_config_path, collector, show_data,
+    def fake_importer(config_path, *, dbms_config_path, collector, show_data,
                       only, create_schema, source_overrides, strategy, execution):
         seen.append((Path(config_path).name, execution))
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
@@ -124,7 +124,7 @@ def test_repetitions_sweep_the_whole_matrix_instead_of_repeating_one_cell(tmp_pa
     labeled = brun.run_matrix(
         sizes=[1000], modes=["multi", "combined"], repetitions=3,
         executions=["materialize", "stream"],
-        sgbd_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+        dbms_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
         seed=1, only=["postgres"], cleaners={},
         importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
         generate=lambda out_dir, rows, seed, mode: None,
@@ -144,7 +144,7 @@ def test_datasets_are_prepared_before_the_first_import(tmp_path):
     """Generation is not a measurement: it must not run between timed imports."""
     events = []
 
-    def fake_importer(config_path, *, sgbd_config_path, collector, show_data,
+    def fake_importer(config_path, *, dbms_config_path, collector, show_data,
                       only, create_schema, source_overrides, strategy, execution):
         events.append("import")
         return []
@@ -156,7 +156,7 @@ def test_datasets_are_prepared_before_the_first_import(tmp_path):
 
     brun.run_matrix(
         sizes=[1000, 2000], modes=["multi"], repetitions=2,
-        sgbd_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+        dbms_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
         seed=1, only=["postgres"], cleaners={},
         importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
         generate=generate,
@@ -168,7 +168,7 @@ def test_datasets_are_prepared_before_the_first_import(tmp_path):
 def test_on_run_fires_after_each_import_and_survives_a_crash(tmp_path):
     seen: list[int] = []
 
-    def fake_importer(config_path, *, sgbd_config_path, collector, show_data,
+    def fake_importer(config_path, *, dbms_config_path, collector, show_data,
                       only, create_schema, source_overrides, strategy, execution="stream"):
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
         if len(seen) == 2:
@@ -178,7 +178,7 @@ def test_on_run_fires_after_each_import_and_survives_a_crash(tmp_path):
     with pytest.raises(RuntimeError, match="blew up"):
         brun.run_matrix(
             sizes=[10], modes=["multi"], repetitions=4,
-            sgbd_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+            dbms_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
             seed=1, only=["postgres"], cleaners={},
             importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
             generate=lambda out_dir, rows, seed, mode: None,
@@ -193,14 +193,14 @@ def test_on_run_fires_after_each_import_and_survives_a_crash(tmp_path):
 def test_run_matrix_builds_mode_overrides(tmp_path):
     seen = []
 
-    def fake_importer(config_path, *, sgbd_config_path, collector, show_data,
+    def fake_importer(config_path, *, dbms_config_path, collector, show_data,
                       only, create_schema, source_overrides, strategy, execution="stream"):
         seen.append((Path(config_path).name, set(source_overrides)))
         return []
 
     brun.run_matrix(
         sizes=[10], modes=["multi", "combined"], repetitions=1,
-        sgbd_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+        dbms_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
         seed=1, only=["postgres"], cleaners={},
         importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
         generate=lambda out_dir, rows, seed, mode: None,
@@ -214,7 +214,7 @@ def test_run_matrix_builds_mode_overrides(tmp_path):
 def test_run_matrix_iterates_strategies(tmp_path):
     seen = []
 
-    def fake_importer(config_path, *, sgbd_config_path, collector, show_data,
+    def fake_importer(config_path, *, dbms_config_path, collector, show_data,
                       only, create_schema, source_overrides, strategy, execution="stream"):
         seen.append(strategy)
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
@@ -223,7 +223,7 @@ def test_run_matrix_iterates_strategies(tmp_path):
     labeled = brun.run_matrix(
         sizes=[1000], modes=["multi"], repetitions=1,
         strategies=["naive", "optimized"],
-        sgbd_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+        dbms_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
         seed=1, only=["postgres"], cleaners={},
         importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
         generate=lambda out_dir, rows, seed, mode: None,
@@ -240,7 +240,7 @@ def test_run_matrix_rejects_unknown_execution(tmp_path):
         brun.run_matrix(
             sizes=[10], modes=["multi"], repetitions=1,
             executions=["strem"],  # typo: would silently run something else
-            sgbd_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+            dbms_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
             seed=1, only=["postgres"], cleaners={},
             importer=lambda *a, **k: [], load_cfg=lambda c, s: {"postgres": {}},
             generate=lambda out_dir, rows, seed, mode: None,
@@ -250,7 +250,7 @@ def test_run_matrix_rejects_unknown_execution(tmp_path):
 def test_run_matrix_iterates_executions(tmp_path):
     seen = []
 
-    def fake_importer(config_path, *, sgbd_config_path, collector, show_data,
+    def fake_importer(config_path, *, dbms_config_path, collector, show_data,
                       only, create_schema, source_overrides, strategy, execution):
         seen.append(execution)
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
@@ -259,7 +259,7 @@ def test_run_matrix_iterates_executions(tmp_path):
     labeled = brun.run_matrix(
         sizes=[1000], modes=["multi"], repetitions=1,
         executions=["materialize", "stream"],
-        sgbd_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+        dbms_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
         seed=1, only=["postgres"], cleaners={},
         importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
         generate=lambda out_dir, rows, seed, mode: None,
@@ -271,7 +271,7 @@ def test_run_matrix_iterates_executions(tmp_path):
 
 
 def test_run_matrix_records_peak_memory(tmp_path):
-    def fake_importer(config_path, *, sgbd_config_path, collector, show_data,
+    def fake_importer(config_path, *, dbms_config_path, collector, show_data,
                       only, create_schema, source_overrides, strategy, execution):
         # Allocate something inside the timed/traced region so peak > 0.
         _ = [0] * 200_000
@@ -280,7 +280,7 @@ def test_run_matrix_records_peak_memory(tmp_path):
 
     labeled = brun.run_matrix(
         sizes=[1000], modes=["multi"], repetitions=1,
-        sgbd_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+        dbms_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
         seed=1, only=["postgres"], cleaners={},
         importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
         generate=lambda out_dir, rows, seed, mode: None,

@@ -31,8 +31,8 @@ def build_argv(options: RunOptions) -> List[str]:
     argv = []  # type: List[str]
     if options.config_path is not None:
         argv += ["--config", str(options.config_path)]
-    if options.sgbd_config_path is not None:
-        argv += ["--sgbd-config", str(options.sgbd_config_path)]
+    if options.dbms_config_path is not None:
+        argv += ["--dbms-config", str(options.dbms_config_path)]
     if options.only:
         argv += ["--only", ",".join(options.only)]
     argv += ["--strategy", STRATEGY]

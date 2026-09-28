@@ -29,8 +29,8 @@ def config_files(tmp_path):
         }),
         encoding="utf-8",
     )
-    sgbd = tmp_path / "sgbd_config.json"
-    sgbd.write_text(
+    dbms = tmp_path / "dbms_config.json"
+    dbms.write_text(
         json.dumps({
             "version": 1,
             "postgres": {"connection": {"host": "localhost", "port": 5432, "database": "d",
@@ -39,7 +39,7 @@ def config_files(tmp_path):
         }),
         encoding="utf-8",
     )
-    return cfg, sgbd
+    return cfg, dbms
 
 
 @pytest.fixture()
@@ -105,12 +105,12 @@ def test_reactivating_the_window_reruns_preflight_after_an_external_fix(window, 
     """A config fixed in an external editor never changes the QLineEdit text,
     so no ``changed`` signal fires. Reactivating the window must pick up the
     fix anyway, instead of leaving Run disabled with the stale error."""
-    cfg, sgbd = config_files
+    cfg, dbms = config_files
     good = cfg.read_text(encoding="utf-8")
     broken = good.replace('"id":', '"id_errado":')
     cfg.write_text(broken, encoding="utf-8")
 
-    window.config_panel.set_paths(cfg, sgbd)
+    window.config_panel.set_paths(cfg, dbms)
     assert not window.console_panel.run_button.isEnabled()
     assert window.config_panel.error_label.text() != ""
 
@@ -130,8 +130,8 @@ def test_reactivating_the_window_does_not_refresh_while_a_run_is_in_progress(
 ):
     """The Run button doubles as Interromper while a process runs; a
     reactivation-triggered refresh must not touch the form then."""
-    cfg, sgbd = config_files
-    window.config_panel.set_paths(cfg, sgbd)
+    cfg, dbms = config_files
+    window.config_panel.set_paths(cfg, dbms)
     monkeypatch.setattr(window.process, "is_running", lambda: True)
 
     calls = []
@@ -145,8 +145,8 @@ def test_reactivating_the_window_does_not_refresh_while_a_run_is_in_progress(
 def test_reactivating_the_window_does_not_refresh_while_editing_the_console(
     window, config_files
 ):
-    cfg, sgbd = config_files
-    window.config_panel.set_paths(cfg, sgbd)
+    cfg, dbms = config_files
+    window.config_panel.set_paths(cfg, dbms)
     window.console_panel.set_editing(True)
 
     calls = []
@@ -158,8 +158,8 @@ def test_reactivating_the_window_does_not_refresh_while_editing_the_console(
 
 
 def test_reactivating_an_inactive_window_does_not_refresh(window, config_files):
-    cfg, sgbd = config_files
-    window.config_panel.set_paths(cfg, sgbd)
+    cfg, dbms = config_files
+    window.config_panel.set_paths(cfg, dbms)
 
     calls = []
     window.refresh_command = lambda: calls.append(1)
@@ -223,13 +223,13 @@ def test_launcher_prefix_tooltip_is_installed_on_the_console_panel(window):
 
 
 def test_declared_dbms_filter_the_checkboxes(window, config_files):
-    cfg, sgbd = config_files
-    window.config_panel.set_paths(cfg, sgbd)
+    cfg, dbms = config_files
+    window.config_panel.set_paths(cfg, dbms)
     assert window.options_panel.dbms_boxes["postgres"].isEnabled()
     assert not window.options_panel.dbms_boxes["neo4j"].isEnabled()
 
 
-def test_unreadable_sgbd_config_leaves_every_checkbox_enabled(window, tmp_path, config_files):
+def test_unreadable_dbms_config_leaves_every_checkbox_enabled(window, tmp_path, config_files):
     cfg, _ = config_files
     broken = tmp_path / "quebrado.json"
     broken.write_text("{ nao e json", encoding="utf-8")

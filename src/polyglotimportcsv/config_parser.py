@@ -1,15 +1,15 @@
-"""Load and validate the import and SGBD configuration JSON files.
+"""Load and validate the import and DBMS configuration JSON files.
 
 The configuration is split into two files:
 
-* ``sgbd_config.json`` — connection settings for each SGBD
-  (which SGBDs are available and how to reach them).
+* ``dbms_config.json`` — connection settings for each DBMS
+  (which DBMSs are available and how to reach them).
 * ``import_config.json`` — a ``sources`` block naming the CSV(s) to import,
   plus the entity/relationship/column mapping from those sources to each
-  SGBD, with no connection details.
+  DBMS, with no connection details.
 
 ``load_config`` validates each file against its own JSON Schema, ensures the
-import configuration only targets SGBDs declared in the SGBD configuration,
+import configuration only targets DBMSs declared in the DBMS configuration,
 and returns a single merged structure (the shape the importers expect).
 """
 
@@ -27,9 +27,9 @@ from polyglotimportcsv.business_exception import ConfigError
 
 BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
 
-#: Default name of the SGBD configuration file, looked up next to the import
+#: Default name of the DBMS configuration file, looked up next to the import
 #: configuration when an explicit path is not provided.
-DEFAULT_SGBD_CONFIG_NAME = "sgbd_config.json"
+DEFAULT_DBMS_CONFIG_NAME = "dbms_config.json"
 
 
 def _load_schema(name: str) -> Dict[str, Any]:
@@ -49,10 +49,10 @@ def _read_json(path: Union[str, Path], label: str) -> Dict[str, Any]:
             raise ConfigError(f"Invalid JSON in {label} ({p}): {e}") from e
 
 
-def load_sgbd_config(path: Union[str, Path]) -> Dict[str, Any]:
-    """Load and validate the SGBD connection configuration."""
-    data = _read_json(path, "SGBD config")
-    validate_sgbd_config(data)
+def load_dbms_config(path: Union[str, Path]) -> Dict[str, Any]:
+    """Load and validate the DBMS connection configuration."""
+    data = _read_json(path, "DBMS config")
+    validate_dbms_config(data)
     return data
 
 
@@ -63,12 +63,12 @@ def load_import_config(path: Union[str, Path]) -> Dict[str, Any]:
     return data
 
 
-def validate_sgbd_config(data: Dict[str, Any]) -> None:
-    schema = _load_schema("sgbd_config.schema.json")
+def validate_dbms_config(data: Dict[str, Any]) -> None:
+    schema = _load_schema("dbms_config.schema.json")
     try:
         jsonschema.validate(instance=data, schema=schema)
     except jsonschema.ValidationError as e:
-        raise ConfigError(f"Invalid SGBD configuration JSON: {e.message}") from e
+        raise ConfigError(f"Invalid DBMS configuration JSON: {e.message}") from e
 
 
 def validate_import_config_schema(data: Dict[str, Any]) -> None:
@@ -80,47 +80,47 @@ def validate_import_config_schema(data: Dict[str, Any]) -> None:
 
 
 def merge_configs(
-    import_cfg: Dict[str, Any], sgbd_cfg: Dict[str, Any]
+    import_cfg: Dict[str, Any], dbms_cfg: Dict[str, Any]
 ) -> Dict[str, Any]:
     """Combine mapping and connection configs into one backend structure.
 
     Every backend present in the import configuration must also be declared in
-    the SGBD configuration, otherwise a :class:`BusinessException` is raised.
+    the DBMS configuration, otherwise a :class:`BusinessException` is raised.
     """
     import_backends = [b for b in BACKENDS if b in import_cfg]
-    missing = [b for b in import_backends if b not in sgbd_cfg]
+    missing = [b for b in import_backends if b not in dbms_cfg]
     if missing:
         raise ConfigError(
-            "Import config targets backend(s) not declared in the SGBD config: "
-            f"{', '.join(missing)}. Add them to sgbd_config.json or remove them "
+            "Import config targets backend(s) not declared in the DBMS config: "
+            f"{', '.join(missing)}. Add them to dbms_config.json or remove them "
             "from import_config.json."
         )
 
     merged: Dict[str, Any] = {"sources": copy.deepcopy(import_cfg.get("sources") or {})}
     for backend in import_backends:
         backend_cfg = copy.deepcopy(import_cfg[backend])
-        sgbd_backend = sgbd_cfg.get(backend) or {}
-        # Connection settings (and postgres 'schema') come from the SGBD config.
+        dbms_backend = dbms_cfg.get(backend) or {}
+        # Connection settings (and postgres 'schema') come from the DBMS config.
         for key in ("connection", "schema"):
-            if key in sgbd_backend:
-                backend_cfg[key] = copy.deepcopy(sgbd_backend[key])
+            if key in dbms_backend:
+                backend_cfg[key] = copy.deepcopy(dbms_backend[key])
         merged[backend] = backend_cfg
     return merged
 
 
 def load_config(
     import_path: Union[str, Path],
-    sgbd_path: Optional[Union[str, Path]] = None,
+    dbms_path: Optional[Union[str, Path]] = None,
 ) -> Dict[str, Any]:
     """Load both configuration files and return the merged structure.
 
-    When ``sgbd_path`` is omitted, a file named ``sgbd_config.json`` next to the
+    When ``dbms_path`` is omitted, a file named ``dbms_config.json`` next to the
     import configuration is used.
     """
     import_path = Path(import_path)
-    if sgbd_path is None:
-        sgbd_path = import_path.with_name(DEFAULT_SGBD_CONFIG_NAME)
+    if dbms_path is None:
+        dbms_path = import_path.with_name(DEFAULT_DBMS_CONFIG_NAME)
 
     import_cfg = load_import_config(import_path)
-    sgbd_cfg = load_sgbd_config(sgbd_path)
-    return merge_configs(import_cfg, sgbd_cfg)
+    dbms_cfg = load_dbms_config(dbms_path)
+    return merge_configs(import_cfg, dbms_cfg)

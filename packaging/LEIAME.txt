@@ -30,7 +30,7 @@ Windows: dê dois cliques em polyglotimportcsv-gui.exe.
 Linux:   execute ./polyglotimportcsv-gui em um terminal, nesta pasta.
          Se a janela não abrir, instale: sudo apt install libxcb-cursor0
 
-Escolha data/ecommerce/import_config.json e data/ecommerce/sgbd_config.json,
+Escolha data/ecommerce/import_config.json e data/ecommerce/dbms_config.json,
 marque "Simulação (--dry-run)" e clique em Executar.
 
 

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://polyglot-import-csv.local/schemas/sgbd_config.schema.json",
-  "title": "PolyglotImportCSV SGBD connection configuration",
-  "description": "Connection settings for each SGBD. Lists which SGBDs are available; the import configuration may only target SGBDs declared here.",
+  "$id": "https://polyglot-import-csv.local/schemas/dbms_config.schema.json",
+  "title": "PolyglotImportCSV DBMS connection configuration",
+  "description": "Connection settings for each DBMS. Lists which DBMSs are available; the import configuration may only target DBMSs declared here.",
   "type": "object",
   "required": ["version"],
   "properties": {

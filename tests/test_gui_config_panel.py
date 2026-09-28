@@ -14,7 +14,7 @@ def test_starts_empty(qtbot):
     panel = ConfigPanel()
     qtbot.addWidget(panel)
     assert panel.config_path() is None
-    assert panel.sgbd_config_path() is None
+    assert panel.dbms_config_path() is None
 
 
 def test_typing_a_path_emits_changed(qtbot):
@@ -28,9 +28,9 @@ def test_typing_a_path_emits_changed(qtbot):
 def test_set_paths_populates_both_fields(qtbot):
     panel = ConfigPanel()
     qtbot.addWidget(panel)
-    panel.set_paths(Path("/a/import.json"), Path("/a/sgbd.json"))
+    panel.set_paths(Path("/a/import.json"), Path("/a/dbms.json"))
     assert panel.config_edit.text() == str(Path("/a/import.json"))
-    assert panel.sgbd_config_path() == Path("/a/sgbd.json")
+    assert panel.dbms_config_path() == Path("/a/dbms.json")
 
 
 def test_blank_text_reads_back_as_none(qtbot):

@@ -37,7 +37,7 @@ class RunOptions:
     """
 
     config_path: Optional[Path] = None
-    sgbd_config_path: Optional[Path] = None
+    dbms_config_path: Optional[Path] = None
     only: Tuple[str, ...] = ()
     execution: str = "stream"
     dry_run: bool = False
@@ -61,8 +61,8 @@ def validate(options: RunOptions) -> Dict[str, str]:
     elif not options.config_path.is_file():
         errors["config_path"] = _missing(options.config_path)
 
-    if options.sgbd_config_path is not None and not options.sgbd_config_path.is_file():
-        errors["sgbd_config_path"] = _missing(options.sgbd_config_path)
+    if options.dbms_config_path is not None and not options.dbms_config_path.is_file():
+        errors["dbms_config_path"] = _missing(options.dbms_config_path)
 
     for name in options.only:
         if name not in DBMS_NAMES:
