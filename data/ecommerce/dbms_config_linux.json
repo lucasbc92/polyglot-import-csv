@@ -9,14 +9,16 @@
       "user": "postgres",
       "password": "postgres"
     },
-    "schema": "public"
+    "schema": "public",
+    "start": { "command": "sudo systemctl start postgresql" }
   },
 
   "mongodb": {
     "connection": {
       "uri": "mongodb://127.0.0.1:27017",
       "database": "ecommerce"
-    }
+    },
+    "start": { "command": "sudo systemctl start mongod" }
   },
 
   "cassandra": {
@@ -24,11 +26,13 @@
       "hosts": ["127.0.0.1"],
       "port": 9042,
       "keyspace": "ecommerce"
-    }
+    },
+    "start": { "command": "sudo systemctl start cassandra" }
   },
 
   "redis": {
-    "connection": { "host": "127.0.0.1", "port": 6379, "db": 0 }
+    "connection": { "host": "127.0.0.1", "port": 6379, "db": 0 },
+    "start": { "command": "sudo systemctl start redis-server" }
   },
 
   "neo4j": {
@@ -37,6 +41,7 @@
       "user": "neo4j",
       "password": "password",
       "database": "neo4j"
-    }
+    },
+    "start": { "command": "sudo systemctl start neo4j" }
   }
 }

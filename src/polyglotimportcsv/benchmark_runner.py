@@ -91,7 +91,7 @@ def run_matrix(
     repetitions: int,
     strategies: Iterable[str] = ("optimized",),
     executions: Iterable[str] = ("stream",),
-    sgbd_config_path: "Optional[str | Path]",
+    dbms_config_path: "Optional[str | Path]",
     config_dir: "str | Path",
     data_dir: "str | Path",
     seed: int,
@@ -161,7 +161,7 @@ def run_matrix(
             cfg_name, _ = _MODE_CONFIG[mode]
             config_path = config_dir / cfg_name
             dpath = _ensure_dataset(data_dir, size, seed, mode, generate)
-            merged = load_cfg(config_path, sgbd_config_path)
+            merged = load_cfg(config_path, dbms_config_path)
             cells.append({
                 "size": size,
                 "mode": mode,
@@ -202,7 +202,7 @@ def run_matrix(
                         tracemalloc.reset_peak()
                     importer(
                         cell["config_path"],
-                        sgbd_config_path=sgbd_config_path,
+                        dbms_config_path=dbms_config_path,
                         collector=collector,
                         show_data=False,
                         only=selected,

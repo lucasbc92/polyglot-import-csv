@@ -35,7 +35,7 @@ def _check(folder, config="import_config.json", **kwargs):
     return preflight.check(
         RunOptions(
             config_path=folder / config,
-            sgbd_config_path=folder / "sgbd_config.json",
+            dbms_config_path=folder / "dbms_config.json",
             **kwargs,
         )
     )
@@ -92,25 +92,25 @@ def test_cache_sees_a_rewritten_config(ecommerce):
     assert _check(ecommerce).errors == {}
 
 
-def test_a_dbms_missing_from_the_sgbd_config_is_reported(ecommerce):
-    sgbd = ecommerce / "sgbd_config.json"
-    data = json.loads(sgbd.read_text(encoding="utf-8"))
+def test_a_dbms_missing_from_the_dbms_config_is_reported(ecommerce):
+    dbms = ecommerce / "dbms_config.json"
+    data = json.loads(dbms.read_text(encoding="utf-8"))
     del data["neo4j"]
-    sgbd.write_text(json.dumps(data), encoding="utf-8")
+    dbms.write_text(json.dumps(data), encoding="utf-8")
     result = _check(ecommerce)
-    assert "neo4j" in result.errors["sgbd_config_path"]
+    assert "neo4j" in result.errors["dbms_config_path"]
     assert result.kind == preflight.MULTI, "sources can still be chosen"
 
 
-def test_default_sgbd_config_next_to_the_import_config_is_used(ecommerce):
+def test_default_dbms_config_next_to_the_import_config_is_used(ecommerce):
     result = preflight.check(RunOptions(config_path=ecommerce / "import_config.json"))
     assert result.errors == {}
 
 
-def test_missing_default_sgbd_config_is_reported(ecommerce):
-    (ecommerce / "sgbd_config.json").unlink()
+def test_missing_default_dbms_config_is_reported(ecommerce):
+    (ecommerce / "dbms_config.json").unlink()
     result = preflight.check(RunOptions(config_path=ecommerce / "import_config.json"))
-    assert "sgbd_config.json" in result.errors["sgbd_config_path"]
+    assert "dbms_config.json" in result.errors["dbms_config_path"]
 
 
 def test_an_override_naming_an_undeclared_source_is_reported(ecommerce):
@@ -211,12 +211,12 @@ def test_a_non_utf8_import_config_is_reported_not_raised(ecommerce):
     assert result.errors["config_path"].startswith("Não foi possível ler")
 
 
-def test_a_non_utf8_sgbd_config_is_reported_not_raised(ecommerce):
-    path = ecommerce / "sgbd_config.json"
+def test_a_non_utf8_dbms_config_is_reported_not_raised(ecommerce):
+    path = ecommerce / "dbms_config.json"
     text = path.read_text(encoding="utf-8").replace("{", '{"nota": "descrição",', 1)
     path.write_bytes(text.encode("cp1252"))
     result = _check(ecommerce)
-    assert result.errors["sgbd_config_path"].startswith("Não foi possível ler")
+    assert result.errors["dbms_config_path"].startswith("Não foi possível ler")
 
 
 def test_a_mixed_config_with_two_combined_files_uses_their_header_union(ecommerce):
@@ -313,3 +313,38 @@ def test_the_pure_core_never_imports_qt():
     )
     result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+# -- Preflight.checkable tests -----------------------------------------------
+
+
+def test_a_valid_pair_of_configs_is_checkable(ecommerce):
+    assert _check(ecommerce).checkable
+
+
+def test_a_csv_problem_does_not_block_the_check(ecommerce):
+    (ecommerce / "ecommerce_stock.csv").unlink()
+    result = _check(ecommerce)
+    assert result.errors  # the header check still reports the missing CSV
+    assert result.checkable
+
+
+def test_an_import_config_that_fails_its_schema_is_not_checkable(ecommerce):
+    (ecommerce / "import_config.json").write_text('{"postgres": {}}', encoding="utf-8")
+    assert not _check(ecommerce).checkable
+
+
+def test_a_dbms_config_that_misses_a_target_is_not_checkable(ecommerce):
+    path = ecommerce / "dbms_config.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    del data["neo4j"]
+    path.write_text(json.dumps(data), encoding="utf-8")
+    assert not _check(ecommerce).checkable
+
+
+def test_a_missing_explicit_dbms_config_is_not_checkable(ecommerce):
+    result = preflight.check(RunOptions(
+        config_path=ecommerce / "import_config.json",
+        dbms_config_path=ecommerce / "nao_existe.json",
+    ))
+    assert not result.checkable

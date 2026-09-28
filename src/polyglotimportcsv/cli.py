@@ -10,8 +10,9 @@ from typing import Dict, Optional, Tuple
 import click
 
 from polyglotimportcsv.business_exception import BusinessException
+from polyglotimportcsv.dbms_check import not_ready_message
 from polyglotimportcsv.reporting import DEFAULT_SAMPLE_SIZE, error, kv, setup_reporting
-from polyglotimportcsv.runner import run_import
+from polyglotimportcsv.runner import run_check, run_import
 
 logger = logging.getLogger(__name__)
 
@@ -52,16 +53,23 @@ def _parse_source_overrides(pairs: Tuple[str, ...]) -> Dict[str, str]:
     help="JSON import (mapping) configuration with the 'sources' block.",
 )
 @click.option(
-    "--sgbd-config",
-    "sgbd_config_path",
+    "--dbms-config",
+    "dbms_config_path",
     default=None,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="JSON SGBD connection configuration. Defaults to sgbd_config.json next to --config.",
+    help="JSON DBMS connection configuration. Defaults to dbms_config.json next to --config.",
 )
 @click.option(
     "--dry-run",
     is_flag=True,
     help="Validate and print planned row counts; do not connect to databases.",
+)
+@click.option(
+    "--check-dbms",
+    "check_dbms_only",
+    is_flag=True,
+    help="Only check that the target DBMS answer, show how to start the ones "
+    "that do not, and exit (0 when all are up). Imports nothing.",
 )
 @click.option(
     "--create-schema/--no-create-schema",
@@ -126,8 +134,9 @@ def _parse_source_overrides(pairs: Tuple[str, ...]) -> Dict[str, str]:
 )
 def main(
     config_path: Path,
-    sgbd_config_path: Path,
+    dbms_config_path: Path,
     dry_run: bool,
+    check_dbms_only: bool,
     create_schema: bool,
     only: str,
     strategy: str,
@@ -140,6 +149,8 @@ def main(
 ) -> None:
     """Import CSV sources into multiple databases according to --config."""
     _ensure_utf8_output()
+    if check_dbms_only and (dry_run or benchmark):
+        raise click.UsageError("--check-dbms cannot be combined with --dry-run or --benchmark.")
     if sample_size is not None and show_data is not None:
         raise click.UsageError(
             "--sample only applies to the sample display; "
@@ -151,9 +162,15 @@ def main(
     only_list = [x.strip() for x in only.split(",") if x.strip()] if only else None
     overrides = _parse_source_overrides(source_pairs)
     try:
+        if check_dbms_only:
+            report = run_check(config_path, dbms_config_path=dbms_config_path, only=only_list)
+            if not report.ok:
+                error(not_ready_message(report))
+                sys.exit(1)
+            return
         run_import(
             config_path,
-            sgbd_config_path=sgbd_config_path,
+            dbms_config_path=dbms_config_path,
             dry_run=dry_run,
             create_schema=create_schema,
             only=only_list,

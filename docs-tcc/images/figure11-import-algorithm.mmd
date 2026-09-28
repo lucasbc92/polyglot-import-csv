@@ -1,6 +1,8 @@
 flowchart TD
     START(["CLI: 2 configs JSON\n(+ opções)"]) --> LC["load_config()\n+ JSON Schema + merge"]
-    LC --> LS["load_sources()\nlê CSV(s), infere tipos\n(fatia origem no modo combinado)"]
+    LC --> CHK{"verifica os SGBDs\n(sonda TCP;\nomitida em --dry-run)"}
+    CHK -->|"algum fora do ar\nou inválido"| STOP(["Fim: estados e\ncomandos para subi-los"])
+    CHK -->|todos no ar| LS["load_sources()\nlê CSV(s), infere tipos\n(fatia origem no modo combinado)"]
     LS --> BK{"para cada\nSGBD"}
     BK -->|fim| END(["Fim: relatório\nde contagens"])
     BK --> BIND["mapping_resolver:\nvincula entidade -> fonte\n(nome / união / por nome)\nexpande columns + converte tipos"]
@@ -22,3 +24,4 @@ flowchart TD
     style START fill:#dbeafe,stroke:#2563eb,color:#1e293b
     style END fill:#dcfce7,stroke:#16a34a,color:#1e293b
     style WR fill:#fef3c7,stroke:#d97706,color:#1e293b
+    style STOP fill:#fee2e2,stroke:#dc2626,color:#1e293b

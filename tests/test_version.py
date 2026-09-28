@@ -16,5 +16,5 @@ def test_pyproject_and_package_versions_agree():
     assert project["version"] == polyglotimportcsv.__version__
 
 
-def test_the_delivered_version_is_1_0_0():
-    assert polyglotimportcsv.__version__ == "1.0.0"
+def test_the_delivered_version_is_1_1_0():
+    assert polyglotimportcsv.__version__ == "1.1.0"

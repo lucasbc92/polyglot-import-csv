@@ -47,9 +47,10 @@ seção~\ref{sec:observabilidade}. O comando principal da CLI é o seguinte:
 \begin{lstlisting}[style=bashstyle]
 python -m polyglotimportcsv \
   --config caminho/import_config.json \
-  --sgbd-config caminho/sgbd_config.json \
+  --dbms-config caminho/dbms_config.json \
   [--source NOME=CAMINHO] \
   [--dry-run] \
+  [--check-dbms] \
   [--create-schema / --no-create-schema] \
   [--only postgres,redis] \
   [--execution stream|materialize] \
@@ -62,9 +63,9 @@ python -m polyglotimportcsv \
 Cada parte do comando tem o seguinte papel. A opção \texttt{-{}-config} é
 \textbf{obrigatória} e indica o caminho do arquivo JSON de importação, que já contém, em
 seu bloco \texttt{sources}, os caminhos dos CSVs a carregar --- por isso não há mais um
-argumento posicional de arquivo de dados. A opção \texttt{-{}-sgbd-config} indica o
+argumento posicional de arquivo de dados. A opção \texttt{-{}-dbms-config} indica o
 caminho do arquivo JSON de conexão dos SGBDs; se omitida, a ferramenta procura um arquivo
-\texttt{sgbd\_config.json} no mesmo diretório do arquivo de importação. A opção
+\texttt{dbms\_config.json} no mesmo diretório do arquivo de importação. A opção
 \texttt{-{}-source} \texttt{NOME=CAMINHO} \textbf{sobrescreve}, em tempo de execução, o
 caminho de uma fonte declarada no bloco \texttt{sources} sem editar o arquivo de
 configuração (por exemplo, para apontar a mesma configuração a um conjunto de dados
@@ -74,7 +75,9 @@ As demais opções são facultativas e agrupam-se em três conjuntos. O primeiro
 \textbf{o que} e \textbf{onde} importar: \texttt{-{}-dry-run} executa somente as
 validações e a preparação dos dados e reporta quantos registros \textbf{seriam}
 importados em cada destino, sem conectar a nenhum SGBD, o que é útil para revisar o
-mapeamento antes da carga real; \texttt{-{}-create-schema} e
+mapeamento antes da carga real; \texttt{-{}-check-dbms} apenas verifica se os SGBDs de
+destino respondem e encerra sem importar, como detalha a
+Seção~\ref{sec:verificacao-sgbds}; \texttt{-{}-create-schema} e
 \texttt{-{}-no-create-schema} controlam se a ferramenta cria as estruturas de
 armazenamento necessárias (tabelas no PostgreSQL, \textit{keyspace} e tabelas no
 Cassandra) antes de gravar os dados, sendo a criação ativada por padrão; e
@@ -98,7 +101,7 @@ seção~\ref{sec:observabilidade}.
 A configuração é dividida em \textbf{dois arquivos JSON}, cada um validado estaticamente
 por um \textbf{JSON Schema} próprio embutido em \texttt{src/polyglotimportcsv/schemas/}:
 o \texttt{import\_config.json} define as \textbf{fontes de dados} e o \textbf{mapeamento}
-de entidades, relacionamentos e colunas para cada SGBD; o \texttt{sgbd\_config.json}
+de entidades, relacionamentos e colunas para cada SGBD; o \texttt{dbms\_config.json}
 define a \textbf{configuração de conexão} de cada SGBD, isto é, quais bancos estão
 disponíveis e como alcançá-los.
 
@@ -179,7 +182,7 @@ configuração pelos blocos \texttt{postgres}, \texttt{mongodb},
 estrutura dos dois schemas como um todo, fornecendo um mapa mental que orienta a
 leitura das subseções seguintes. A Figura~\ref{fig:import-schema} sintetiza
 graficamente o schema do arquivo de importação (\texttt{import\_config}) e a
-Figura~\ref{fig:sgbd-schema}, o schema do arquivo de conexão (\texttt{sgbd\_config}).
+Figura~\ref{fig:dbms-schema}, o schema do arquivo de conexão (\texttt{dbms\_config}).
 
 \begin{figure}
   \centering
@@ -192,9 +195,9 @@ Figura~\ref{fig:sgbd-schema}, o schema do arquivo de conexão (\texttt{sgbd\_con
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.85\textwidth]{images/figure9-sgbd-schema}
-  \caption{Estrutura do JSON Schema de conexão (\texttt{sgbd\_config}).}
-  \label{fig:sgbd-schema}
+  \includegraphics[width=0.85\textwidth]{images/figure9-dbms-schema}
+  \caption{Estrutura do JSON Schema de conexão (\texttt{dbms\_config}).}
+  \label{fig:dbms-schema}
   \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{figure}
@@ -231,12 +234,14 @@ Cassandra, Redis) quanto os subdocumentos do MongoDB. As arestas tipadas do Neo4
 e as chaves estrangeiras do PostgreSQL aparecem em \texttt{relationships},
 reutilizando o mesmo \texttt{columnSpec} para eventuais propriedades.
 
-\textbf{O arquivo de conexão.} Na Figura~\ref{fig:sgbd-schema}, cada bloco de
-SGBD de \texttt{sgbd\_config} carrega apenas um descritor
+\textbf{O arquivo de conexão.} Na Figura~\ref{fig:dbms-schema}, cada bloco de
+SGBD de \texttt{dbms\_config} carrega um descritor
 \texttt{connection} com os parâmetros de acesso pertinentes àquela tecnologia (por
 exemplo, \texttt{uri} para MongoDB e Neo4j; \texttt{hosts} e \texttt{keyspace} para
-Cassandra). É uma estrutura deliberadamente rasa: indica \textit{onde} alcançar cada
-SGBD, sem nenhuma informação de mapeamento.
+Cassandra) e, opcionalmente, um descritor \texttt{start}, que diz como iniciá-lo
+(Seção~\ref{sec:inicializacao-sgbds}). É uma estrutura deliberadamente rasa: indica
+\textit{onde} alcançar cada SGBD e, opcionalmente, \textit{como} iniciá-lo, sem
+nenhuma informação de mapeamento.
 
 As subseções seguintes percorrem essa estrutura na ordem em que as duas figuras são
 lidas: primeiro a raiz e os elementos comuns a todos os SGBDs
@@ -629,13 +634,56 @@ Listagem~\ref{lst:neo4j-conn}.
 }
 \end{lstlisting}
 
+\subsection{Inicialização dos SGBDs}
+\label{sec:inicializacao-sgbds}
+
+O arquivo de conexão diz \textit{onde} alcançar cada SGBD, mas não o que fazer quando
+ele não responde. Para esse caso, cada bloco de SGBD aceita um descritor opcional
+\texttt{start}, que registra \textit{como} iniciá-lo, em uma de duas formas mutuamente
+exclusivas: \texttt{command}, uma linha de comando para um SGBD instalado na própria
+máquina, ou \texttt{compose}, que indica um arquivo do Docker Compose e o serviço
+correspondente. A ferramenta \textbf{nunca executa} esse comando: ela o exibe, pronto
+para ser copiado para um terminal, quando a verificação descrita na
+Seção~\ref{sec:verificacao-sgbds} encontra o SGBD fora do ar. A escolha é deliberada:
+iniciar um serviço do sistema operacional costuma exigir privilégios de administrador,
+que a ferramenta não tem nem deve pedir. A Listagem~\ref{lst:start-windows} mostra dois
+blocos do arquivo de conexão de exemplo para Windows, um em cada forma.
+
+\begin{lstlisting}[style=jsonstyle,caption={Descritores \texttt{start} nas duas formas (\texttt{dbms\_config\_windows.json}).},label={lst:start-windows}]
+"postgres": {
+  "connection": { ... },
+  "schema": "public",
+  "start": { "command": "net start postgresql-x64-16" }
+},
+"cassandra": {
+  "connection": { ... },
+  "start": {
+    "compose": {
+      "file":    "../../docker-compose.yml",
+      "service": "cassandra"
+    }
+  }
+}
+\end{lstlisting}
+
+Na listagem, o conteúdo dos descritores \texttt{connection}, igual ao do arquivo
+reproduzido no Apêndice~\ref{ap:config}, foi omitido. O PostgreSQL, instalado como
+serviço do Windows, é iniciado por \texttt{net start}; o
+Apache Cassandra, que não roda nativamente no Windows, é descrito por um serviço do
+Docker Compose, cujo arquivo tem caminho relativo à pasta do próprio arquivo de
+conexão. O cenário de exemplo traz três arquivos de conexão com as mesmas conexões e
+descritores \texttt{start} distintos: \texttt{dbms\_config.json}, todo em Docker
+Compose; \texttt{dbms\_config\_windows.json}, com serviços do Windows; e
+\texttt{dbms\_config\_linux.json}, com o \texttt{systemctl}. Como os nomes de serviço
+dependem de cada instalação, os comandos desses arquivos são exemplos a ajustar.
+
 \subsection{Validação, Consistência entre Arquivos e Fluxo de Carregamento}
 \label{sec:validacao}
 
-A validação ocorre em \textbf{três camadas} antes de qualquer conexão com os SGBDs. A
+A validação ocorre em \textbf{três camadas} antes de qualquer gravação nos SGBDs. A
 primeira é a validação por \textbf{JSON Schema}: cada arquivo é validado contra o seu
 schema (sintaxe, tipos e propriedades permitidas) --- \texttt{import\_config.schema.json}
-para o arquivo de importação e \texttt{sgbd\_config.schema.json} para o arquivo de
+para o arquivo de importação e \texttt{dbms\_config.schema.json} para o arquivo de
 conexão. A segunda é a \textbf{consistência entre arquivos}
 (\texttt{config\_parser.merge\_configs}): todo SGBD referenciado no arquivo
 de importação deve estar declarado no arquivo de conexão. A terceira é a
@@ -658,7 +706,7 @@ Figura~\ref{fig:config-pipeline} apresenta o fluxo completo de carregamento, com
 pontos de falha de cada camada e a convergência dos dois arquivos em uma configuração
 única, à qual os dados das fontes se juntam apenas na validação cruzada (camada 3). O
 diagrama evidencia por que a separação em dois arquivos isola falhas: um
-\texttt{sgbd\_config.json} inválido é detectado independentemente do
+\texttt{dbms\_config.json} inválido é detectado independentemente do
 \texttt{import\_config.json}, sem necessidade de ler os CSVs.
 
 \begin{figure}[H]
@@ -701,6 +749,10 @@ todo SGBD referenciado no arquivo de importação deve estar declarado no
 arquivo de conexão (camada 2) --- e as configurações são mescladas em uma estrutura única
 de execução.
 
+Em uma importação real, segue-se a \textbf{verificação dos SGBDs} de destino,
+detalhada na Seção~\ref{sec:verificacao-sgbds}: se algum deles não responder, a
+execução termina antes da leitura de qualquer CSV, com a indicação de como iniciá-lo.
+
 Na etapa de \textbf{carregamento das fontes}, cada CSV declarado no bloco
 \texttt{sources} é lido uma única vez. Todos os valores são lidos inicialmente como
 texto, preservando o conteúdo original do arquivo e evitando conversões prematuras de
@@ -717,7 +769,7 @@ resolve o \texttt{source} de cada entidade --- nome único, união de fontes ou 
 nome ---, expande o mapeamento de colunas (manual, automático ou híbrido) e converte os
 valores da fonte para tipos nativos. Realiza-se então a validação cruzada da camada 3
 (seção~\ref{sec:validacao}). Qualquer falha, em qualquer camada, encerra a execução com
-uma mensagem de erro antes que qualquer conexão com os SGBDs seja aberta.
+uma mensagem de erro antes que qualquer dado seja gravado nos SGBDs.
 
 Para cada entidade vinculada, a ferramenta \textbf{aplica os filtros} declarados na
 configuração, quando houver --- operação que corresponde à \textit{seleção} da álgebra
@@ -750,6 +802,68 @@ armazenamento} quando \texttt{-{}-create-schema} está ativo (tabelas no Postgre
 operação de escrita própria de cada tecnologia. A \textbf{saída} da execução é um
 relatório com as contagens de registros gravados por entidade e por SGBD, que permite
 conferir o resultado da carga.
+
+\subsection{Verificação dos SGBDs}
+\label{sec:verificacao-sgbds}
+
+Antes de ler as fontes, toda importação real verifica se os SGBDs de destino --- os
+presentes no arquivo de importação, filtrados por \texttt{-{}-only} --- respondem. A
+verificação abre uma conexão TCP com cada endereço declarado no arquivo de conexão e a
+fecha em seguida, sem autenticar. As sondas correm em paralelo, com limite de dois
+segundos cada, de modo que o tempo total não cresce com o número de SGBDs. Cada SGBD
+termina em um de três estados: \textbf{no ar}, quando algum de seus endereços responde
+(no Cassandra, basta um nó); \textbf{fora do ar}, quando nenhum responde; e
+\textbf{conexão inválida}, quando o próprio \textit{driver} rejeita a configuração, como
+em uma URI com esquema desconhecido. Um único SGBD fora do ar ou com conexão inválida
+\textbf{interrompe} a execução antes da leitura dos CSVs, o que evita uma carga parcial:
+sem a verificação, os SGBDs anteriores na ordem de importação receberiam dados antes que
+a falha do seguinte fosse descoberta.
+
+Os endereços não são extraídos por um analisador próprio. Para o MongoDB e o Neo4j,
+cuja conexão é descrita por uma URI, a ferramenta constrói o cliente do próprio
+\textit{driver} sem conectar e obtém dele os endereços; assim, uma URI aceita pelo
+\textit{driver} nunca é recusada pela verificação, e uma recusada nunca passa. Para o
+PostgreSQL, seguem-se as regras da biblioteca cliente \texttt{libpq}, inclusive listas
+de hosts e \textit{sockets} Unix.
+
+Quando algum SGBD não responde, a ferramenta mostra, abaixo da tabela de estados, o
+que fazer: para cada descritor \texttt{command}, o próprio comando; para os descritores
+\texttt{compose} de um mesmo arquivo, um único \texttt{docker compose up}; e, para um
+SGBD sem \texttt{start}, uma orientação genérica. A opção \texttt{-{}-check-dbms}
+executa apenas essa etapa e encerra, com código de saída zero quando todos os SGBDs
+respondem. A Tabela~\ref{tab:check-dbms} e a Listagem~\ref{lst:check-dbms} reproduzem
+uma verificação feita com o arquivo de conexão de exemplo para Windows, com o MongoDB e
+o Neo4j fora do ar.
+
+\begin{table}[H]
+  \caption{Estados reportados por \texttt{-{}-check-dbms} com dois SGBDs fora do ar.}
+  \label{tab:check-dbms}
+  \centering
+  \begin{tabular}{l l l}
+    \toprule
+    SGBD & Endereço & Estado \\
+    \midrule
+    postgres  & 127.0.0.1:5432  & up   \\
+    mongodb   & 127.0.0.1:27017 & down \\
+    cassandra & 127.0.0.1:9042  & up   \\
+    redis     & 127.0.0.1:6379  & up   \\
+    neo4j     & 127.0.0.1:7687  & down \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{table}
+
+A Listagem~\ref{lst:check-dbms} mostra os comandos que a ferramenta lista abaixo da
+tabela para iniciar os dois SGBDs fora do ar, retirados dos descritores
+\texttt{start} do arquivo de conexão.
+
+\begin{lstlisting}[style=textstyle,caption={Comandos de inicialização mostrados por \texttt{-{}-check-dbms}.},label={lst:check-dbms}]
+To start the DBMS that are down, run in a terminal:
+  net start MongoDB
+  net start neo4j
+Service commands (net start, systemctl) may need an administrator terminal or sudo.
+\end{lstlisting}
 
 \subsection{O Cenário de Exemplo e os Arquivos de Dados}
 \label{sec:exemplo-linha}
@@ -1001,7 +1115,7 @@ CSVs de fonte (\texttt{ecommerce\_\allowbreak stock.csv},
 \texttt{ecommerce\_\allowbreak add\_to\_cart.csv}), com oito linhas cada; o arquivo de
 importação \texttt{import\_config.json}, cujos fragmentos por SGBD foram apresentados nas
 Listagens~\ref{lst:pg-import} a~\ref{lst:neo4j-import}; e o arquivo de conexão
-\texttt{sgbd\_config.json}, cujos fragmentos acompanham as mesmas subseções --- ambos
+\texttt{dbms\_config.json}, cujos fragmentos acompanham as mesmas subseções --- ambos
 reproduzidos na íntegra no Apêndice~\ref{ap:config}. Além deles, o arquivo
 \texttt{docker-compose.yml}, na raiz do repositório, define os contêineres dos cinco
 SGBDs usados no exemplo. A execução usa o comando apresentado na
@@ -1010,7 +1124,7 @@ seção~\ref{sec:visao-geral}, instanciado com esses arquivos:
 \begin{lstlisting}[style=bashstyle]
 python -m polyglotimportcsv \
   --config data/ecommerce/import_config.json \
-  --sgbd-config data/ecommerce/sgbd_config.json \
+  --dbms-config data/ecommerce/dbms_config.json \
   --dry-run
 \end{lstlisting}
 
@@ -1052,7 +1166,7 @@ repetir o mesmo comando sem a \textit{flag} \texttt{-{}-dry-run}: os mesmos volu
 Tabela~\ref{tab:dryrun} são então persistidos nos cinco SGBDs configurados,
 materializando o cenário poliglota da Seção~\ref{sec:persistencia-poliglota}. Alternativamente, o script
 \texttt{run\_example.sh}, na raiz do repositório, automatiza o fluxo completo: lê o
-\texttt{sgbd\_config.json}, sobe apenas os contêineres dos SGBDs ali declarados e, em
+\texttt{dbms\_config.json}, sobe apenas os contêineres dos SGBDs ali declarados e, em
 seguida, executa o \textit{dry-run} e a importação real com \texttt{-{}-create-schema}.
 
 Complementarmente à evidência de execução, testes automatizados (\texttt{pytest}) cobrem
@@ -1211,7 +1325,7 @@ quantifica, varrendo sistematicamente os dois eixos aqui descritos.
 \label{sec:interface-grafica}
 
 Todas as capacidades descritas até aqui são acionadas por uma interface de linha de comando
-governada por doze opções, que precisam ser digitadas corretamente a cada execução e cujos
+governada por treze opções, que precisam ser digitadas corretamente a cada execução e cujos
 erros de sintaxe só se manifestam depois que o comando é submetido. Para reduzir essa barreira
 --- sem esconder a ferramenta de quem deseja aprendê-la --- foi construída uma
 \textbf{interface gráfica} \textit{desktop} sobre a CLI já existente. O princípio que orienta
@@ -1331,7 +1445,7 @@ próprio formulário, junto ao cartão a que se referem, como mostra a
 Figura~\ref{fig:gui-erro}: a mensagem é a mesma que a CLI produziria, e a execução fica
 bloqueada. Quando o usuário corrige o arquivo em um editor externo e retorna à janela, a
 validação é refeita automaticamente. Os erros que só surgem durante a importação, como a
-falha de conexão com um SGBD, aparecem no console exatamente como apareceriam no terminal, e
+falha de gravação em um SGBD, aparecem no console exatamente como apareceriam no terminal, e
 a barra de estado informa o código de saída do processo. Como a interface executa a CLI
 real, não há tradução intermediária que pudesse mascarar a mensagem.
 
@@ -1342,6 +1456,25 @@ real, não há tradução intermediária que pudesse mascarar a mensagem.
   \textit{JSON Schema}, a mensagem da CLI aparece no cartão de configuração e o botão de
   execução permanece desabilitado.}
   \label{fig:gui-erro}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{figure}
+
+A disponibilidade dos SGBDs, que a validação prévia deliberadamente não examina, tem um
+botão próprio: \textbf{Verificar SGBDs}, ao lado do botão de execução. Ele executa a CLI
+com \texttt{-{}-check-dbms}, com os arquivos de configuração e a seleção de SGBDs do
+formulário, e depende apenas de que esses dois arquivos sejam válidos --- pendências nas
+fontes CSV não o bloqueiam, porque a verificação não lê dados. A saída é a mesma do
+terminal, inclusive os comandos que iniciam cada SGBD fora do ar, que o usuário copia
+para um terminal: o console integrado executa somente a própria ferramenta. A
+Figura~\ref{fig:gui-verificacao} mostra uma verificação com dois SGBDs fora do ar.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\textwidth]{images/figure16-gui-verificacao}
+  \caption{Verificação dos SGBDs pela interface gráfica: MongoDB e Neo4j fora do ar e,
+  abaixo da tabela de estados, os comandos que os iniciam.}
+  \label{fig:gui-verificacao}
   \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{figure}

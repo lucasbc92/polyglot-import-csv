@@ -53,6 +53,7 @@ class ConsolePanel(QFrame):
     """
 
     run_requested = Signal()
+    check_requested = Signal()
     stop_requested = Signal()
     edit_mode_changed = Signal(bool)
     save_log_requested = Signal()
@@ -65,6 +66,7 @@ class ConsolePanel(QFrame):
         self._editing = False
         self._running = False
         self._run_enabled = True
+        self._check_enabled = True
         self._rendered_lines = 0
         self._log_available = False
         # I2: injection point for the "discard the edited command?" question.
@@ -87,6 +89,14 @@ class ConsolePanel(QFrame):
         self.copy_button = QPushButton("Copiar", self)
         self.run_button = QPushButton("▶  Executar", self)
         self.run_button.setObjectName("runButton")
+        self.check_button = QPushButton("Verificar SGBDs", self)
+        self.check_button.setObjectName("checkButton")
+        self.check_button.setToolTip(
+            "Testa se os SGBDs de destino respondem, sem importar nada (--check-dbms). "
+            "Para os que não respondem, o console mostra o comando que os inicia, "
+            "para ser copiado para um terminal."
+        )
+        self.check_button.clicked.connect(self.check_requested)
         self.save_log_button = QPushButton("Salvar log…", self)
         self.save_log_button.setToolTip(
             "Salvar uma cópia do arquivo de log desta execução (nível DEBUG, sem cores)"
@@ -108,6 +118,7 @@ class ConsolePanel(QFrame):
         actions.addWidget(self.save_log_button)
         actions.addWidget(self.edit_button)
         actions.addWidget(self.copy_button)
+        actions.addWidget(self.check_button)
         actions.addWidget(self.run_button)
 
         self.log_view = QTextEdit(self)
@@ -173,6 +184,7 @@ class ConsolePanel(QFrame):
         if not editing:
             self.command_edit.setPlainText(self._generated)
         self._update_run_enabled()
+        self._update_check_enabled()
         self.edit_mode_changed.emit(editing)
 
     # -- run state --------------------------------------------------------
@@ -182,6 +194,7 @@ class ConsolePanel(QFrame):
         self.run_button.setText("■  Interromper" if running else "▶  Executar")
         self.run_button.setProperty("running", running)
         self._update_run_enabled()
+        self._update_check_enabled()
         self.edit_button.setEnabled(not running)
         self.save_log_button.setEnabled(self._log_available and not running)
         self.command_edit.setReadOnly(running or not self._editing)
@@ -203,6 +216,11 @@ class ConsolePanel(QFrame):
         """
         self._run_enabled = enabled
         self._update_run_enabled()
+
+    def set_check_enabled(self, enabled: bool) -> None:
+        """Offer "Verificar SGBDs" when the configuration files allow a check."""
+        self._check_enabled = enabled
+        self._update_check_enabled()
 
     def set_log_available(self, available: bool) -> None:
         """Offer "Salvar log…" once a finished run has left a log behind."""
@@ -304,6 +322,13 @@ class ConsolePanel(QFrame):
             self.run_button.setEnabled(bool(self.command_text().strip()))
         else:
             self.run_button.setEnabled(self._run_enabled)
+
+    def _update_check_enabled(self) -> None:
+        # In edit mode the typed text is the source of truth; a check built
+        # from the locked form would silently ignore it.
+        self.check_button.setEnabled(
+            self._check_enabled and not self._running and not self._editing
+        )
 
     def _ask_discard_confirmation(self) -> bool:
         """Ask before throwing away a hand-edited command (§5)."""

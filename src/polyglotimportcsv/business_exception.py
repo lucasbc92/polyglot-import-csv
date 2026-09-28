@@ -18,4 +18,12 @@ class MappingError(BusinessException):
 
 
 class ImportExecutionError(BusinessException):
-    """Failure while connecting to or writing into a target SGBD."""
+    """Failure while connecting to or writing into a target DBMS."""
+
+
+class DbmsUnavailableError(BusinessException):
+    """A target DBMS does not answer, or its connection setting is invalid.
+
+    Raised by the check that precedes every real import, before any CSV is
+    read or anything is written.
+    """

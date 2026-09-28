@@ -16,7 +16,7 @@ _run_example_completion() {
   prev="${COMP_WORDS[COMP_CWORD-1]}"
 
   local flags=(
-    --config --sgbd-config
+    --config --dbms-config
     --dry-run --import --clean --inspect
     --create-schema --no-create-schema
     --no-docker --fresh-start
@@ -27,7 +27,7 @@ _run_example_completion() {
   local backends=(postgres mongodb cassandra redis neo4j)
 
   case "${prev}" in
-    --config|--sgbd-config)
+    --config|--dbms-config)
       local -a configs=( "${_RUN_EXAMPLE_REPO_ROOT}"/data/ecommerce/*.json )
       if [[ -e "${configs[0]}" ]]; then
         COMPREPLY=( $(compgen -W "$(printf '%s\n' "${configs[@]}")" -- "${cur}") )

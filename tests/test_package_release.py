@@ -25,7 +25,7 @@ def repo(tmp_path):
     (root / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
     (root / "LICENSE").write_text("MIT\n", encoding="utf-8")
     (root / "packaging").mkdir()
-    (root / "packaging" / "LEIAME.txt").write_text("leia-me\n", encoding="utf-8")
+    (root / "packaging" / "README.md").write_text("readme\n", encoding="utf-8")
     return root
 
 
@@ -43,7 +43,7 @@ def test_a_zip_holds_the_executable_and_the_example(repo, tmp_path):
     prefix = "polyglotimportcsv-v1.0.0-windows-x64/"
     assert _names(out) == sorted([
         prefix + "polyglotimportcsv.exe",
-        prefix + "LEIAME.txt",
+        prefix + "README.md",
         prefix + "LICENSE",
         prefix + "docker-compose.yml",
         prefix + "data/ecommerce/ecommerce_stock.csv",
@@ -92,3 +92,14 @@ def test_a_missing_executable_is_an_error(repo, tmp_path):
     dist.mkdir()
     with pytest.raises(FileNotFoundError):
         package_release.package_all(repo, dist, tmp_path / "release", "v1.0.0", "linux-x64")
+
+
+def test_the_three_dbms_configs_are_shipped(repo, tmp_path):
+    names = ("dbms_config.json", "dbms_config_windows.json", "dbms_config_linux.json")
+    for name in names:
+        (repo / "data" / "ecommerce" / name).write_text("{}", encoding="utf-8")
+    exe = tmp_path / "polyglotimportcsv.exe"
+    exe.write_bytes(b"MZ")
+    out = package_release.build_zip(repo, exe, tmp_path / "release", "pkg")
+    for name in names:
+        assert "pkg/data/ecommerce/" + name in _names(out)

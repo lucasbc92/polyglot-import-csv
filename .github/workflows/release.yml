@@ -76,6 +76,13 @@ jobs:
           ./dist/polyglotimportcsv${{ matrix.exe }} --help
           ./dist/polyglotimportcsv${{ matrix.exe }} --config data/ecommerce/import_config.json --dry-run --no-data
           ./dist/polyglotimportcsv-gui${{ matrix.exe }} --cli --config data/ecommerce/import_config.json --dry-run --no-data
+          set +e
+          ./dist/polyglotimportcsv${{ matrix.exe }} --config data/ecommerce/import_config.json --check-dbms > check.txt 2>&1
+          code=$?
+          set -e
+          cat check.txt
+          test "$code" -eq 1
+          grep -q "DBMS not ready" check.txt
       - name: GUI starts
         # The smoke test above never imports Qt (--cli returns first), so open
         # the window for real: it must still be running when timeout stops it.

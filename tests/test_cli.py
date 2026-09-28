@@ -1,5 +1,7 @@
 """CLI v2: config-driven sources, repeatable --source overrides."""
 
+from pathlib import Path
+import pytest
 from click.testing import CliRunner
 
 from polyglotimportcsv.cli import main
@@ -230,3 +232,76 @@ def test_cli_survives_a_non_utf8_output_encoding():
     )
     assert result.returncode == 0, result.stderr.decode("utf-8", "replace")[-800:]
     assert "Finished dry-run" in result.stdout.decode("utf-8", "replace")
+
+
+ECOMMERCE = Path(__file__).resolve().parents[1] / "data" / "ecommerce"
+
+
+def _report(ok):
+    from polyglotimportcsv.dbms_check import DOWN, UP, DbmsCheckReport, DbmsStatus
+
+    status = DbmsStatus("redis", (("127.0.0.1", 6379),), UP if ok else DOWN)
+    return DbmsCheckReport((status,), (), (), False)
+
+
+def _no_import(*a, **k):
+    raise AssertionError("--check-dbms must not import")
+
+
+def test_cli_check_dbms_exits_zero_when_all_are_up(tmp_path, monkeypatch):
+    captured = {}
+
+    def fake_run_check(config_path, **kwargs):
+        captured.update(kwargs)
+        return _report(True)
+
+    monkeypatch.setattr("polyglotimportcsv.cli.run_check", fake_run_check)
+    monkeypatch.setattr("polyglotimportcsv.cli.run_import", _no_import)
+    cfg = tmp_path / "cfg.json"
+    cfg.write_text("{}", encoding="utf-8")
+    result = CliRunner().invoke(main, ["--config", str(cfg), "--check-dbms", "--only", "redis"])
+    assert result.exit_code == 0, result.output
+    assert captured == {"dbms_config_path": None, "only": ["redis"]}
+
+
+def test_cli_check_dbms_exits_one_when_a_dbms_is_down(tmp_path, monkeypatch):
+    monkeypatch.setattr("polyglotimportcsv.cli.run_check", lambda config_path, **kw: _report(False))
+    monkeypatch.setattr("polyglotimportcsv.cli.run_import", _no_import)
+    cfg = tmp_path / "cfg.json"
+    cfg.write_text("{}", encoding="utf-8")
+    result = CliRunner().invoke(main, ["--config", str(cfg), "--check-dbms"])
+    assert result.exit_code == 1
+    assert "DBMS not ready: redis (down)" in result.output
+
+
+@pytest.mark.parametrize("flag", ["--dry-run", "--benchmark"])
+def test_cli_check_dbms_rejects_dry_run_and_benchmark(tmp_path, flag):
+    cfg = tmp_path / "cfg.json"
+    cfg.write_text("{}", encoding="utf-8")
+    result = CliRunner().invoke(main, ["--config", str(cfg), "--check-dbms", flag])
+    assert result.exit_code == 2
+    assert "--check-dbms cannot be combined" in result.output
+
+
+def test_cli_check_dbms_exits_one_when_only_matches_no_declared_dbms(monkeypatch):
+    def must_not_probe(*a, **k):
+        raise AssertionError("probe must not run when there is no target DBMS")
+
+    monkeypatch.setattr("polyglotimportcsv.dbms_check.probe", must_not_probe)
+    result = CliRunner().invoke(main, [
+        "--config", str(ECOMMERCE / "import_config.json"),
+        "--check-dbms", "--only", "postgre",
+    ])
+    assert result.exit_code == 1
+    assert "No target DBMS to check" in result.output
+
+
+def test_cli_check_dbms_end_to_end_shows_the_start_command(monkeypatch):
+    monkeypatch.setattr("polyglotimportcsv.dbms_check.probe", lambda ep, timeout=2.0: False)
+    result = CliRunner().invoke(main, [
+        "--config", str(ECOMMERCE / "import_config.json"),
+        "--dbms-config", str(ECOMMERCE / "dbms_config_linux.json"),
+        "--check-dbms", "--only", "redis",
+    ])
+    assert result.exit_code == 1
+    assert "sudo systemctl start redis-server" in result.output

@@ -96,7 +96,7 @@ def test_main_alternates_the_arms_across_passes(monkeypatch, capsys):
 def test_run_matrix_without_trace_memory_does_not_trace(tmp_path):
     tracing = []
 
-    def fake_importer(config_path, *, sgbd_config_path, collector, show_data,
+    def fake_importer(config_path, *, dbms_config_path, collector, show_data,
                       only, create_schema, source_overrides, strategy, execution):
         tracing.append(tracemalloc.is_tracing())
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
@@ -104,7 +104,7 @@ def test_run_matrix_without_trace_memory_does_not_trace(tmp_path):
 
     labeled = brun.run_matrix(
         sizes=[1000], modes=["multi"], repetitions=1,
-        sgbd_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+        dbms_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
         seed=1, only=["postgres"], cleaners={},
         importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
         generate=lambda out_dir, rows, seed, mode: None,
@@ -118,7 +118,7 @@ def test_run_matrix_without_trace_memory_does_not_trace(tmp_path):
 def test_run_matrix_traces_by_default(tmp_path):
     tracing = []
 
-    def fake_importer(config_path, *, sgbd_config_path, collector, show_data,
+    def fake_importer(config_path, *, dbms_config_path, collector, show_data,
                       only, create_schema, source_overrides, strategy, execution):
         tracing.append(tracemalloc.is_tracing())
         _ = [0] * 200_000  # allocate inside the traced region so peak > 0
@@ -127,7 +127,7 @@ def test_run_matrix_traces_by_default(tmp_path):
 
     labeled = brun.run_matrix(
         sizes=[1000], modes=["multi"], repetitions=1,
-        sgbd_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+        dbms_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
         seed=1, only=["postgres"], cleaners={},
         importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
         generate=lambda out_dir, rows, seed, mode: None,

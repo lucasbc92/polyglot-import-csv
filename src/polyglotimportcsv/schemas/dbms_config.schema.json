@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://polyglot-import-csv.local/schemas/sgbd_config.schema.json",
-  "title": "PolyglotImportCSV SGBD connection configuration",
-  "description": "Connection settings for each SGBD. Lists which SGBDs are available; the import configuration may only target SGBDs declared here.",
+  "$id": "https://polyglot-import-csv.local/schemas/dbms_config.schema.json",
+  "title": "PolyglotImportCSV DBMS connection configuration",
+  "description": "Connection settings for each DBMS. Lists which DBMSs are available; the import configuration may only target DBMSs declared here.",
   "type": "object",
   "required": ["version"],
   "properties": {
@@ -37,7 +37,8 @@
           "type": "string",
           "default": "public",
           "description": "Target schema for created tables."
-        }
+        },
+        "start": { "$ref": "#/$defs/start" }
       },
       "additionalProperties": false
     },
@@ -52,7 +53,8 @@
           },
           "required": ["uri", "database"],
           "additionalProperties": false
-        }
+        },
+        "start": { "$ref": "#/$defs/start" }
       },
       "additionalProperties": false
     },
@@ -70,7 +72,8 @@
           },
           "required": ["hosts", "keyspace"],
           "additionalProperties": false
-        }
+        },
+        "start": { "$ref": "#/$defs/start" }
       },
       "additionalProperties": false
     },
@@ -86,7 +89,8 @@
             "password": { "type": "string" }
           },
           "additionalProperties": false
-        }
+        },
+        "start": { "$ref": "#/$defs/start" }
       },
       "additionalProperties": false
     },
@@ -103,9 +107,39 @@
           },
           "required": ["uri", "user", "password"],
           "additionalProperties": false
-        }
+        },
+        "start": { "$ref": "#/$defs/start" }
       },
       "additionalProperties": false
+    },
+    "start": {
+      "description": "How to start this DBMS when it does not answer. Shown to the user, never executed.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "command": { "type": "string", "minLength": 1, "description": "Command line that starts a DBMS installed on this machine." }
+          },
+          "required": ["command"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "compose": {
+              "type": "object",
+              "properties": {
+                "file": { "type": "string", "minLength": 1, "description": "Docker Compose file, relative to this configuration file's folder." },
+                "service": { "type": "string", "minLength": 1, "description": "Service of that file that runs this DBMS." }
+              },
+              "required": ["file", "service"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["compose"],
+          "additionalProperties": false
+        }
+      ]
     }
   }
 }

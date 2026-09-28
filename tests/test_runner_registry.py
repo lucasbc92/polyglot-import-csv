@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from polyglotimportcsv.business_exception import BusinessException
-from polyglotimportcsv.runner import run_import
+from polyglotimportcsv.business_exception import BusinessException, ConfigError, DbmsUnavailableError
+from polyglotimportcsv.runner import run_check, run_import
 
 ROOT = Path(__file__).resolve().parents[1]
 CFG = ROOT / "data" / "ecommerce" / "import_config.json"
@@ -157,3 +157,76 @@ def test_run_import_stream_passes_a_preview_to_the_orchestrator(monkeypatch, cap
     out = capsys.readouterr().out
     assert "redis · user_session" in out
     assert "2 of 3 row(s)" in out
+
+
+def _probe_answers(value, seen=None):
+    def fake(endpoint, timeout=2.0):
+        if seen is not None:
+            seen.append(endpoint)
+        return value
+    return fake
+
+
+def test_a_real_import_stops_before_reading_sources_when_a_dbms_is_down(monkeypatch):
+    monkeypatch.setattr("polyglotimportcsv.dbms_check.probe", _probe_answers(False))
+
+    def must_not_run(*a, **k):
+        raise AssertionError("nothing may be read or written when a DBMS is down")
+
+    monkeypatch.setattr("polyglotimportcsv.runner.load_sources", must_not_run)
+    monkeypatch.setattr("polyglotimportcsv.runner.run_stream_import", must_not_run)
+    with pytest.raises(DbmsUnavailableError, match=r"postgres \(down\)"):
+        run_import(CFG, execution="stream", only=["postgres"])
+    with pytest.raises(DbmsUnavailableError, match=r"postgres \(down\)"):
+        run_import(CFG, execution="materialize", only=["postgres"],
+                   importers={"postgres": must_not_run})
+
+
+def test_dry_run_never_checks_the_dbms(monkeypatch):
+    def boom(*a, **k):
+        raise AssertionError("dry-run must not probe")
+
+    monkeypatch.setattr("polyglotimportcsv.dbms_check.probe", boom)
+    run_import(CFG, dry_run=True, only=["postgres"],
+               importers={"postgres": lambda cfg, entities, **kw: []})
+
+
+def test_run_check_targets_follow_only(monkeypatch):
+    seen = []
+    monkeypatch.setattr("polyglotimportcsv.dbms_check.probe", _probe_answers(True, seen))
+    report = run_check(CFG, only=["redis"])
+    assert [s.dbms for s in report.statuses] == ["redis"]
+    assert seen == [("127.0.0.1", 6379)]
+    assert report.ok
+
+
+def test_run_check_prints_the_table_and_the_start_command(monkeypatch, capsys):
+    monkeypatch.setattr("polyglotimportcsv.dbms_check.probe", _probe_answers(False))
+    linux = CFG.with_name("dbms_config_linux.json")
+    report = run_check(CFG, dbms_config_path=linux, only=["redis", "neo4j"])
+    out = capsys.readouterr().out
+    assert not report.ok
+    assert "Check DBMS" in out
+    assert "127.0.0.1:6379" in out
+    assert "To start the DBMS that are down, run in a terminal:" in out
+    assert "sudo systemctl start redis-server" in out
+    assert "sudo systemctl start neo4j" in out
+    assert "administrator terminal or sudo" in out
+
+
+def test_run_check_raises_when_only_matches_no_declared_dbms(monkeypatch):
+    def must_not_probe(*a, **k):
+        raise AssertionError("probe must not run when there is no target DBMS")
+
+    monkeypatch.setattr("polyglotimportcsv.dbms_check.probe", must_not_probe)
+    with pytest.raises(ConfigError, match=r"No target DBMS to check"):
+        run_check(CFG, only=["postgre"])
+
+
+def test_start_commands_are_never_wrapped(monkeypatch, capsys):
+    """A wrapped command would carry a line break into the terminal it is pasted in."""
+    monkeypatch.setattr("polyglotimportcsv.dbms_check.probe", _probe_answers(False))
+    run_check(CFG, only=["redis"])  # dbms_config.json: a long docker compose line
+    out = capsys.readouterr().out
+    line = next(l for l in out.splitlines() if "docker compose -f" in l)
+    assert line.rstrip().endswith("up -d --wait redis")

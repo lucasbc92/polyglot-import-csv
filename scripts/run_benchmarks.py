@@ -108,7 +108,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                              "roughly nothing on the database writes -- so it distorts the "
                              "phases against each other, not by one factor). Use a traced run "
                              "for memory and an untraced one for time.")
-    parser.add_argument("--sgbd-config", type=Path, default=Path("data/ecommerce/sgbd_config.json"))
+    parser.add_argument("--dbms-config", type=Path, default=Path("data/ecommerce/dbms_config.json"))
     parser.add_argument("--config-dir", type=Path, default=Path("data/ecommerce"),
                         help="Directory holding import_config.json / import_config_combined.json.")
     parser.add_argument("--data-dir", type=Path, default=Path("data/benchmark/generated"),
@@ -152,7 +152,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         labeled = run_matrix(
             sizes=sizes, modes=modes, repetitions=args.repetitions,
             strategies=strategies, executions=executions,
-            sgbd_config_path=args.sgbd_config, config_dir=args.config_dir,
+            dbms_config_path=args.dbms_config, config_dir=args.config_dir,
             data_dir=args.data_dir, seed=args.seed, only=only,
             cleaners=CLEANERS, importer=run_import, load_cfg=load_config,
             on_run=_checkpoint_writer(args.out, meta),
