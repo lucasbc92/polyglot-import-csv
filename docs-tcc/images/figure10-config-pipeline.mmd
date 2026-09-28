@@ -21,7 +21,7 @@ flowchart TD
     J --> M["mapping_resolver + validation\ncolunas existem na fonte?\nunião coerente? filtros ok?\nFKs e arestas válidos?\ncolunas planas nos SGBDs planos?"]
     L --> M
 
-    M -->|falha| N(["❌ MappingError\nerro semântico\nantes de qualquer conexão"])
+    M -->|falha| N(["❌ MappingError\nerro semântico\nantes de qualquer gravação"])
     M -->|ok| O["importação por SGBD\n(filtro, materialização, escrita)"]
 
     style E fill:#fee2e2,stroke:#dc2626,color:#1e293b

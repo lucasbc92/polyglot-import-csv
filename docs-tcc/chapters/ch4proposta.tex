@@ -803,6 +803,67 @@ operação de escrita própria de cada tecnologia. A \textbf{saída} da execuç�
 relatório com as contagens de registros gravados por entidade e por SGBD, que permite
 conferir o resultado da carga.
 
+\subsection{Verificação dos SGBDs}
+\label{sec:verificacao-sgbds}
+
+Antes de ler as fontes, toda importação real verifica se os SGBDs de destino --- os
+presentes no arquivo de importação, filtrados por \texttt{-{}-only} --- respondem. A
+verificação abre uma conexão TCP com cada endereço declarado no arquivo de conexão e a
+fecha em seguida, sem autenticar. As sondas correm em paralelo, com limite de dois
+segundos cada, de modo que o tempo total não cresce com o número de SGBDs. Cada SGBD
+termina em um de três estados: \textbf{no ar}, quando algum de seus endereços responde
+(no Cassandra, basta um nó); \textbf{fora do ar}, quando nenhum responde; e
+\textbf{conexão inválida}, quando o próprio \textit{driver} rejeita a configuração, como
+em uma URI com esquema desconhecido. Um único SGBD fora do ar ou com conexão inválida
+\textbf{interrompe} a execução antes da leitura dos CSVs, o que evita uma carga parcial:
+sem a verificação, os SGBDs anteriores na ordem de importação receberiam dados antes que
+a falha do seguinte fosse descoberta.
+
+Os endereços não são extraídos por um analisador próprio. Para o MongoDB e o Neo4j,
+cuja conexão é descrita por uma URI, a ferramenta constrói o cliente do próprio
+\textit{driver} sem conectar e obtém dele os endereços; assim, uma URI aceita pelo
+\textit{driver} nunca é recusada pela verificação, e uma recusada nunca passa. Para o
+PostgreSQL, seguem-se as regras da biblioteca cliente \texttt{libpq}, inclusive listas
+de hosts e \textit{sockets} Unix.
+
+Quando algum SGBD não responde, a ferramenta mostra, abaixo da tabela de estados, o
+que fazer: para cada descritor \texttt{command}, o próprio comando; para os descritores
+\texttt{compose} de um mesmo arquivo, um único \texttt{docker compose up}; e, para um
+SGBD sem \texttt{start}, uma orientação genérica. A opção \texttt{-{}-check-dbms}
+executa apenas essa etapa e encerra, com código de saída zero quando todos os SGBDs
+respondem. A Tabela~\ref{tab:check-dbms} e a Listagem~\ref{lst:check-dbms} reproduzem
+uma verificação feita com o arquivo de conexão de exemplo para Windows, com o MongoDB e
+o Neo4j fora do ar.
+
+\begin{table}[H]
+  \caption{Estados reportados por \texttt{-{}-check-dbms} com dois SGBDs fora do ar.}
+  \label{tab:check-dbms}
+  \centering
+  \begin{tabular}{l l l}
+    \toprule
+    SGBD & Endereço & Estado \\
+    \midrule
+    postgres  & 127.0.0.1:5432  & up   \\
+    mongodb   & 127.0.0.1:27017 & down \\
+    cassandra & 127.0.0.1:9042  & up   \\
+    redis     & 127.0.0.1:6379  & up   \\
+    neo4j     & 127.0.0.1:7687  & down \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{table}
+
+Abaixo da tabela, a ferramenta lista os comandos que iniciam os dois SGBDs fora do ar,
+retirados dos descritores \texttt{start} do arquivo de conexão:
+
+\begin{lstlisting}[style=textstyle,caption={Comandos de inicialização mostrados por \texttt{-{}-check-dbms}.},label={lst:check-dbms}]
+To start the DBMS that are down, run in a terminal:
+  net start MongoDB
+  net start neo4j
+Service commands (net start, systemctl) may need an administrator terminal or sudo.
+\end{lstlisting}
+
 \subsection{O Cenário de Exemplo e os Arquivos de Dados}
 \label{sec:exemplo-linha}
 
@@ -1263,7 +1324,7 @@ quantifica, varrendo sistematicamente os dois eixos aqui descritos.
 \label{sec:interface-grafica}
 
 Todas as capacidades descritas até aqui são acionadas por uma interface de linha de comando
-governada por doze opções, que precisam ser digitadas corretamente a cada execução e cujos
+governada por treze opções, que precisam ser digitadas corretamente a cada execução e cujos
 erros de sintaxe só se manifestam depois que o comando é submetido. Para reduzir essa barreira
 --- sem esconder a ferramenta de quem deseja aprendê-la --- foi construída uma
 \textbf{interface gráfica} \textit{desktop} sobre a CLI já existente. O princípio que orienta
@@ -1383,7 +1444,7 @@ próprio formulário, junto ao cartão a que se referem, como mostra a
 Figura~\ref{fig:gui-erro}: a mensagem é a mesma que a CLI produziria, e a execução fica
 bloqueada. Quando o usuário corrige o arquivo em um editor externo e retorna à janela, a
 validação é refeita automaticamente. Os erros que só surgem durante a importação, como a
-falha de conexão com um SGBD, aparecem no console exatamente como apareceriam no terminal, e
+falha de gravação em um SGBD, aparecem no console exatamente como apareceriam no terminal, e
 a barra de estado informa o código de saída do processo. Como a interface executa a CLI
 real, não há tradução intermediária que pudesse mascarar a mensagem.
 
@@ -1394,6 +1455,25 @@ real, não há tradução intermediária que pudesse mascarar a mensagem.
   \textit{JSON Schema}, a mensagem da CLI aparece no cartão de configuração e o botão de
   execução permanece desabilitado.}
   \label{fig:gui-erro}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{figure}
+
+A disponibilidade dos SGBDs, que a validação prévia deliberadamente não examina, tem um
+botão próprio: \textbf{Verificar SGBDs}, ao lado do botão de execução. Ele executa a CLI
+com \texttt{-{}-check-dbms}, com os arquivos de configuração e a seleção de SGBDs do
+formulário, e depende apenas de que esses dois arquivos sejam válidos --- pendências nas
+fontes CSV não o bloqueiam, porque a verificação não lê dados. A saída é a mesma do
+terminal, inclusive os comandos que iniciam cada SGBD fora do ar, que o usuário copia
+para um terminal: o console integrado executa somente a própria ferramenta. A
+Figura~\ref{fig:gui-verificacao} mostra uma verificação com dois SGBDs fora do ar.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\textwidth]{images/figure16-gui-verificacao}
+  \caption{Verificação dos SGBDs pela interface gráfica: MongoDB e Neo4j fora do ar e,
+  abaixo da tabela de estados, os comandos que os iniciam.}
+  \label{fig:gui-verificacao}
   \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{figure}
