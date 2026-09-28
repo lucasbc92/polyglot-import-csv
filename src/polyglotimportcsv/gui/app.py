@@ -16,9 +16,10 @@ import click
 from polyglotimportcsv.gui.launcher import CLI_FLAG
 
 _ASSETS = Path(__file__).resolve().parent / "assets"
-#: Window icon; PNG needs no Qt image-format plugin.
+#: 512 px icon; PNG needs no Qt image-format plugin, so it is the fallback.
 ICON_PNG = _ASSETS / "picsv.png"
-#: Executable icon, used by polyglotimportcsv.spec.
+#: One image per size the Windows shell draws (16-256 px): the window and
+#: taskbar icon, and the executable's icon in polyglotimportcsv.spec.
 ICON_ICO = _ASSETS / "picsv.ico"
 #: Without its own AppUserModelID, a GUI started with "python -m ..." is grouped
 #: under python.exe on the Windows taskbar and shows Python's icon there.
@@ -35,6 +36,19 @@ def _claim_taskbar_identity() -> None:
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
     except (AttributeError, OSError):
         pass  # an old shell without the call: the window icon still applies
+
+
+def window_icon():
+    """The application icon: the ICO's hand-sized images, the PNG for larger sizes.
+
+    Qt otherwise scales one large image down for the 16 and 32 px icons of the
+    title bar and taskbar. Imported lazily: the --cli hand-off must not load Qt.
+    """
+    from PySide6.QtGui import QIcon
+
+    icon = QIcon(str(ICON_ICO))
+    icon.addFile(str(ICON_PNG))
+    return icon
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -66,10 +80,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     app = QApplication([sys.argv[0]] + arguments)
     app.setApplicationName("PolyglotImportCSV")
     app.setOrganizationName("UFSC")
-
-    from PySide6.QtGui import QIcon
-
-    app.setWindowIcon(QIcon(str(ICON_PNG)))
+    app.setWindowIcon(window_icon())
     # Before the stylesheet: setStyle() resets the style, and the stylesheet
     # has to be applied on top of the style that will actually paint.
     indicators.install(app)

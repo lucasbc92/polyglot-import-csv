@@ -96,3 +96,30 @@ def test_the_window_icon_loads(qapp):
     from polyglotimportcsv.gui.app import ICON_PNG
 
     assert not QIcon(str(ICON_PNG)).isNull()
+
+
+def test_the_ico_holds_every_size_the_windows_shell_draws():
+    """A single 256 px image left the taskbar and small Explorer views to a
+    downscale of a wide logo; each size the shell asks for has its own image."""
+    import struct
+
+    from polyglotimportcsv.gui.app import ICON_ICO
+
+    data = ICON_ICO.read_bytes()
+    reserved, kind, count = struct.unpack_from("<HHH", data, 0)
+    assert (reserved, kind) == (0, 1)
+    sizes = {data[6 + 16 * i] or 256 for i in range(count)}
+    assert {16, 20, 24, 32, 40, 48, 64, 256} <= sizes
+
+
+def test_the_window_icon_has_its_own_small_images(qapp):
+    pytest.importorskip("PySide6")
+    from PySide6.QtCore import QSize
+
+    from polyglotimportcsv.gui.app import window_icon
+
+    icon = window_icon()
+    assert not icon.isNull()
+    available = icon.availableSizes()
+    assert QSize(16, 16) in available
+    assert QSize(32, 32) in available
