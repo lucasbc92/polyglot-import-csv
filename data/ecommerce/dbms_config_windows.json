@@ -10,7 +10,7 @@
       "password": "postgres"
     },
     "schema": "public",
-    "start": { "compose": { "file": "../../docker-compose.yml", "service": "postgres" } }
+    "start": { "command": "net start postgresql-x64-16" }
   },
 
   "mongodb": {
@@ -18,7 +18,7 @@
       "uri": "mongodb://127.0.0.1:27017",
       "database": "ecommerce"
     },
-    "start": { "compose": { "file": "../../docker-compose.yml", "service": "mongodb" } }
+    "start": { "command": "net start MongoDB" }
   },
 
   "cassandra": {
@@ -32,7 +32,7 @@
 
   "redis": {
     "connection": { "host": "127.0.0.1", "port": 6379, "db": 0 },
-    "start": { "compose": { "file": "../../docker-compose.yml", "service": "redis" } }
+    "start": { "command": "net start Memurai" }
   },
 
   "neo4j": {
@@ -42,6 +42,6 @@
       "password": "password",
       "database": "neo4j"
     },
-    "start": { "compose": { "file": "../../docker-compose.yml", "service": "neo4j" } }
+    "start": { "command": "net start neo4j" }
   }
 }

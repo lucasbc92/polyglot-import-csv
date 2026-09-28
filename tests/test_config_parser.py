@@ -7,6 +7,7 @@ import pytest
 from polyglotimportcsv.business_exception import BusinessException
 from polyglotimportcsv.config_parser import (
     load_config,
+    load_dbms_config,
     merge_configs,
     validate_import_config_schema,
     validate_dbms_config,
@@ -123,3 +124,68 @@ def test_load_config_accepts_ecommerce_fixture():
     assert "sources" in data and "version" not in data
     assert "postgres" in data
     assert data["postgres"]["connection"]["database"] == "ecommerce"
+
+
+ECOMMERCE = Path(__file__).resolve().parents[1] / "data" / "ecommerce"
+DBMS_NAMES = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
+
+
+def _postgres_with(start):
+    return {"version": 1, "postgres": {"connection": {"host": "h"}, "start": start}}
+
+
+@pytest.mark.parametrize("start", [
+    {"command": "net start postgresql-x64-16"},
+    {"compose": {"file": "../../docker-compose.yml", "service": "postgres"}},
+])
+def test_dbms_schema_accepts_each_start_form(start):
+    validate_dbms_config(_postgres_with(start))
+
+
+@pytest.mark.parametrize("start", [
+    {"command": "x", "compose": {"file": "f", "service": "s"}},  # both forms
+    {"command": ""},
+    {"command": "x", "sudo": True},
+    {"compose": {"file": "f"}},
+    {"compose": {"file": "f", "service": "s", "profile": "p"}},
+    {},
+])
+def test_dbms_schema_rejects_a_malformed_start(start):
+    with pytest.raises(BusinessException):
+        validate_dbms_config(_postgres_with(start))
+
+
+@pytest.mark.parametrize("name", [
+    "dbms_config.json", "dbms_config_windows.json", "dbms_config_linux.json",
+])
+def test_example_dbms_configs_are_valid_and_declare_start_everywhere(name):
+    cfg = load_dbms_config(ECOMMERCE / name)
+    for dbms in DBMS_NAMES:
+        assert "start" in cfg[dbms], (name, dbms)
+
+
+def test_example_dbms_configs_share_the_same_connections():
+    base = load_dbms_config(ECOMMERCE / "dbms_config.json")
+    for name in ("dbms_config_windows.json", "dbms_config_linux.json"):
+        other = load_dbms_config(ECOMMERCE / name)
+        for dbms in DBMS_NAMES:
+            assert other[dbms]["connection"] == base[dbms]["connection"], (name, dbms)
+        assert other["postgres"]["schema"] == base["postgres"]["schema"]
+
+
+def test_example_compose_references_point_at_the_repository_compose_file():
+    for name in ("dbms_config.json", "dbms_config_windows.json"):
+        cfg = load_dbms_config(ECOMMERCE / name)
+        for dbms in DBMS_NAMES:
+            compose = cfg[dbms]["start"].get("compose")
+            if compose:
+                assert (ECOMMERCE / compose["file"]).resolve().is_file(), (name, dbms)
+
+
+def test_merge_does_not_carry_start_into_the_import_structure():
+    import_cfg = {"sources": {"s": "s.csv"}, "postgres": {"entities": {}}}
+    dbms_cfg = {"version": 1, "postgres": {"connection": {"host": "h"},
+                                           "start": {"command": "x"}}}
+    merged = merge_configs(import_cfg, dbms_cfg)
+    assert "start" not in merged["postgres"]
+    assert merged["postgres"]["connection"] == {"host": "h"}
