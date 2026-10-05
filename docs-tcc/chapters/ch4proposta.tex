@@ -98,34 +98,141 @@ seção~\ref{sec:observabilidade}.
 \section{Formato de Configuração (JSON Schema)}
 \label{sec:config-format}
 
-A configuração é dividida em \textbf{dois arquivos JSON}, cada um validado estaticamente
-por um \textbf{JSON Schema} próprio embutido em \texttt{src/polyglotimportcsv/schemas/}:
-o \texttt{import\_config.json} define as \textbf{fontes de dados} e o \textbf{mapeamento}
-de entidades, relacionamentos e colunas para cada SGBD; o \texttt{dbms\_config.json}
-define a \textbf{configuração de conexão} de cada SGBD, isto é, quais bancos estão
-disponíveis e como alcançá-los.
+A configuração da ferramenta é dividida em \textbf{dois arquivos JSON}. O arquivo de
+\textbf{importação} (\texttt{import\_config.json}) declara as fontes de dados e o
+\textbf{mapeamento} das suas colunas para entidades e relacionamentos em cada SGBD; o
+arquivo de \textbf{conexão} (\texttt{dbms\_config.json}) declara quais SGBDs estão
+disponíveis e como alcançá-los. A separação atende a duas preocupações distintas: o
+mapeamento muda conforme o domínio dos dados, enquanto a conexão muda conforme o ambiente
+(desenvolvimento, testes, produção). Cada arquivo é validado por um \textbf{JSON Schema}
+próprio, embutido na ferramenta em \texttt{src/\allowbreak polyglotimportcsv/\allowbreak
+schemas/} e reproduzido no Apêndice~\ref{ap:schemas}.
 
-Essa separação atende a duas preocupações distintas: o \textit{mapeamento} muda conforme o
-domínio dos dados; a \textit{conexão} muda conforme o ambiente (desenvolvimento, testes,
-produção). Um SGBD só pode ser referenciado no arquivo de importação se estiver
-\textbf{declarado} no arquivo de conexão --- esta e as demais regras de validação são
-detalhadas na seção~\ref{sec:validacao}. A representação completa de ambos os schemas na
-forma serializada JSON Schema 2020-12 encontra-se no Apêndice~\ref{ap:schemas}.
+Os exemplos desta seção vêm do cenário de e-commerce apresentado na
+Seção~\ref{sec:persistencia-poliglota} (Figura~\ref{fig:polyglot-ecommerce}), cujos
+arquivos acompanham o repositório da ferramenta em \texttt{data/\allowbreak ecommerce/}.
+Os dados desse cenário registram os eventos de uma loja virtual, de quatro tipos,
+resumidos na Tabela~\ref{tab:eventos-ecommerce}. Todo evento registra o instante em que
+ocorreu e o usuário envolvido; a tabela indica os demais dados de cada tipo.
 
-\subsection{Fontes de Dados e os Dois Modos de Importação}
+\begin{table}[H]
+  \caption{Tipos de evento do cenário de e-commerce.}
+  \label{tab:eventos-ecommerce}
+  \centering
+  \begin{tabular}{>{\ttfamily}l l >{\raggedright\arraybackslash}p{6.4cm}}
+    \toprule
+    \normalfont\textbf{Tipo} & \textbf{Evento} & \textbf{Demais dados registrados} \\
+    \midrule
+    stock           & reposição de estoque & produto, categoria, quantidade disponível e preço \\
+    purchase        & compra               & pedido, produto, contraparte da venda, pagamento e avaliação \\
+    select\_product & seleção de produto   & produto selecionado \\
+    add\_to\_cart   & adição ao carrinho   & carrinho, produto e quantidade \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{table}
+
+Cada tipo de evento tem o seu próprio CSV, com oito linhas: \texttt{ecommerce\_stock.csv},
+\texttt{ecommerce\_purchase.csv}, \texttt{ecommerce\_select\_product.csv} e
+\texttt{ecommerce\_add\_to\_cart.csv}. Os mesmos eventos estão também reunidos em um único
+arquivo, \texttt{ecommerce\_join.csv}, cuja primeira coluna (\texttt{action}) indica o
+tipo de cada linha. O Apêndice~\ref{ap:csv} reproduz esses dados em forma tabular.
+
+As subseções seguintes descrevem cada arquivo da raiz até as folhas do seu schema: a
+Seção~\ref{sec:arquivo-importacao} apresenta o arquivo de importação; a
+Seção~\ref{sec:importacao-por-sgbd}, o que esse arquivo tem de específico em cada SGBD; a
+Seção~\ref{sec:arquivo-conexao}, o arquivo de conexão; e a Seção~\ref{sec:validacao}, as
+validações aplicadas aos dois antes da importação.
+
+\subsection{O Arquivo de Importação}
+\label{sec:arquivo-importacao}
+
+A Figura~\ref{fig:import-schema} mostra a estrutura do schema do arquivo de importação,
+da raiz (à esquerda) até as folhas (à direita); os campos marcados com asterisco são
+obrigatórios. A Tabela~\ref{tab:partes-importacao} resume a finalidade de cada parte e
+indica quais podem ser omitidas.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{images/figure8-import-schema}
+  \caption{Estrutura do JSON Schema de importação (\texttt{import\_config}).}
+  \label{fig:import-schema}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{figure}
+
+\begin{table}[H]
+  \caption{Partes do arquivo de importação.}
+  \label{tab:partes-importacao}
+  \centering
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{>{\raggedright\arraybackslash\ttfamily}p{3.5cm} >{\raggedright\arraybackslash}p{2.6cm} >{\raggedright\arraybackslash}p{4.6cm} >{\raggedright\arraybackslash}p{3.6cm}}
+    \toprule
+    \normalfont\textbf{Parte} & \textbf{Onde} & \textbf{Finalidade} & \textbf{Obrigatória?} \\
+    \midrule
+    sources & raiz & nomear os CSVs de entrada & sim \\
+    postgres, mongodb, cassandra, redis, neo4j & raiz & mapear dados para um SGBD & não; só os SGBDs de destino \\
+    entities & bloco de SGBD & declarar os alvos (tabelas, coleções, nós\ldots) & sim \\
+    relationships & bloco PostgreSQL ou Neo4j & declarar chaves estrangeiras ou arestas & não \\
+    source & entidade & indicar a fonte lida & não; padrão: a fonte de mesmo nome \\
+    columns & entidade & mapear as colunas & não; se omitido, todas as colunas da fonte \\
+    auto\_map, csv\_columns & entidade & controlar o mapeamento automático & não \\
+    filters & entidade & selecionar linhas & não \\
+    cassandra\_partition, cassandra\_cluster & entidade do Cassandra & definir a chave primária & não; a partição é exigida para criar a tabela \\
+    csv\_column, schema\_column, is\_key, db\_type & coluna & ligar uma coluna do CSV a um atributo & não \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{table}
+
+A Listagem~\ref{lst:import-minimo} mostra um trecho do arquivo de importação do cenário
+que percorre essa estrutura da raiz até as folhas: o bloco \texttt{sources}, o bloco do
+PostgreSQL, uma de suas entidades e duas de suas colunas. As reticências (\texttt{...})
+marcam o conteúdo omitido; o arquivo completo está no Apêndice~\ref{ap:config}.
+
+\begin{lstlisting}[style=jsonstyle,caption={Trecho do arquivo de importação, da raiz até as colunas.},label={lst:import-minimo}]
+"sources": {
+  "stock":    "ecommerce_stock.csv",
+  "purchase": "ecommerce_purchase.csv",
+  ...
+},
+"postgres": {
+  "entities": {
+    "inventory": {
+      "source": "stock",
+      "columns": {
+        "product_id": { "is_key": true, "db_type": "BIGINT" },
+        "price":      { "db_type": "NUMERIC(14,2)" },
+        ...
+      }
+    },
+    ...
+  }
+},
+...
+\end{lstlisting}
+
+Lido de cima para baixo, o trecho diz que: o bloco \texttt{sources} nomeia os arquivos de
+dados; o bloco \texttt{postgres} indica que parte dos dados vai para o PostgreSQL; a
+entidade \texttt{inventory} será uma tabela, alimentada pela fonte \texttt{stock}; e cada
+entrada de \texttt{columns} cria uma coluna dessa tabela. As subseções a seguir explicam
+cada um desses níveis, nessa ordem.
+
+\subsubsection{Raiz e bloco \texttt{sources}}
 \label{sec:sources}
 
-O bloco \texttt{sources}, obrigatório no arquivo de importação, nomeia as fontes de dados
-e determina o modo de importação. Cada entrada associa um \textbf{nome de fonte} a um
-arquivo CSV, em uma de duas formas.
+A raiz do arquivo admite apenas o bloco \texttt{sources}, obrigatório, e um bloco por SGBD
+de destino. Qualquer outra chave é rejeitada (\texttt{additionalProperties: false}), de
+modo que um erro de digitação como \texttt{postgress} é apontado na validação em vez de
+ser ignorado.
 
-Na primeira, \textbf{multifonte}, o valor é diretamente o caminho de um CSV, e cada fonte
-corresponde a um conjunto de dados do domínio, com o seu próprio arquivo. O exemplo
-adotado ao longo deste capítulo é o cenário de e-commerce apresentado na
-Seção~\ref{sec:persistencia-poliglota} (Figura~\ref{fig:polyglot-ecommerce}), em que cada
-categoria de dado da loja virtual é destinada ao SGBD mais adequado ao seu uso. A
-Listagem~\ref{lst:sources-multi} mostra o bloco \texttt{sources} desse cenário no modo
-multifonte: quatro fontes, uma por tipo de evento da loja.
+O bloco \texttt{sources} dá um \textbf{nome} a cada arquivo CSV de entrada, e as entidades
+referem-se às fontes por esse nome. Há duas formas de declarar as fontes, que
+correspondem aos dois modos de importação. No modo \textbf{multifonte}, cada nome aponta
+diretamente para um CSV, como na Listagem~\ref{lst:sources-multi}: uma fonte por tipo de
+evento.
 
 \begin{lstlisting}[style=jsonstyle,caption={Bloco \texttt{sources} no modo multifonte (um CSV por conjunto de dados).},label={lst:sources-multi}]
 "sources": {
@@ -136,11 +243,9 @@ multifonte: quatro fontes, uma por tipo de evento da loja.
 }
 \end{lstlisting}
 
-Na segunda, \textbf{combinada}, o valor é um objeto \texttt{\{ "file": ...,
-"origin\_column": true \}}, indicando que um \textbf{único} CSV largo reúne todos os
-conjuntos de dados, sendo a sua \textbf{primeira coluna} o rótulo de origem de cada linha. A
-Listagem~\ref{lst:sources-combined} mostra o mesmo cenário nesse modo: uma só fonte,
-apontando para o arquivo com a coluna de origem.
+No modo \textbf{combinado}, uma única fonte aponta para o CSV que reúne todos os eventos, e
+\texttt{"origin\_column": true} indica que a primeira coluna desse arquivo identifica a
+origem de cada linha, como na Listagem~\ref{lst:sources-combined}.
 
 \begin{lstlisting}[style=jsonstyle,caption={Bloco \texttt{sources} no modo combinado (um CSV com coluna de origem).},label={lst:sources-combined}]
 "sources": {
@@ -148,117 +253,122 @@ apontando para o arquivo com a coluna de origem.
 }
 \end{lstlisting}
 
-Ao carregar uma fonte combinada, a ferramenta lê a primeira coluna como a
-\textbf{origem}, remove-a das colunas de dados e registra, além da fonte inteira, uma
-fonte \textbf{derivada} para cada valor distinto de origem. Dessa forma, os nomes
-\texttt{stock}, \texttt{purchase}, \texttt{select\_product} e \texttt{add\_to\_cart}
-tornam-se fontes disponíveis exatamente como no modo multifonte, e o restante da
-configuração --- o mapeamento de cada SGBD --- permanece \textbf{idêntico} entre os dois
-modos. Os dois arquivos de importação que acompanham o repositório são, de fato, byte a
-byte iguais exceto pelo bloco \texttt{sources}.
+Ao carregar uma fonte combinada, a ferramenta separa as linhas pelo valor da primeira
+coluna e registra, além da própria fonte, uma fonte para cada valor distinto. Assim, os
+nomes \texttt{stock}, \texttt{purchase}, \texttt{select\_product} e \texttt{add\_to\_cart}
+ficam disponíveis como no modo multifonte, e o restante do arquivo de importação é
+idêntico nos dois modos. Em ambos, cada linha recebe ainda uma \textbf{pseudo-coluna}
+\texttt{\_source} com o nome da sua fonte, que pode ser mapeada como qualquer outra
+coluna (um exemplo aparece na Listagem~\ref{lst:cassandra-import}).
 
-Em qualquer dos modos, cada linha carrega uma \textbf{pseudo-coluna} \texttt{\_source}
-com a sua origem: o nome da fonte, no modo multifonte, ou o valor da coluna de origem, no
-modo combinado. Essa pseudo-coluna pode ser mapeada como qualquer outra coluna --- no
-cenário de e-commerce, ela alimenta o tipo de evento na tabela do Cassandra, como se verá
-na seção~\ref{sec:importacao-sgbds}.
+\subsubsection{Blocos de SGBD}
+\label{sec:blocos-sgbd}
 
-\textbf{Vínculo entre entidade e fonte.} Cada entidade declara de qual fonte lê por meio
-do campo \texttt{source}, que admite três formas: (i) uma \textbf{string} com o nome de
-uma fonte (\texttt{"source": "stock"}); (ii) uma \textbf{lista} de nomes
-(\texttt{"source": ["stock", "purchase"]}), caso em que as fontes são \textbf{unidas} em
-uma só tabela --- colunas ausentes em uma das partes ficam vazias e a pseudo-coluna
-\texttt{\_source} preserva a origem de cada linha; ou (iii) a \textbf{omissão} do campo,
-caso em que a entidade se liga à fonte que tiver o seu próprio nome. Essa flexibilidade
-permite que entidades diferentes leiam de fontes diferentes na mesma execução, sem
-depender de uma coluna discriminadora presente em todas as linhas.
+Cada bloco de SGBD (\texttt{postgres}, \texttt{mongodb}, \texttt{cassandra},
+\texttt{redis} ou \texttt{neo4j}) descreve o que será gravado naquele SGBD; só aparecem os
+blocos dos SGBDs que se deseja alimentar. A Listagem~\ref{lst:bloco-postgres} mostra o
+esqueleto do bloco do PostgreSQL no cenário, com o conteúdo de cada entrada omitido.
 
-\subsection{Visão Geral da Estrutura dos Arquivos de Configuração}
-\label{sec:visao-schema}
+\begin{lstlisting}[style=jsonstyle,caption={Esqueleto do bloco \texttt{postgres} do arquivo de importação.},label={lst:bloco-postgres}]
+"postgres": {
+  "entities": {
+    "categories": { ... },
+    "products":   { ... },
+    "inventory":  { ... },
+    "orders":     { ... }
+  },
+  "relationships": {
+    "product_category": { ... },
+    "order_product":    { ... }
+  }
+}
+\end{lstlisting}
 
-Antes de detalhar cada SGBD de destino suportado --- identificado nos arquivos de
-configuração pelos blocos \texttt{postgres}, \texttt{mongodb},
-\texttt{cassandra}, \texttt{redis} e \texttt{neo4j} --- esta subseção apresenta a
-estrutura dos dois schemas como um todo, fornecendo um mapa mental que orienta a
-leitura das subseções seguintes. A Figura~\ref{fig:import-schema} sintetiza
-graficamente o schema do arquivo de importação (\texttt{import\_config}) e a
-Figura~\ref{fig:dbms-schema}, o schema do arquivo de conexão (\texttt{dbms\_config}).
+O mapa \texttt{entities}, obrigatório, contém as entidades a criar, cada uma identificada
+pelo nome que terá no SGBD --- aqui, quatro tabelas. O mapa \texttt{relationships},
+opcional, existe apenas nos blocos do PostgreSQL, onde declara chaves estrangeiras, e do
+Neo4j, onde declara arestas; ambos são detalhados na Seção~\ref{sec:importacao-por-sgbd}.
 
-\begin{figure}
-  \centering
-  \includegraphics[width=\textwidth]{images/figure8-import-schema}
-  \caption{Estrutura do JSON Schema de importação (\texttt{import\_config}).}
-  \label{fig:import-schema}
-  \par\vspace{4pt}
-  {\footnotesize Fonte: Elaborado pelo autor (2026).}
-\end{figure}
+\subsubsection{Entidade}
+\label{sec:entidade}
 
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=0.85\textwidth]{images/figure9-dbms-schema}
-  \caption{Estrutura do JSON Schema de conexão (\texttt{dbms\_config}).}
-  \label{fig:dbms-schema}
-  \par\vspace{4pt}
-  {\footnotesize Fonte: Elaborado pelo autor (2026).}
-\end{figure}
+Uma entidade representa um alvo no SGBD: uma tabela no PostgreSQL ou no Cassandra, uma
+coleção no MongoDB, um conjunto de chaves no Redis ou um rótulo de nó no Neo4j. Todos os
+SGBDs usam a mesma definição de entidade, exemplificada na Listagem~\ref{lst:entidade}
+pela entidade \texttt{inventory} do PostgreSQL.
 
-\textbf{Raízes por SGBD.} Ambos os schemas partilham a mesma organização: um bloco
-opcional por SGBD (\texttt{postgres}, \texttt{mongodb}, \texttt{cassandra},
-\texttt{redis}, \texttt{neo4j}), com \texttt{additionalProperties: false} rejeitando
-chaves desconhecidas. A diferença está no conteúdo de cada bloco e na raiz: o arquivo de
-importação exige o bloco \texttt{sources} (seção~\ref{sec:sources}) e descreve \textit{o
-que} mapear; o de conexão exige um campo \texttt{version} e descreve \textit{onde}
-gravar.
+\begin{lstlisting}[style=jsonstyle,caption={Entidade \texttt{inventory} do arquivo de importação.},label={lst:entidade}]
+"inventory": {
+  "source": "stock",
+  "columns": {
+    "product_id":         { "is_key": true, "db_type": "BIGINT" },
+    "quantity_available": { "db_type": "BIGINT" },
+    "last_restock_date":  { "db_type": "TIMESTAMPTZ" },
+    "price":              { "db_type": "NUMERIC(14,2)" }
+  }
+}
+\end{lstlisting}
 
-\textbf{O arquivo de importação e a definição reutilizável \texttt{entity}.}
-Seguindo as setas a partir de \texttt{import\_config}, cada bloco de SGBD
-expande-se em um mapa \texttt{entities} (e, para PostgreSQL e Neo4j, também em
-\texttt{relationships}). O ponto central da Figura~\ref{fig:import-schema} --- e da economia de
-vocabulário do schema --- é que \textbf{todas as entidades, de todos os
-SGBDs, convergem para uma única definição reutilizável}, rotulada
-\texttt{entity}. Em vez de cinco formatos distintos, há apenas um: toda entidade
-possui um mapa \texttt{columns} (o mapeamento de colunas) e campos opcionais como
-\texttt{source} (o vínculo com a fonte, seção~\ref{sec:sources}), \texttt{auto\_map} e
-\texttt{csv\_columns} (mapeamento automático, seção~\ref{sec:raiz}), \texttt{filters}
-(predicados sobre as linhas) e os campos específicos do Cassandra
-(\texttt{cassandra\_partition} e \texttt{cassandra\_cluster}).
+Todos os campos de uma entidade são opcionais:
 
-\textbf{O mapeamento recursivo de colunas.} À direita da Figura~\ref{fig:import-schema}, \texttt{columns}
-remete a \texttt{columnEntry}, definido como uma escolha (\texttt{oneOf}) entre duas
-formas: (i) uma \textbf{folha} --- o \texttt{columnSpec}, que liga uma coluna do CSV
-a um atributo do destino por meio dos campos \texttt{csv\_column},
-\texttt{schema\_column}, \texttt{is\_key} e \texttt{db\_type}; ou (ii) um
-\textbf{objeto aninhado}, que contém novos \texttt{columnEntry}. Essa recursão é o
-que permite, com um único mecanismo, tanto o mapeamento plano (PostgreSQL,
-Cassandra, Redis) quanto os subdocumentos do MongoDB. As arestas tipadas do Neo4j
-e as chaves estrangeiras do PostgreSQL aparecem em \texttt{relationships},
-reutilizando o mesmo \texttt{columnSpec} para eventuais propriedades.
+\begin{itemize}
+  \item \texttt{source} indica a fonte da qual a entidade lê. Pode ser o nome de uma fonte,
+  como na listagem; uma lista de nomes (\texttt{"source": ["stock", "purchase"]}), caso em
+  que as linhas das fontes são unidas em uma só entidade, com valores vazios nas colunas
+  que faltam em alguma delas; ou ser omitido, caso em que a entidade lê da fonte que tem o
+  seu próprio nome.
+  \item \texttt{columns} lista as colunas da entidade (Seção~\ref{sec:colunas}). Se for
+  omitido, a entidade recebe \textbf{todas} as colunas da fonte, com os nomes do CSV e
+  tipos inferidos dos próprios dados; é o \textbf{mapeamento automático}, que
+  \texttt{auto\_map} e \texttt{csv\_columns} ajustam, como descreve a mesma seção.
+  \item \texttt{filters} restringe as linhas da fonte que participam da entidade, como
+  descrito a seguir.
+  \item \texttt{cassandra\_partition} e \texttt{cassandra\_cluster} definem a chave
+  primária no Cassandra (Seção~\ref{sec:importacao-por-sgbd}).
+\end{itemize}
 
-\textbf{O arquivo de conexão.} Na Figura~\ref{fig:dbms-schema}, cada bloco de
-SGBD de \texttt{dbms\_config} carrega um descritor
-\texttt{connection} com os parâmetros de acesso pertinentes àquela tecnologia (por
-exemplo, \texttt{uri} para MongoDB e Neo4j; \texttt{hosts} e \texttt{keyspace} para
-Cassandra) e, opcionalmente, um descritor \texttt{start}, que diz como iniciá-lo
-(Seção~\ref{sec:inicializacao-sgbds}). É uma estrutura deliberadamente rasa: indica
-\textit{onde} alcançar cada SGBD e, opcionalmente, \textit{como} iniciá-lo, sem
-nenhuma informação de mapeamento.
+No cenário, cada tipo de evento já vem de uma fonte própria, e nenhuma entidade precisa de
+filtros. A Listagem~\ref{lst:filtro} mostra um filtro ilustrativo, que não faz parte do
+cenário: aplicado a uma entidade que lê da fonte \texttt{purchase}, ele manteria apenas as
+compras pagas com cartão de crédito.
 
-As subseções seguintes percorrem essa estrutura na ordem em que as duas figuras são
-lidas: primeiro a raiz e os elementos comuns a todos os SGBDs
-(\texttt{columnSpec}, \texttt{entity}, mapeamento automático e filtros) e, em seguida, as
-particularidades de cada SGBD, ilustradas com fragmentos concretos de configuração.
+\begin{lstlisting}[style=jsonstyle,caption={Filtro ilustrativo sobre a coluna \texttt{payment\_method}.},label={lst:filtro}]
+"filters": [
+  { "column": "payment_method", "operator": "==", "value": "credit_card" }
+]
+\end{lstlisting}
 
-\subsection{Raiz e Elementos Comuns}
-\label{sec:raiz}
+Cada filtro exige a coluna (\texttt{column}) e o operador (\texttt{operator}), que pode ser
+\texttt{==}, \texttt{!=}, \texttt{>}, \texttt{<}, \texttt{>=}, \texttt{<=}, \texttt{in},
+\texttt{not\_in} ou \texttt{each}; \texttt{value} é o valor comparado. O operador
+\texttt{each} não restringe as linhas, e sim divide a entidade: cada valor distinto da
+coluna gera um alvo próprio, cujo nome é o da entidade seguido de um sufixo derivado do
+valor (ou definido em \texttt{target\_suffix}).
 
-Como antecipado na visão geral, ambos os arquivos organizam-se em um bloco opcional por
-SGBD. A cláusula \texttt{additionalProperties: false} \textbf{rejeita} qualquer
-propriedade não prevista, impedindo que erros de digitação como \texttt{postgress}
-passem despercebidos.
+\subsubsection{Colunas}
+\label{sec:colunas}
 
-\textbf{columnSpec.} Cada \textbf{folha} do mapa \texttt{columns} descreve como um valor
-do CSV alimenta um atributo no destino. Quatro campos opcionais compõem esse mapeamento,
-conforme a Tabela~\ref{tab:columnspec}.
+O mapa \texttt{columns} associa cada atributo da entidade a uma coluna do CSV. A
+Listagem~\ref{lst:colunas} mostra três entradas: as duas primeiras pertencem à entidade
+\texttt{user\_activity\_log} do Cassandra (Listagem~\ref{lst:cassandra-import}); a
+terceira é ilustrativa.
+
+\begin{lstlisting}[style=jsonstyle,caption={Três formas de mapear uma coluna.},label={lst:colunas}]
+"columns": {
+  "product_id": {},
+  "timestamp":  { "schema_column": "event_time" },
+  "preco":      { "csv_column": "price" }
+}
+\end{lstlisting}
+
+A chave de cada entrada dá, por padrão, dois nomes ao mesmo tempo: o da coluna lida no CSV
+e o do atributo gravado no SGBD. Na primeira entrada, os dois nomes são iguais à chave
+(\texttt{product\_id}), e o objeto vazio basta. Na segunda, a coluna \texttt{timestamp} do
+CSV é gravada com outro nome, \texttt{event\_time}, indicado em \texttt{schema\_column}.
+Na terceira, o atributo se chama \texttt{preco} no SGBD, mas é lido da coluna
+\texttt{price} do CSV, indicada em \texttt{csv\_column}; esse campo também aceita a
+posição da coluna, a partir de 1, útil em CSVs sem cabeçalho. A
+Tabela~\ref{tab:columnspec} resume os quatro campos que uma entrada pode ter.
 
 \begin{table}[H]
   \caption{Campos de mapeamento de coluna (\texttt{columnSpec}).}
@@ -268,8 +378,8 @@ conforme a Tabela~\ref{tab:columnspec}.
     \toprule
     \normalfont\textbf{Campo} & \textbf{Tipo} & \textbf{Obrigatório} & \textbf{Descrição} \\
     \midrule
-    csv\_column    & \textit{string} ou inteiro ($\geq 1$) & não & Cabeçalho CSV ou índice da coluna de dados (base 1). Padrão: chave JSON. \\
-    schema\_column & \textit{string} & não & Nome do atributo no SGBD destino. Padrão: chave JSON. \\
+    csv\_column    & \textit{string} ou inteiro ($\geq 1$) & não & Cabeçalho CSV ou posição da coluna (base 1). Padrão: a chave. \\
+    schema\_column & \textit{string} & não & Nome do atributo no SGBD destino. Padrão: a chave. \\
     is\_key        & booleano & não & Chave primária, chave de \texttt{MERGE} (Neo4j) ou chave Redis. \\
     db\_type       & \textit{string} & não & Tipo SQL/CQL para geração de DDL. \\
     \bottomrule
@@ -278,26 +388,17 @@ conforme a Tabela~\ref{tab:columnspec}.
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{table}
 
-A chave JSON de cada entrada em \texttt{columns} identifica o mapeamento e serve de
-\textbf{padrão} tanto para a coluna de origem no CSV quanto para o atributo de destino
-no SGBD; por isso a forma mínima (\texttt{"campo": \{\}}) basta quando os três nomes
-coincidem. Quando divergem, \texttt{csv\_column} redefine a origem --- por nome de
-cabeçalho ou por índice posicional de base 1, útil para CSVs sem cabeçalho --- e
-\texttt{schema\_column} redefine o destino no SGBD. Por ser um identificador
-independente da origem, a chave permite ainda que uma mesma coluna do CSV alimente
-atributos distintos (entradas com \texttt{csv\_column} repetido), recurso pontual para
-cenários de denormalização.
+No lugar de uma entrada simples, \texttt{columns} pode conter um novo mapa de colunas.
+Esse \textbf{aninhamento} só é aceito no MongoDB, onde produz um subdocumento
+(Listagem~\ref{lst:mongo-import}).
 
-\textbf{Mapeamento automático (\texttt{auto\_map} e \texttt{csv\_columns}).} Nem sempre é
-prático enumerar coluna a coluna. Quando o campo \texttt{columns} é omitido, ou quando
-\texttt{auto\_map} é \texttt{true}, a entidade \textbf{mapeia automaticamente} todas as
-colunas da sua fonte, atribuindo a cada uma o nome e um tipo de destino inferido do
-próprio dado (adiante, em \textbf{Inferência de tipos}); entradas manuais em
-\texttt{columns} sobrepõem-se às automáticas coluna a coluna, permitindo, por exemplo,
-declarar apenas a chave e deixar o restante ser inferido. O campo \texttt{csv\_columns}
---- válido apenas com mapeamento automático --- \textbf{restringe} o conjunto
-auto-mapeado a colunas específicas, indicadas por nome, por índice de base 1 ou por
-intervalos como \texttt{"1-5"}.
+\textbf{Mapeamento automático.} Quando \texttt{columns} é omitido, a entidade recebe todas
+as colunas da sua fonte, com os nomes do CSV. Com \texttt{"auto\_map": true}, as colunas
+declaradas em \texttt{columns} somam-se às automáticas e prevalecem sobre elas: na
+Listagem~\ref{lst:redis-import}, a entidade \texttt{shopping\_cart} declara apenas a
+coluna-chave e recebe as demais automaticamente. Nos dois casos, \texttt{csv\_columns}
+limita o mapeamento automático às colunas indicadas, por nome, por posição (a partir de 1)
+ou por intervalo, como \texttt{"1-5"}.
 
 \textbf{Inferência de tipos.} Todos os valores são lidos inicialmente como texto,
 preservando o conteúdo original do arquivo. Em seguida, a ferramenta classifica cada
@@ -305,7 +406,8 @@ coluna segundo o tipo predominante entre os seus valores --- inteiro, real, data
 booleano, texto ou vazia --- e converte os valores para o tipo nativo correspondente.
 Essa classificação também define o tipo de destino (\texttt{db\_type}) usado na geração de
 DDL quando a coluna é auto-mapeada, segundo a correspondência da
-Tabela~\ref{tab:kinds}.
+Tabela~\ref{tab:kinds}; uma coluna declarada sem \texttt{db\_type} é criada como
+\texttt{TEXT}.
 
 \begin{table}[H]
   \caption{Correspondência entre tipo inferido e tipo de destino na geração de DDL.}
@@ -325,24 +427,6 @@ Tabela~\ref{tab:kinds}.
   \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{table}
-
-\textbf{entity.} Uma entidade representa um alvo lógico: tabela (PostgreSQL/Cassandra),
-coleção (MongoDB), rótulo de nó (Neo4j) ou entidade Redis. O único campo estritamente
-necessário é o vínculo com a fonte (explícito em \texttt{source} ou implícito pelo nome);
-\texttt{columns} pode ser omitido em favor do mapeamento automático. São opcionais
-\texttt{auto\_map} e \texttt{csv\_columns} (mapeamento automático), \texttt{filters}
-(predicados sobre as linhas), e \texttt{cassandra\_partition} e
-\texttt{cassandra\_cluster} (apenas Cassandra).
-
-\textbf{Filtros.} Além do vínculo com a fonte, uma entidade pode declarar
-\texttt{filters}: predicados opcionais que \textbf{restringem} as linhas participantes.
-Cada item exige \texttt{column} e \texttt{operator} (\texttt{==}, \texttt{!=},
-\texttt{>}, \texttt{<}, \texttt{>=}, \texttt{<=}, \texttt{in}, \texttt{not\_in},
-\texttt{each}). O operador \texttt{each} particiona a entidade por valores distintos da
-coluna, gerando múltiplos alvos com sufixo opcional. Diferentemente da seleção da origem
---- feita pelo bloco \texttt{sources} e pelo campo \texttt{source} ---, os filtros são um
-refinamento adicional; no cenário de e-commerce, em que cada conjunto de dados já vem de uma fonte
-própria, eles não são necessários e não aparecem na configuração.
 
 \subsection{PostgreSQL}
 
@@ -868,23 +952,11 @@ Service commands (net start, systemctl) may need an administrator terminal or su
 \subsection{O Cenário de Exemplo e os Arquivos de Dados}
 \label{sec:exemplo-linha}
 
-Para concretizar o algoritmo, esta subseção e a seguinte percorrem o cenário de
-e-commerce que acompanha o repositório da ferramenta (Seção~\ref{sec:visao-geral}) --- o
-mesmo cenário cujos
-fragmentos de configuração ilustraram a seção~\ref{sec:config-format} e cuja execução
-completa é demonstrada na seção~\ref{sec:exemplo-uso}.
-
-Os dados do cenário registram os eventos de uma loja virtual, agrupados por tipo:
-\textbf{reposição de estoque} (\texttt{stock}), \textbf{compra} (\texttt{purchase}),
-\textbf{seleção de produto} (\texttt{select\_product}) e \textbf{adição ao carrinho}
-(\texttt{add\_to\_cart}). No modo multifonte --- adotado como referência neste exemplo ---
-cada tipo tem o seu próprio CSV (\texttt{ecommerce\_stock.csv},
-\texttt{ecommerce\_purchase.csv}, \texttt{ecommerce\_select\_product.csv} e
-\texttt{ecommerce\_add\_to\_cart.csv}), cada um com oito linhas e as colunas pertinentes
-ao seu conjunto de dados. Como alternativa equivalente, o modo combinado reúne os mesmos eventos em
-um único arquivo largo, \texttt{ecommerce\_join.csv}, cuja primeira coluna
-(\texttt{action}) rotula a origem de cada linha; o Apêndice~\ref{ap:csv} reproduz esse
-arquivo em forma tabular, organizado por ação.
+Para concretizar o algoritmo, esta subseção e a seguinte acompanham as linhas do cenário
+de e-commerce apresentado na seção~\ref{sec:config-format}
+(Tabela~\ref{tab:eventos-ecommerce}) pelo núcleo do algoritmo; a execução completa do
+cenário é demonstrada na seção~\ref{sec:exemplo-uso}. O exemplo adota o modo multifonte,
+em que cada tipo de evento tem o seu próprio CSV.
 
 A Tabela~\ref{tab:csv-stock} apresenta as oito linhas da fonte \texttt{stock}
 (\texttt{ecommerce\_stock.csv}), que servem de fio condutor do exemplo. Para caber na
