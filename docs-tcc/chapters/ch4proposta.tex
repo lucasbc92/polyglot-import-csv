@@ -179,7 +179,7 @@ indica quais podem ser omitidas.
     columns & entidade & mapear as colunas & não; se omitido, todas as colunas da fonte \\
     auto\_map, csv\_columns & entidade & controlar o mapeamento automático & não \\
     filters & entidade & selecionar linhas & não \\
-    cassandra\_\allowbreak partition, cassandra\_\allowbreak cluster & entidade do Cassandra & definir a chave primária & não; a partição é exigida para criar a tabela \\
+    cassandra\_\allowbreak partition, cassandra\_\allowbreak cluster & entidade do Cassandra & definir a chave primária & não; sem a partição, a gravação falha \\
     csv\_column, schema\_column, is\_key, db\_type & coluna & ligar uma coluna do CSV a um atributo & não \\
     \bottomrule
   \end{tabular}
@@ -204,8 +204,8 @@ marcam o conteúdo omitido; o arquivo completo está no Apêndice~\ref{ap:config
       "source": "stock",
       "columns": {
         "product_id": { "is_key": true, "db_type": "BIGINT" },
-        "price":      { "db_type": "NUMERIC(14,2)" },
         ...
+        "price":      { "db_type": "NUMERIC(14,2)" }
       }
     },
     ...
@@ -258,7 +258,8 @@ coluna e registra, além da própria fonte, uma fonte para cada valor distinto. 
 nomes \texttt{stock}, \texttt{purchase}, \texttt{select\_product} e \texttt{add\_to\_cart}
 ficam disponíveis como no modo multifonte, e o restante do arquivo de importação é
 idêntico nos dois modos. Em ambos, cada linha recebe ainda uma \textbf{pseudo-coluna}
-\texttt{\_source} com o nome da sua fonte, que pode ser mapeada como qualquer outra
+\texttt{\_source} com a sua origem --- o nome da fonte, no modo multifonte, ou o valor da
+coluna de origem, no modo combinado ---, que pode ser mapeada como qualquer outra
 coluna (um exemplo aparece na Listagem~\ref{lst:cassandra-import}).
 
 \subsubsection{Blocos de SGBD}
@@ -340,10 +341,11 @@ compras pagas com cartão de crédito.
 
 Cada filtro exige a coluna (\texttt{column}) e o operador (\texttt{operator}), que pode ser
 \texttt{==}, \texttt{!=}, \texttt{>}, \texttt{<}, \texttt{>=}, \texttt{<=}, \texttt{in},
-\texttt{not\_in} ou \texttt{each}; \texttt{value} é o valor comparado. O operador
-\texttt{each} não restringe as linhas, e sim divide a entidade: cada valor distinto da
-coluna gera um alvo próprio, cujo nome é o da entidade seguido de um sufixo derivado do
-valor (ou definido em \texttt{target\_suffix}).
+\texttt{not\_in} ou \texttt{each}; o valor comparado (\texttt{value}) também é exigido,
+exceto com \texttt{each}, e é uma lista com \texttt{in} e \texttt{not\_in}. O operador
+\texttt{each} não restringe as linhas, e sim divide a entidade: cada valor distinto e não
+vazio da coluna gera um alvo próprio, cujo nome é o da entidade seguido de um sufixo derivado
+desse valor.
 
 \subsubsection{Colunas}
 \label{sec:colunas}
@@ -367,7 +369,7 @@ e o do atributo gravado no SGBD. Na primeira entrada, os dois nomes são iguais 
 CSV é gravada com outro nome, \texttt{event\_time}, indicado em \texttt{schema\_column}.
 Na terceira, o atributo se chama \texttt{preco} no SGBD, mas é lido da coluna
 \texttt{price} do CSV, indicada em \texttt{csv\_column}; esse campo também aceita a
-posição da coluna, a partir de 1, útil em CSVs sem cabeçalho. A
+posição da coluna de dados, a partir de 1. A
 Tabela~\ref{tab:columnspec} resume os quatro campos que uma entrada pode ter.
 
 \begin{table}[H]
@@ -378,7 +380,7 @@ Tabela~\ref{tab:columnspec} resume os quatro campos que uma entrada pode ter.
     \toprule
     \normalfont\textbf{Campo} & \textbf{Tipo} & \textbf{Obrigatório} & \textbf{Descrição} \\
     \midrule
-    csv\_column    & \textit{string} ou inteiro ($\geq 1$) & não & Cabeçalho CSV ou posição da coluna (base 1). Padrão: a chave. \\
+    csv\_column    & \textit{string} ou inteiro ($\geq 1$) & não & Cabeçalho CSV ou posição da coluna de dados (base 1). Padrão: a chave. \\
     schema\_column & \textit{string} & não & Nome do atributo no SGBD destino. Padrão: a chave. \\
     is\_key        & booleano & não & Chave primária, chave de \texttt{MERGE} (Neo4j) ou chave Redis. \\
     db\_type       & \textit{string} & não & Tipo SQL/CQL para geração de DDL. \\
@@ -406,8 +408,8 @@ coluna segundo o tipo predominante entre os seus valores --- inteiro, real, data
 booleano, texto ou vazia --- e converte os valores para o tipo nativo correspondente.
 Essa classificação também define o tipo de destino (\texttt{db\_type}) usado na geração de
 DDL quando a coluna é auto-mapeada, segundo a correspondência da
-Tabela~\ref{tab:kinds}; uma coluna declarada sem \texttt{db\_type} é criada como
-\texttt{TEXT}.
+Tabela~\ref{tab:kinds}. Para uma coluna declarada sem \texttt{db\_type}, o PostgreSQL
+usa \texttt{TEXT}, enquanto o Cassandra usa o tipo inferido.
 
 \begin{table}[H]
   \caption{Correspondência entre tipo inferido e tipo de destino na geração de DDL.}
@@ -454,6 +456,7 @@ a liga às categorias.
       "columns": {
         "product_id":   { "is_key": true, "db_type": "BIGINT" },
         "product_name": { "db_type": "TEXT" },
+        ...
         "category_id":  { "db_type": "BIGINT" },
         ...
       }
@@ -512,9 +515,10 @@ descrição, imagem e preço), mapeadas da mesma forma que \texttt{product\_id} 
 \textbf{Apache Cassandra.} As entidades são tabelas com colunas simples, e a chave
 primária é definida por dois campos próprios: \texttt{cassandra\_\allowbreak partition},
 a lista de colunas da chave de partição, e \texttt{cassandra\_\allowbreak cluster}, as
-colunas de agrupamento. A partição é exigida para criar a tabela, pois a linguagem CQL
-requer ao menos uma coluna de partição na chave primária; por isso a sua ausência só é
-apontada quando \texttt{-{}-create-schema} está ativo. No Cassandra, \texttt{is\_key} não
+colunas de agrupamento. A partição é obrigatória na prática, pois a linguagem CQL requer
+ao menos uma coluna de partição na chave primária; a sua ausência, porém, não é apontada
+na validação nem pelo \texttt{-{}-dry-run}, e só interrompe a importação no momento da
+gravação no Cassandra. No Cassandra, \texttt{is\_key} não
 participa da chave primária. A Listagem~\ref{lst:cassandra-import} mostra uma entidade
 que \textbf{une} as quatro fontes em uma tabela de eventos.
 
@@ -630,15 +634,6 @@ os campos obrigatórios marcados com asterisco: a raiz, um bloco por SGBD e, den
 bloco, os parâmetros de acesso. A Tabela~\ref{tab:partes-conexao} resume a finalidade de
 cada parte.
 
-\begin{figure}[tbp]
-  \centering
-  \includegraphics[width=0.85\textwidth]{images/figure9-dbms-schema}
-  \caption{Estrutura do JSON Schema de conexão (\texttt{dbms\_config}).}
-  \label{fig:dbms-schema}
-  \par\vspace{4pt}
-  {\footnotesize Fonte: Elaborado pelo autor (2026).}
-\end{figure}
-
 \begin{table}[H]
   \caption{Partes do arquivo de conexão.}
   \label{tab:partes-conexao}
@@ -649,7 +644,7 @@ cada parte.
     \normalfont\textbf{Parte} & \textbf{Onde} & \textbf{Finalidade} & \textbf{Obrigatória?} \\
     \midrule
     version & raiz & versão do formato do arquivo (atualmente, 1) & sim \\
-    postgres, mongodb, cassandra, redis, neo4j & raiz & dar acesso a um SGBD & não; só os SGBDs de destino \\
+    postgres, mongodb, cassandra, redis, neo4j & raiz & dar acesso a um SGBD & não; ao menos os SGBDs de destino \\
     connection & bloco de SGBD & parâmetros de acesso & sim \\
     schema & bloco PostgreSQL & schema de destino das tabelas & não; padrão: \texttt{public} \\
     start & bloco de SGBD & como iniciar o SGBD & não \\
@@ -687,6 +682,15 @@ SGBDs; o arquivo completo está no Apêndice~\ref{ap:config}.
 }
 \end{lstlisting}
 
+\begin{figure}[tbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{images/figure9-dbms-schema}
+  \caption{Estrutura do JSON Schema de conexão (\texttt{dbms\_config}).}
+  \label{fig:dbms-schema}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{figure}
+
 \subsubsection{Raiz e blocos de SGBD}
 
 A raiz exige o campo \texttt{version} e aceita um bloco por SGBD; como no arquivo de
@@ -722,7 +726,8 @@ obrigatórios e os valores usados quando um campo opcional é omitido.
 \end{table}
 
 No MongoDB e no Neo4j, o endereço é uma URI no formato do respectivo \textit{driver}
-(\texttt{mongodb://...} e \texttt{bolt://...}), que pode incluir usuário e senha. No
+(\texttt{mongodb://...} e \texttt{bolt://...}). A URI do MongoDB pode incluir usuário e
+senha; no Neo4j, as credenciais vão nos campos \texttt{user} e \texttt{password}. No
 Cassandra, \texttt{hosts} é uma lista, pois um \textit{cluster} pode ter vários nós, e
 \texttt{request\_timeout} é o tempo máximo, em segundos, de cada requisição.
 
