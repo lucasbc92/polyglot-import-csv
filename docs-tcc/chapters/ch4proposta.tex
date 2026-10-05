@@ -428,25 +428,34 @@ Tabela~\ref{tab:kinds}; uma coluna declarada sem \texttt{db\_type} é criada com
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{table}
 
-\subsection{PostgreSQL}
+\subsection{Particularidades de Cada SGBD no Arquivo de Importação}
+\label{sec:importacao-por-sgbd}
 
-\textbf{Arquivo de importação.} O bloco \texttt{postgres} contém \texttt{entities}
-(entidades planas --- aninhamento de \texttt{columns} é rejeitado) e, opcionalmente,
-\texttt{relationships} para declarar chaves estrangeiras. O campo \texttt{db\_type} em
-cada \texttt{columnSpec} alimenta a geração de DDL (\texttt{CREATE TABLE}) quando
-\texttt{-{}-create-schema} está ativo. A Listagem~\ref{lst:pg-import} mostra um fragmento
-da importação no domínio de e-commerce.
+Os cinco blocos de SGBD usam a mesma definição de entidade, mas cada SGBD acrescenta
+regras próprias, decorrentes do seu modelo de dados. Esta subseção apresenta essas regras,
+cada uma com o trecho correspondente do arquivo de importação do cenário; o arquivo
+completo está no Apêndice~\ref{ap:config}.
 
-\begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação PostgreSQL (e-commerce).},label={lst:pg-import}]
+\textbf{PostgreSQL.} As entidades são tabelas e só admitem colunas simples, sem
+aninhamento. O campo \texttt{db\_type} de cada coluna define o tipo usado na criação da
+tabela (\texttt{CREATE TABLE}) quando \texttt{-{}-create-schema} está ativo, e as colunas
+com \texttt{is\_key} formam a chave primária. O mapa \texttt{relationships} declara chaves
+estrangeiras: \texttt{from} é a tabela que contém a chave, \texttt{to} é a tabela
+referenciada, \texttt{foreign\_key} é a coluna de \texttt{from} e \texttt{references\_key}
+é a coluna de \texttt{to} (por padrão, a de mesmo nome). A
+Listagem~\ref{lst:pg-import} mostra a entidade \texttt{products} e a chave estrangeira que
+a liga às categorias.
+
+\begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação PostgreSQL com chave estrangeira.},label={lst:pg-import}]
 "postgres": {
   "entities": {
-    "inventory": {
+    "products": {
       "source": "stock",
       "columns": {
-        "product_id":         { "is_key": true, "db_type": "BIGINT" },
-        "quantity_available": { "db_type": "BIGINT" },
-        "last_restock_date":  { "db_type": "TIMESTAMPTZ" },
-        "price":              { "db_type": "NUMERIC(14,2)" }
+        "product_id":   { "is_key": true, "db_type": "BIGINT" },
+        "product_name": { "db_type": "TEXT" },
+        "category_id":  { "db_type": "BIGINT" },
+        ...
       }
     },
     ...
@@ -463,39 +472,15 @@ da importação no domínio de e-commerce.
 }
 \end{lstlisting}
 
-As reticências indicam que o arquivo real declara outras três entidades
-(\texttt{categories}, \texttt{products} e \texttt{orders}) e uma segunda chave
-estrangeira (\texttt{order\_product}), omitidas aqui por brevidade; o arquivo
-completo é reproduzido no Apêndice~\ref{ap:config}. O campo \texttt{source} liga a
-entidade \texttt{inventory} à fonte \texttt{stock} (as linhas de reposição de estoque),
-das quais projeta quatro colunas, com \texttt{product\_id} como chave.
+As reticências omitem três colunas de \texttt{products} (variante, marca e preço), as
+outras três entidades (\texttt{categories}, \texttt{inventory} e \texttt{orders}) e a
+segunda chave estrangeira (\texttt{order\_product}, de pedidos para produtos).
 
-\textbf{Arquivo de conexão.} O bloco \texttt{postgres} contém \texttt{connection}
-(host, port, database, user, password) e o campo \texttt{schema} (padrão
-\texttt{public}), que define o schema PostgreSQL de destino das tabelas. A
-Listagem~\ref{lst:pg-conn} mostra um exemplo de configuração de conexão.
-
-\begin{lstlisting}[style=jsonstyle,caption={Fragmento de conexão PostgreSQL.},label={lst:pg-conn}]
-"postgres": {
-  "connection": {
-    "host": "127.0.0.1", "port": 5432,
-    "database": "ecommerce",
-    "user": "postgres", "password": "postgres"
-  },
-  "schema": "public"
-}
-\end{lstlisting}
-
-\subsection{MongoDB}
-
-\textbf{Arquivo de importação.} O bloco \texttt{mongodb} contém apenas
-\texttt{entities}. O diferencial do MongoDB é o suporte a
-\textbf{aninhamento de \texttt{columns}}: chaves JSON aninhadas produzem subdocumentos
-BSON, sem necessidade de nenhum campo adicional --- o próprio mapa recursivo expressa a
-hierarquia. A Listagem~\ref{lst:mongo-import} exemplifica esse aninhamento: as chaves
-\texttt{category} e \texttt{stock} não são colunas do CSV, e sim objetos que agrupam
-outras colunas, produzindo dois subdocumentos dentro de cada documento
-\texttt{product\_catalog}, também alimentado pela fonte \texttt{stock}.
+\textbf{MongoDB.} As entidades são coleções, e o MongoDB é o único SGBD que aceita
+\textbf{aninhamento} em \texttt{columns}: uma chave cujo valor é um novo mapa de colunas
+produz um subdocumento, sem nenhum campo adicional. Na Listagem~\ref{lst:mongo-import}, as
+chaves \texttt{category} e \texttt{stock} não são colunas do CSV, e sim agrupam outras
+colunas em dois subdocumentos de cada documento \texttt{product\_catalog}.
 
 \begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação MongoDB com subdocumentos.},label={lst:mongo-import}]
 "mongodb": {
@@ -521,35 +506,17 @@ outras colunas, produzindo dois subdocumentos dentro de cada documento
 \end{lstlisting}
 
 As reticências omitem as demais colunas cadastrais do produto (variante, marca,
-descrição, imagem e preço), mapeadas de forma direta como \texttt{product\_id} e
-\texttt{product\_name}; o bloco completo encontra-se no Apêndice~\ref{ap:config}.
+descrição, imagem e preço), mapeadas da mesma forma que \texttt{product\_id} e
+\texttt{product\_name}.
 
-\textbf{Arquivo de conexão.} O bloco \texttt{mongodb} contém \texttt{connection}
-com \texttt{uri} (string de conexão MongoDB, incluindo usuário e senha quando
-necessário) e \texttt{database} (nome do banco de destino), como na
-Listagem~\ref{lst:mongo-conn}.
-
-\begin{lstlisting}[style=jsonstyle,caption={Fragmento de conexão MongoDB.},label={lst:mongo-conn}]
-"mongodb": {
-  "connection": {
-    "uri": "mongodb://127.0.0.1:27017",
-    "database": "ecommerce"
-  }
-}
-\end{lstlisting}
-
-\subsection{Apache Cassandra}
-
-\textbf{Arquivo de importação.} O bloco \texttt{cassandra} contém \texttt{entities}
-planas. Dois campos específicos controlam a chave primária composta do Cassandra:
-\texttt{cassandra\_\allowbreak partition} (lista de colunas que formam a chave de partição)
-e \texttt{cassandra\_\allowbreak cluster} (colunas de agrupamento). O campo
-\texttt{cassandra\_\allowbreak partition} é obrigatório para gerar o schema Cassandra:
-sua ausência só é detectada quando \texttt{-{}-create-schema} está ativo, pois o CQL
-exige ao menos uma coluna de partição na cláusula \texttt{PRIMARY KEY}; esse campo é
-independente de \texttt{is\_key}, que no Cassandra não tem papel na definição da chave
-primária. A Listagem~\ref{lst:cassandra-import} ilustra uma entidade que \textbf{une}
-todas as fontes e usa uma chave composta.
+\textbf{Apache Cassandra.} As entidades são tabelas com colunas simples, e a chave
+primária é definida por dois campos próprios: \texttt{cassandra\_\allowbreak partition},
+a lista de colunas da chave de partição, e \texttt{cassandra\_\allowbreak cluster}, as
+colunas de agrupamento. A partição é exigida para criar a tabela, pois a linguagem CQL
+requer ao menos uma coluna de partição na chave primária; por isso a sua ausência só é
+apontada quando \texttt{-{}-create-schema} está ativo. No Cassandra, \texttt{is\_key} não
+participa da chave primária. A Listagem~\ref{lst:cassandra-import} mostra uma entidade
+que \textbf{une} as quatro fontes em uma tabela de eventos.
 
 \begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação Cassandra com união de fontes e chave composta.},label={lst:cassandra-import}]
 "cassandra": {
@@ -572,39 +539,18 @@ todas as fontes e usa uma chave composta.
 }
 \end{lstlisting}
 
-A entidade \texttt{user\_activity\_log} declara \texttt{source} como a \textbf{lista} das
-quatro fontes: as suas linhas são unidas em uma única tabela de eventos. A pseudo-coluna
-\texttt{\_source} --- que registra a origem de cada linha --- é mapeada para a coluna
-\texttt{event\_type}, distinguindo os tipos de evento na tabela CQL; de modo análogo,
-\texttt{schema\_column} renomeia \texttt{timestamp} para \texttt{event\_time}. É um exemplo
-concreto de como \texttt{csv\_column}/\texttt{\_source} e \texttt{schema\_column} atuam
-independentemente.
+A pseudo-coluna \texttt{\_source}, que guarda a fonte de cada linha, é gravada na coluna
+\texttt{event\_type}, distinguindo os tipos de evento na tabela; a chave primária é
+formada pelo usuário (partição) e pelo instante do evento (agrupamento).
 
-\textbf{Arquivo de conexão.} O bloco \texttt{cassandra} contém \texttt{connection}
-com \texttt{hosts} (lista de endereços de nós), \texttt{port} (padrão 9042),
-\texttt{keyspace} e \texttt{protocol\_version} opcional, conforme a
-Listagem~\ref{lst:cassandra-conn}.
-
-\begin{lstlisting}[style=jsonstyle,caption={Fragmento de conexão Cassandra.},label={lst:cassandra-conn}]
-"cassandra": {
-  "connection": {
-    "hosts": ["127.0.0.1"],
-    "port": 9042,
-    "keyspace": "ecommerce"
-  }
-}
-\end{lstlisting}
-
-\subsection{Redis}
-
-\textbf{Arquivo de importação.} O bloco \texttt{redis} contém \texttt{entities}.
-A restrição fundamental é que \textbf{cada entidade deve ter exatamente uma coluna
-marcada com \texttt{is\_key}}: esse valor se torna a chave Redis --- usada exatamente
-como aparece no CSV --- e todos os demais campos mapeados compõem o valor JSON
-armazenado. A Listagem~\ref{lst:redis-import} mostra as duas entidades do cenário
-e-commerce e ilustra o mapeamento automático: \texttt{shopping\_cart} declara apenas a
-chave e usa \texttt{auto\_map} para mapear todas as demais colunas da fonte
-\texttt{add\_to\_cart}.
+\textbf{Redis.} Cada entidade gera um conjunto de pares chave-valor e deve ter
+\textbf{exatamente uma} coluna com \texttt{is\_key}: o valor dessa coluna, tal como aparece
+no CSV, torna-se a chave Redis, e os demais campos mapeados compõem o valor, armazenado em
+JSON. Na Listagem~\ref{lst:redis-import}, \texttt{shopping\_cart} declara apenas a chave e
+usa \texttt{auto\_map} para receber as demais colunas da fonte \texttt{add\_to\_cart};
+\texttt{user\_session} usa como chave o identificador do usuário e renomeia
+\texttt{timestamp} para \texttt{last\_seen}, registrando a última navegação de cada
+usuário.
 
 \begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação Redis (e-commerce), com mapeamento automático.},label={lst:redis-import}]
 "redis": {
@@ -629,37 +575,15 @@ chave e usa \texttt{auto\_map} para mapear todas as demais colunas da fonte
 }
 \end{lstlisting}
 
-A entidade \texttt{shopping\_cart} lê da fonte \texttt{add\_to\_cart} e usa como chave o
-identificador do carrinho (\texttt{shopping\_cart\_id}); com \texttt{auto\_map}, o valor
-armazenado reúne automaticamente as demais colunas da fonte. A entidade
-\texttt{user\_session} lê da fonte \texttt{select\_product}, usa como chave o
-identificador do usuário e renomeia \texttt{timestamp} para \texttt{last\_seen},
-registrando a última atividade de navegação de cada usuário.
-
-\textbf{Arquivo de conexão.} O bloco \texttt{redis} contém \texttt{connection}
-com \texttt{host}, \texttt{port} (padrão 6379), \texttt{db} (índice do banco,
-padrão 0) e \texttt{password} opcional, como na Listagem~\ref{lst:redis-conn}.
-
-\begin{lstlisting}[style=jsonstyle,caption={Fragmento de conexão Redis.},label={lst:redis-conn}]
-"redis": {
-  "connection": {
-    "host": "127.0.0.1",
-    "port": 6379,
-    "db": 0
-  }
-}
-\end{lstlisting}
-
-\subsection{Neo4j}
-
-\textbf{Arquivo de importação.} O bloco \texttt{neo4j} contém \texttt{entities}
-(nós) e \texttt{relationships} (arestas tipadas). Cada entidade declara um rótulo
-(\textit{label}) de nó e deve ter exatamente uma coluna \texttt{is\_key}, usada como
-predicado de identificação no \texttt{MERGE} Cypher. As arestas em
-\texttt{relationships} declaram \texttt{from} (rótulo de origem), \texttt{to}
-(rótulo de destino), \texttt{type} (tipo da aresta em maiúsculas) e um mapa
-\texttt{columns} opcional com propriedades da aresta. A Listagem~\ref{lst:neo4j-import}
-mostra um nó de cada rótulo, ligados por uma aresta.
+\textbf{Neo4j.} Cada entidade é um rótulo (\textit{label}) de nó e deve ter exatamente uma
+coluna com \texttt{is\_key}, usada para identificar o nó na operação \texttt{MERGE} da
+linguagem Cypher, que só cria o nó se ele ainda não existir. O mapa
+\texttt{relationships} declara arestas: \texttt{from} e \texttt{to} são os rótulos de
+origem e de destino, \texttt{type} é o tipo da aresta e \texttt{columns}, opcional, lista as
+propriedades da aresta. Na Listagem~\ref{lst:neo4j-import}, o nó \texttt{User} lê da fonte
+\texttt{purchase} (os compradores) e o nó \texttt{Product}, da fonte \texttt{stock}; a
+aresta \texttt{PURCHASED} liga cada comprador ao produto comprado, com quantidade, preço e
+nota da avaliação.
 
 \begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação Neo4j (nós e aresta).},label={lst:neo4j-import}]
 "neo4j": {
@@ -697,32 +621,116 @@ mostra um nó de cada rótulo, ligados por uma aresta.
 }
 \end{lstlisting}
 
-O nó \texttt{User} lê da fonte \texttt{purchase} (os compradores) e o nó \texttt{Product},
-da fonte \texttt{stock} (os produtos repostos); a aresta \texttt{PURCHASED} liga um ao
-outro pela fonte de origem (\texttt{purchase}), decorada com quantidade, preço e nota da
-avaliação.
+\subsection{O Arquivo de Conexão}
+\label{sec:arquivo-conexao}
 
-\textbf{Arquivo de conexão.} O bloco \texttt{neo4j} contém \texttt{connection}
-com \texttt{uri} (bolt://\ldots), \texttt{user}, \texttt{password} e
-\texttt{database} opcional (padrão \texttt{neo4j}), conforme a
-Listagem~\ref{lst:neo4j-conn}.
+O arquivo de conexão diz \textit{onde} alcançar cada SGBD, sem nenhuma informação de
+mapeamento. A Figura~\ref{fig:dbms-schema} mostra a estrutura do seu schema, também com
+os campos obrigatórios marcados com asterisco: a raiz, um bloco por SGBD e, dentro de cada
+bloco, os parâmetros de acesso. A Tabela~\ref{tab:partes-conexao} resume a finalidade de
+cada parte.
 
-\begin{lstlisting}[style=jsonstyle,caption={Fragmento de conexão Neo4j.},label={lst:neo4j-conn}]
-"neo4j": {
-  "connection": {
-    "uri":      "bolt://127.0.0.1:7687",
-    "user":     "neo4j",
-    "password": "password",
-    "database": "neo4j"
-  }
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{images/figure9-dbms-schema}
+  \caption{Estrutura do JSON Schema de conexão (\texttt{dbms\_config}).}
+  \label{fig:dbms-schema}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{figure}
+
+\begin{table}[H]
+  \caption{Partes do arquivo de conexão.}
+  \label{tab:partes-conexao}
+  \centering
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{>{\raggedright\arraybackslash\ttfamily}p{3.5cm} >{\raggedright\arraybackslash}p{2.6cm} >{\raggedright\arraybackslash}p{4.6cm} >{\raggedright\arraybackslash}p{3.6cm}}
+    \toprule
+    \normalfont\textbf{Parte} & \textbf{Onde} & \textbf{Finalidade} & \textbf{Obrigatória?} \\
+    \midrule
+    version & raiz & versão do formato do arquivo (atualmente, 1) & sim \\
+    postgres, mongodb, cassandra, redis, neo4j & raiz & dar acesso a um SGBD & não; só os SGBDs de destino \\
+    connection & bloco de SGBD & parâmetros de acesso & sim \\
+    schema & bloco PostgreSQL & schema de destino das tabelas & não; padrão: \texttt{public} \\
+    start & bloco de SGBD & como iniciar o SGBD & não \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{table}
+
+A Listagem~\ref{lst:conexao-exemplo} mostra o início do arquivo de conexão do cenário,
+com os blocos do PostgreSQL e do MongoDB. As reticências marcam os descritores
+\texttt{start}, tratados na Seção~\ref{sec:inicializacao-sgbds}, e os blocos dos demais
+SGBDs; o arquivo completo está no Apêndice~\ref{ap:config}.
+
+\begin{lstlisting}[style=jsonstyle,caption={Início do arquivo de conexão do cenário (\texttt{dbms\_config.json}).},label={lst:conexao-exemplo}]
+{
+  "version": 1,
+  "postgres": {
+    "connection": {
+      "host": "127.0.0.1", "port": 5432,
+      "database": "ecommerce",
+      "user": "postgres", "password": "postgres"
+    },
+    "schema": "public",
+    ...
+  },
+  "mongodb": {
+    "connection": {
+      "uri": "mongodb://127.0.0.1:27017",
+      "database": "ecommerce"
+    },
+    ...
+  },
+  ...
 }
 \end{lstlisting}
 
-\subsection{Inicialização dos SGBDs}
+\subsubsection{Raiz e blocos de SGBD}
+
+A raiz exige o campo \texttt{version} e aceita um bloco por SGBD; como no arquivo de
+importação, chaves desconhecidas são rejeitadas. Todo SGBD que aparece no arquivo de
+importação precisa ter o seu bloco aqui; caso contrário, a importação é recusada antes de
+começar (Seção~\ref{sec:validacao}). Cada bloco presente deve conter o descritor
+\texttt{connection}.
+
+\subsubsection{Parâmetros de conexão}
+
+Os campos de \texttt{connection} dependem do SGBD, pois seguem os parâmetros do
+\textit{driver} de cada um. A Tabela~\ref{tab:conexao-sgbd} lista esses campos, os
+obrigatórios e os valores usados quando um campo opcional é omitido.
+
+\begin{table}[H]
+  \caption{Campos do descritor \texttt{connection} por SGBD.}
+  \label{tab:conexao-sgbd}
+  \centering
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{l >{\raggedright\arraybackslash\ttfamily}p{4.4cm} >{\raggedright\arraybackslash\ttfamily}p{2.8cm} >{\raggedright\arraybackslash}p{4.8cm}}
+    \toprule
+    \textbf{SGBD} & \normalfont\textbf{Campos} & \normalfont\textbf{Obrigatórios} & \textbf{Padrões} \\
+    \midrule
+    PostgreSQL & host, port, database, user, password & \normalfont --- & \texttt{127.0.0.1}, \texttt{5432}, \texttt{postgres}, \texttt{postgres}, senha vazia \\
+    MongoDB & uri, database & uri, database & --- \\
+    Cassandra & hosts, port, keyspace, protocol\_version, request\_timeout & hosts, keyspace & porta \texttt{9042}; \texttt{request\_timeout} de 30 s; protocolo negociado pelo \textit{driver} \\
+    Redis & host, port, db, password & \normalfont --- & \texttt{127.0.0.1}, \texttt{6379}, \texttt{0}, sem senha \\
+    Neo4j & uri, user, password, database & uri, user, password & \texttt{database}: o banco padrão do servidor \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+\end{table}
+
+No MongoDB e no Neo4j, o endereço é uma URI no formato do respectivo \textit{driver}
+(\texttt{mongodb://\ldots} e \texttt{bolt://\ldots}), que pode incluir usuário e senha. No
+Cassandra, \texttt{hosts} é uma lista, pois um \textit{cluster} pode ter vários nós, e
+\texttt{request\_timeout} é o tempo máximo, em segundos, de cada requisição.
+
+\subsubsection{Inicialização dos SGBDs}
 \label{sec:inicializacao-sgbds}
 
-O arquivo de conexão diz \textit{onde} alcançar cada SGBD, mas não o que fazer quando
-ele não responde. Para esse caso, cada bloco de SGBD aceita um descritor opcional
+O descritor \texttt{connection} diz \textit{onde} alcançar cada SGBD, mas não o que fazer
+quando ele não responde. Para esse caso, cada bloco de SGBD aceita um descritor opcional
 \texttt{start}, que registra \textit{como} iniciá-lo, em uma de duas formas mutuamente
 exclusivas: \texttt{command}, uma linha de comando para um SGBD instalado na própria
 máquina, ou \texttt{compose}, que indica um arquivo do Docker Compose e o serviço
@@ -1007,7 +1015,7 @@ seguir.
 (Listagem~\ref{lst:pg-import}). A entidade \texttt{inventory} lê da fonte \texttt{stock} e
 projeta quatro colunas, com o \texttt{product\_id} como chave: o resultado é a relação da
 Tabela~\ref{tab:pg-inventory}, criada e gravada no banco \texttt{ecommerce} declarado
-no arquivo de conexão (Listagem~\ref{lst:pg-conn}). As entidades \texttt{categories} e
+no arquivo de conexão (Listagem~\ref{lst:conexao-exemplo}). As entidades \texttt{categories} e
 \texttt{products} também leem de \texttt{stock}, e a eliminação de duplicatas pela chave
 reduz o resultado aos oito produtos e oito categorias distintos; a entidade
 \texttt{orders} lê da fonte \texttt{purchase} (as oito compras). As chaves estrangeiras
