@@ -210,3 +210,25 @@ def test_resolve_dbms_config_path_defaults_next_to_the_import_config(tmp_path):
     cfg = tmp_path / "import_config.json"
     assert resolve_dbms_config_path(cfg) == tmp_path / "dbms_config.json"
     assert resolve_dbms_config_path(cfg, "other.json") == Path("other.json")
+
+
+_ALL_DBMS = ["postgres", "mongodb", "cassandra", "redis", "neo4j"]
+
+
+@pytest.mark.parametrize("dbms", _ALL_DBMS)
+def test_dbms_schema_requires_connection(dbms):
+    # A declared DBMS must say how to reach it; an empty block used to pass and
+    # fall back to silent defaults (e.g. MongoDB database "test").
+    with pytest.raises(ConfigError):
+        validate_dbms_config({"version": 1, dbms: {}})
+
+
+@pytest.mark.parametrize("dbms", _ALL_DBMS)
+def test_dbms_schema_start_alone_is_not_enough(dbms):
+    with pytest.raises(ConfigError):
+        validate_dbms_config({"version": 1, dbms: {"start": {"command": "x"}}})
+
+
+@pytest.mark.parametrize("dbms", ["postgres", "redis"])
+def test_dbms_schema_accepts_empty_connection_when_every_field_has_a_default(dbms):
+    validate_dbms_config({"version": 1, dbms: {"connection": {}}})
