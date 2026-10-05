@@ -179,7 +179,7 @@ indica quais podem ser omitidas.
     columns & entidade & mapear as colunas & não; se omitido, todas as colunas da fonte \\
     auto\_map, csv\_columns & entidade & controlar o mapeamento automático & não \\
     filters & entidade & selecionar linhas & não \\
-    cassandra\_partition, cassandra\_cluster & entidade do Cassandra & definir a chave primária & não; a partição é exigida para criar a tabela \\
+    cassandra\_\allowbreak partition, cassandra\_\allowbreak cluster & entidade do Cassandra & definir a chave primária & não; a partição é exigida para criar a tabela \\
     csv\_column, schema\_column, is\_key, db\_type & coluna & ligar uma coluna do CSV a um atributo & não \\
     \bottomrule
   \end{tabular}
@@ -630,7 +630,7 @@ os campos obrigatórios marcados com asterisco: a raiz, um bloco por SGBD e, den
 bloco, os parâmetros de acesso. A Tabela~\ref{tab:partes-conexao} resume a finalidade de
 cada parte.
 
-\begin{figure}[H]
+\begin{figure}[tbp]
   \centering
   \includegraphics[width=0.85\textwidth]{images/figure9-dbms-schema}
   \caption{Estrutura do JSON Schema de conexão (\texttt{dbms\_config}).}
@@ -701,7 +701,7 @@ Os campos de \texttt{connection} dependem do SGBD, pois seguem os parâmetros do
 \textit{driver} de cada um. A Tabela~\ref{tab:conexao-sgbd} lista esses campos, os
 obrigatórios e os valores usados quando um campo opcional é omitido.
 
-\begin{table}[H]
+\begin{table}[htbp]
   \caption{Campos do descritor \texttt{connection} por SGBD.}
   \label{tab:conexao-sgbd}
   \centering
@@ -722,7 +722,7 @@ obrigatórios e os valores usados quando um campo opcional é omitido.
 \end{table}
 
 No MongoDB e no Neo4j, o endereço é uma URI no formato do respectivo \textit{driver}
-(\texttt{mongodb://\ldots} e \texttt{bolt://\ldots}), que pode incluir usuário e senha. No
+(\texttt{mongodb://...} e \texttt{bolt://...}), que pode incluir usuário e senha. No
 Cassandra, \texttt{hosts} é uma lista, pois um \textit{cluster} pode ter vários nós, e
 \texttt{request\_timeout} é o tempo máximo, em segundos, de cada requisição.
 
