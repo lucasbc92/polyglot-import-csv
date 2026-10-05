@@ -3,8 +3,7 @@
 
 Este apêndice reproduz os dois documentos \textit{JSON Schema} (rascunho 2020-12) tal
 como embutidos em \texttt{src/polyglotimportcsv/schemas/}. A estrutura de alto nível
-de ambos é descrita na seção~\ref{sec:config-format}; os fragmentos por SGBD são
-apresentados nas respectivas subseções do capítulo~4.
+de ambos é descrita nas seções~\ref{sec:arquivo-importacao} e~\ref{sec:arquivo-conexao}.
 
 \section{Schema de Importação (\texttt{import\_config.schema.json})}
 
@@ -264,6 +263,7 @@ apresentados nas respectivas subseções do capítulo~4.
   "$defs": {
     "postgresConnection": {
       "type": "object",
+      "required": ["connection"],
       "properties": {
         "connection": {
           "type": "object",
@@ -287,6 +287,7 @@ apresentados nas respectivas subseções do capítulo~4.
     },
     "mongoConnection": {
       "type": "object",
+      "required": ["connection"],
       "properties": {
         "connection": {
           "type": "object",
@@ -303,6 +304,7 @@ apresentados nas respectivas subseções do capítulo~4.
     },
     "cassandraConnection": {
       "type": "object",
+      "required": ["connection"],
       "properties": {
         "connection": {
           "type": "object",
@@ -322,6 +324,7 @@ apresentados nas respectivas subseções do capítulo~4.
     },
     "redisConnection": {
       "type": "object",
+      "required": ["connection"],
       "properties": {
         "connection": {
           "type": "object",
@@ -339,6 +342,7 @@ apresentados nas respectivas subseções do capítulo~4.
     },
     "neo4jConnection": {
       "type": "object",
+      "required": ["connection"],
       "properties": {
         "connection": {
           "type": "object",

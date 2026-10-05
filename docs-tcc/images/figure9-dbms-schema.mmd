@@ -6,11 +6,11 @@ flowchart LR
     ROOT --> RD[redis]
     ROOT --> NJ[neo4j]
 
-    PG --> PGC["connection(host, port, database,\nuser, password), schema"]
-    MG --> MGC["connection(uri*, database*)"]
-    CS --> CSC["connection(hosts*, port,\nkeyspace*, protocol_version)"]
-    RD --> RDC["connection(host, port, db, password)"]
-    NJ --> NJC["connection(uri*, user*,\npassword*, database)"]
+    PG --> PGC["connection* (host, port, database,\nuser, password)\nschema"]
+    MG --> MGC["connection* (uri*, database*)"]
+    CS --> CSC["connection* (hosts*, port, keyspace*,\nprotocol_version, request_timeout)"]
+    RD --> RDC["connection* (host, port, db, password)"]
+    NJ --> NJC["connection* (uri*, user*,\npassword*, database)"]
 
     PG -.-> ST
     MG -.-> ST
