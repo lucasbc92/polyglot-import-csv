@@ -47,7 +47,7 @@ seção~\ref{sec:observabilidade}. O comando principal da CLI é o seguinte:
 \begin{lstlisting}[style=bashstyle]
 python -m polyglotimportcsv \
   --config caminho/import_config.json \
-  --dbms-config caminho/dbms_config.json \
+  [--dbms-config caminho/dbms_config.json] \
   [--source NOME=CAMINHO] \
   [--dry-run] \
   [--check-dbms] \
@@ -60,18 +60,18 @@ python -m polyglotimportcsv \
   [--benchmark]
 \end{lstlisting}
 
-Cada parte do comando tem o seguinte papel. A opção \texttt{-{}-config} é
-\textbf{obrigatória} e indica o caminho do arquivo JSON de importação, que já contém, em
-seu bloco \texttt{sources}, os caminhos dos CSVs a carregar --- por isso não há mais um
-argumento posicional de arquivo de dados. A opção \texttt{-{}-dbms-config} indica o
-caminho do arquivo JSON de conexão dos SGBDs; se omitida, a ferramenta procura um arquivo
-\texttt{dbms\_config.json} no mesmo diretório do arquivo de importação. A opção
+Cada parte do comando tem o seguinte papel. A opção \texttt{-{}-config} é a única
+\textbf{obrigatória} e indica o caminho do arquivo JSON de importação, que contém, em seu
+bloco \texttt{sources}, os caminhos dos CSVs a carregar. As demais opções, entre
+colchetes, são opcionais. A opção \texttt{-{}-dbms-config} indica o caminho do arquivo
+JSON de conexão dos SGBDs; quando não é informada, a ferramenta usa o arquivo
+\texttt{dbms\_config.json} do mesmo diretório do arquivo de importação. A opção
 \texttt{-{}-source} \texttt{NOME=CAMINHO} \textbf{sobrescreve}, em tempo de execução, o
 caminho de uma fonte declarada no bloco \texttt{sources} sem editar o arquivo de
 configuração (por exemplo, para apontar a mesma configuração a um conjunto de dados
 maior); pode ser repetida uma vez por fonte.
 
-As demais opções são facultativas e agrupam-se em três conjuntos. O primeiro controla
+As outras opções agrupam-se em três conjuntos. O primeiro controla
 \textbf{o que} e \textbf{onde} importar: \texttt{-{}-dry-run} executa somente as
 validações e a preparação dos dados e reporta quantos registros \textbf{seriam}
 importados em cada destino, sem conectar a nenhum SGBD, o que é útil para revisar o
