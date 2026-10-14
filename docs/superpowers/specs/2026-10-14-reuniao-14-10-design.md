@@ -139,6 +139,11 @@ Cap. 4 (`ch4proposta.tex`):
 - §4.6: remover a frase sobre a estratégia ausente do formulário (manter a do
   `--benchmark`); "treze opções" → contagem real das opções da CLI após a remoção.
 - Título da §4.5 e referências cruzadas: conferir.
+- Figuras 12–16 (interface gráfica): o comando exibido nelas contém
+  `--strategy optimized`. Recapturá-las com `scripts/capture_gui_figures.py` depois da
+  remoção; a figura 16 exige a pilha de exemplo no ar com só MongoDB e Neo4j parados
+  (`docker compose up -d --wait` e `docker compose stop mongodb neo4j`), o que depende do
+  autor. (Adendo descoberto ao escrever o plano.)
 
 Cap. Avaliação (`ch6avaliacao.tex`):
 
