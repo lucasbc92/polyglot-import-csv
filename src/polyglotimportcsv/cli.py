@@ -83,13 +83,6 @@ def _parse_source_overrides(pairs: Tuple[str, ...]) -> Dict[str, str]:
     help="Comma-separated backends to run (postgres,redis,mongodb,cassandra,neo4j). Empty = all configured.",
 )
 @click.option(
-    "--strategy",
-    default="optimized",
-    show_default=True,
-    type=click.Choice(["naive", "optimized"], case_sensitive=False),
-    help="Write/cast strategy. 'naive' reproduces the row-at-a-time baseline.",
-)
-@click.option(
     "--execution",
     default="stream",
     show_default=True,
@@ -139,7 +132,6 @@ def main(
     check_dbms_only: bool,
     create_schema: bool,
     only: str,
-    strategy: str,
     execution: str,
     source_pairs: Tuple[str, ...],
     log_level: str,
@@ -178,7 +170,6 @@ def main(
             show_data=show_data,
             sample_size=sample_size if sample_size is not None else DEFAULT_SAMPLE_SIZE,
             benchmark=benchmark,
-            strategy=strategy,
             execution=execution,
         )
     except BusinessException as e:

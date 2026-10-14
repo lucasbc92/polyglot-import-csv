@@ -141,7 +141,22 @@ def test_cli_rejects_unknown_execution():
     assert "execution" in res.output.lower()
 
 
-def test_cli_passes_strategy(monkeypatch):
+def test_cli_rejects_the_removed_strategy_option(monkeypatch):
+    from click.testing import CliRunner
+    import polyglotimportcsv.cli as climod
+
+    called = []
+    monkeypatch.setattr(climod, "run_import", lambda *a, **k: called.append(1) or [])
+    res = CliRunner().invoke(climod.main, [
+        "--config", "data/ecommerce/import_config.json",
+        "--dry-run", "--strategy", "optimized",
+    ])
+    assert res.exit_code == 2
+    assert "No such option" in res.output and "--strategy" in res.output
+    assert called == []  # nothing ran
+
+
+def test_cli_does_not_pass_a_strategy_to_the_runner(monkeypatch):
     from click.testing import CliRunner
     import polyglotimportcsv.cli as climod
 
@@ -152,14 +167,17 @@ def test_cli_passes_strategy(monkeypatch):
         return []
 
     monkeypatch.setattr(climod, "run_import", fake_run_import)
-    runner = CliRunner()
-    # --dry-run so no DB; reuse a config that exists in the repo
-    res = runner.invoke(climod.main, [
-        "--config", "data/ecommerce/import_config.json",
-        "--dry-run", "--strategy", "naive",
+    res = CliRunner().invoke(climod.main, [
+        "--config", "data/ecommerce/import_config.json", "--dry-run",
     ])
     assert res.exit_code == 0, res.output
-    assert captured["strategy"] == "naive"
+    assert "strategy" not in captured
+
+
+def test_run_import_has_no_strategy_parameter():
+    import inspect
+    from polyglotimportcsv.runner import run_import
+    assert "strategy" not in inspect.signature(run_import).parameters
 
 
 def _capture_run_import(monkeypatch):
