@@ -1,8 +1,7 @@
 """The card holding every execution option of the CLI the GUI offers.
 
-``--strategy`` and ``--benchmark`` are deliberately absent: the GUI always
-writes with ``optimized`` and never benchmarks. Both stay in the CLI, where the
-evaluation needs them.
+``--benchmark`` is deliberately absent: the GUI never benchmarks. It stays in
+the CLI, where the evaluation needs it.
 """
 
 from __future__ import annotations
