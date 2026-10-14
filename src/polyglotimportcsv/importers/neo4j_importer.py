@@ -73,18 +73,6 @@ def _dedupe_props(part_df, ecfg, key_name, props_from_row, seen: Optional[Set[An
     return out, skipped
 
 
-def _merge_nodes_naive(session, plabel, key_name, props_list, advance) -> int:
-    q = f"MERGE (n:{plabel} {{{key_name}: $k}}) SET n += $props"
-    merged = 0
-    for props in props_list:
-        kid = props[key_name]
-        rest = {k: v for k, v in props.items() if k != key_name}
-        session.run(q, k=kid, props=rest)
-        merged += 1
-        advance(1)
-    return merged
-
-
 def _merge_nodes_batched(session, plabel, key_name, props_list, advance, batch: int = 1000) -> int:
     q = (f"UNWIND $batch AS row "
          f"MERGE (n:{plabel} {{{key_name}: row.k}}) SET n += row.props")
@@ -98,29 +86,6 @@ def _merge_nodes_batched(session, plabel, key_name, props_list, advance, batch: 
         merged += len(chunk)
         advance(len(chunk))
     return merged
-
-
-def _merge_rels_naive(session, q, dff, from_src, to_src, rel_cols, mk_names, advance) -> int:
-    """Issue one MERGE per row, exactly as the original (pre-batching) code did."""
-    count = 0
-    for row in iter_rows(dff):
-        a_id = cell_scalar(row[from_src] if from_src in row.index else None)
-        b_id = cell_scalar(row[to_src] if to_src in row.index else None)
-        if a_id is None or b_id is None:
-            advance(1)
-            continue
-        rel_props: Dict[str, Any] = {}
-        csv_columns = row.index
-        for field_key, spec in rel_cols.items():
-            name = target_field_name(field_key, spec)
-            src = resolve_csv_column(field_key, spec, csv_columns)
-            rel_props[name] = cell_scalar(row[src] if src in row.index else None)
-        mk_params = {f"mk_{k}": rel_props[k] for k in mk_names}
-        rest_props = {k: v for k, v in rel_props.items() if k not in mk_names}
-        session.run(q, a_id=a_id, b_id=b_id, rprops=rest_props, **mk_params)
-        count += 1
-        advance(1)
-    return count
 
 
 def _rel_rows_for_batch(dff, from_src, to_src, rel_cols, mk_names):
@@ -174,7 +139,6 @@ def run_neo4j_import(
     *,
     dry_run: bool,
     create_schema: bool,
-    strategy: str = "optimized",
     driver_factory: Callable[[Dict[str, Any]], Any] = _default_neo4j_driver,
 ) -> List[str]:
     lines: List[str] = []
@@ -237,10 +201,7 @@ def run_neo4j_import(
                 with metrics.timed_phase("neo4j", part_name, "write") as tw:
                     props_list, skipped = _dedupe_props(part_df, be.cfg, key_name, props_from_row)
                     with entity_progress(f"neo4j · {part_name}", len(props_list)) as advance:
-                        if strategy == "naive":
-                            merged = _merge_nodes_naive(session, plabel, key_name, props_list, advance)
-                        else:
-                            merged = _merge_nodes_batched(session, plabel, key_name, props_list, advance)
+                        merged = _merge_nodes_batched(session, plabel, key_name, props_list, advance)
                     tw.rows = merged
                 if skipped:
                     logger.warning(
@@ -270,26 +231,12 @@ def run_neo4j_import(
             f1 = [x for x in (from_be.cfg.get("filters") or []) if x.get("operator") != "each"]
             dff = apply_filters(from_be.df, f1, from_be.kinds)
             with metrics.timed_phase("neo4j", f"rel:{rel_type}", "write") as tw:
-                if strategy == "naive":
-                    mk_clause = ", ".join(f"{k}: $mk_{k}" for k in mk_names)
-                    mk_block = f" {{{mk_clause}}}" if mk_clause else ""
-                    q = (
-                        f"MATCH (a:{from_label} {{{from_key}: $a_id}}), "
-                        f"(b:{to_label} {{{to_key}: $b_id}}) "
-                        f"MERGE (a)-[r:{rel_type}{mk_block}]->(b) SET r += $rprops"
+                rows = _rel_rows_for_batch(dff, from_src, to_src, rel_cols, mk_names)
+                with entity_progress(f"neo4j · :{rel_type}", len(rows)) as advance:
+                    count = _merge_rels_batched(
+                        session, from_label, from_key, to_label, to_key, rel_type,
+                        mk_names, rows, advance,
                     )
-                    logger.debug("[neo4j] Cypher: %s", q)
-                    with entity_progress(f"neo4j · :{rel_type}", len(dff)) as advance:
-                        count = _merge_rels_naive(
-                            session, q, dff, from_src, to_src, rel_cols, mk_names, advance
-                        )
-                else:
-                    rows = _rel_rows_for_batch(dff, from_src, to_src, rel_cols, mk_names)
-                    with entity_progress(f"neo4j · :{rel_type}", len(rows)) as advance:
-                        count = _merge_rels_batched(
-                            session, from_label, from_key, to_label, to_key, rel_type,
-                            mk_names, rows, advance,
-                        )
                 tw.rows = count
             lines.append(f"[neo4j] merged {count} relationship(s) :{rel_type}")
 
