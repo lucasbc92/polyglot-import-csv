@@ -20,6 +20,11 @@ campaign below was verified to hold exactly one run.
 | `naive/` | 10k × multi/combined × naive+optimized × materialize × 3 | **on** | peak, naive vs optimized |
 | `timings-naive/` | same axes | **off** | time, naive vs optimized |
 
+The `naive` strategy was removed from the tool in 2.0.0. `naive/` and
+`timings-naive/` were measured with version 1.1.0 (tag `v1.1.0`), the last
+release that has it; check out that tag to reproduce them. Their CSVs keep the
+`strategy` column, which the current results no longer have.
+
 Timings and peaks cannot come from the same run: `tracemalloc` inflates the read
 phase ~8.6× and map ~6.5×, against roughly nothing on the database writes, so a
 traced run distorts the phases *against each other*. Hence the paired campaigns.
@@ -148,6 +153,11 @@ execução.
 | `timings/` | mesmos eixos | **desligado** | só `median_seconds` |
 | `naive/` | 10k × multi/combined × naive+optimized × materialize × 3 | **ligado** | pico, naive vs optimized |
 | `timings-naive/` | mesmos eixos | **desligado** | tempo, naive vs optimized |
+
+A estratégia `naive` foi removida da ferramenta na versão 2.0.0. `naive/` e
+`timings-naive/` foram medidos com a versão 1.1.0 (tag `v1.1.0`), a última que
+a contém; faça checkout dessa tag para reproduzi-los. Os CSVs dessas pastas
+mantêm a coluna `strategy`, que os resultados atuais já não têm.
 
 Tempos e picos não podem vir da mesma execução: o `tracemalloc` infla a fase de
 leitura ~8.6× e o mapeamento ~6.5×, contra praticamente nada nas escritas no
