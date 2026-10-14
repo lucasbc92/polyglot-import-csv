@@ -185,7 +185,7 @@ that cost over every cell's first pass, and the median across passes drops it.
 The tool has a single write strategy: vectorized type casting and batched
 writes. The row-at-a-time baseline the report compares it against (`naive`) was
 removed in 2.0.0; `benchmarks/naive/` and `benchmarks/timings-naive/` were
-measured with version 1.1.0, the last release that has it.
+measured before the removal; version 1.1.0 is the last release that has it.
 
 Cassandra absorbs those batched writes at concurrency 64, and a node busy flushing
 or compacting can stop answering for longer than the driver's 10s default request
@@ -408,7 +408,7 @@ célula, e a mediana entre as passadas o descarta.
 A ferramenta tem uma única estratégia de escrita: conversão de tipos vetorizada
 e escritas em lote. A linha de base linha a linha com que o relatório a compara
 (`naive`) foi removida na versão 2.0.0; `benchmarks/naive/` e
-`benchmarks/timings-naive/` foram medidos com a versão 1.1.0, a última que a tem.
+`benchmarks/timings-naive/` foram medidos antes da remoção; a versão 1.1.0 é a última que a tem.
 
 O Cassandra recebe as escritas em lote com concorrência 64, e um nó ocupado com
 *flush* ou *compaction* pode parar de responder por mais que os 10s de timeout

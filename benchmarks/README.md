@@ -21,8 +21,9 @@ campaign below was verified to hold exactly one run.
 | `timings-naive/` | same axes | **off** | time, naive vs optimized |
 
 The `naive` strategy was removed from the tool in 2.0.0. `naive/` and
-`timings-naive/` were measured with version 1.1.0 (tag `v1.1.0`), the last
-release that has it; check out that tag to reproduce them. Their CSVs keep the
+`timings-naive/` were measured on 2026-08-01, before the removal; version 1.1.0
+(tag `v1.1.0`) is the last release that has the strategy — check out that tag
+to run it again. Their CSVs keep the
 `strategy` column, which the current results no longer have.
 
 Timings and peaks cannot come from the same run: `tracemalloc` inflates the read
@@ -155,8 +156,9 @@ execução.
 | `timings-naive/` | mesmos eixos | **desligado** | tempo, naive vs optimized |
 
 A estratégia `naive` foi removida da ferramenta na versão 2.0.0. `naive/` e
-`timings-naive/` foram medidos com a versão 1.1.0 (tag `v1.1.0`), a última que
-a contém; faça checkout dessa tag para reproduzi-los. Os CSVs dessas pastas
+`timings-naive/` foram medidos em 01/08/2026, antes da remoção; a versão 1.1.0
+(tag `v1.1.0`) é a última que contém a estratégia — faça checkout dessa tag
+para executá-la de novo. Os CSVs dessas pastas
 mantêm a coluna `strategy`, que os resultados atuais já não têm.
 
 Tempos e picos não podem vir da mesma execução: o `tracemalloc` infla a fase de

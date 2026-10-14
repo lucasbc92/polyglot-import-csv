@@ -31,7 +31,7 @@ resultados da seção~\ref{sec:resultados} respondem:
   \item \textbf{QP1 --- Custo por SGBD.} Qual é o \textit{throughput} de escrita de cada
         SGBD e como o tempo total de uma importação se decompõe entre as fases de leitura,
         seleção, mapeamento e escrita?
-  \item \textbf{QP2 --- Modos de importação.} Importar a partir de um CSV por tipo de dado
+  \item \textbf{QP2 --- Modos de importação.} Importar a partir de um CSV por tipo de evento
         (modo multifonte) ou de um único CSV combinado impõe custos distintos, e que
         vantagens tem cada modo?
   \item \textbf{QP3 --- Escalabilidade.} Como o tempo e a memória evoluem ao multiplicar o
@@ -127,8 +127,8 @@ modelos de execução. Nem toda combinação é medida em todos os pontos: a est
 ingênua --- a implementação original da ferramenta, do TCC1
 (seção~\ref{sec:estrategias-escrita}) --- serve de linha de base e foi medida apenas no
 ponto $N = 10\,000$, no modo de materialização, já que o modo de fluxo sempre gravou em
-lote (seção~\ref{sec:modelos-execucao}). Essa medição foi feita com a versão 1.1.0 da
-ferramenta, a última que contém a estratégia ingênua; nas versões seguintes, a ferramenta
+lote (seção~\ref{sec:modelos-execucao}). A estratégia ingênua permanece disponível até a
+versão 1.1.0 da ferramenta, a última que a contém; nas versões seguintes, a ferramenta
 grava sempre em lote. Cada resultado a seguir indica o seu escopo.
 
 \section{Resultados}
@@ -286,7 +286,7 @@ SGBD em vez de tratá-la como um bloco único.
 \subsection{Modos de Importação: Multifonte \textit{versus} Combinado (QP2)}
 \label{sec:res-modos}
 
-Os dois modos de importação --- um CSV por tipo de dado ou um único CSV combinado ---
+Os dois modos de importação --- um CSV por tipo de evento ou um único CSV combinado ---
 gravam os mesmos dados. A Tabela~\ref{tab:multi-combined} compara-os no ponto de
 $100\,000$ linhas quanto ao tamanho dos arquivos, à leitura, ao tempo total e ao pico de
 memória.
@@ -316,25 +316,28 @@ memória.
 No \textbf{tempo total}, os dois modos empatam: o combinado é cerca de $8\%$ mais lento na
 materialização e $10\%$ mais lento no fluxo, diferenças abaixo da incerteza de medição do
 tempo ($\approx 20\%$). O modelo de execução em fluxo, portanto, não favorece um modo em
-relação ao outro: nos dois, ele reduz o pico de memória cerca de $12$ vezes e custa cerca
-de $10\%$ de tempo. As diferenças que se sustentam estão em outros pontos. O arquivo
+relação ao outro: nos dois, ele reduz o pico de memória cerca de $12{,}5$ vezes e custa
+de $10$ a $12\%$ de tempo. As diferenças que se sustentam estão em outros pontos. O arquivo
 combinado é cerca de $20\%$ \textbf{maior}, porque todos os tipos de evento partilham um
 único cabeçalho de 39 colunas e cada linha preenche apenas as do seu tipo: $45\%$ das
-células do arquivo ficam vazias, contra nenhuma nos arquivos do modo multifonte. Por isso,
-a \textbf{fase de leitura} do combinado leva o dobro do tempo, e o seu pico de memória é
+células de dados do arquivo ficam vazias, contra nenhuma nos arquivos do modo multifonte.
+Por isso, e porque a ferramenta separa o arquivo combinado por tipo de evento durante a
+leitura, inferindo os tipos das colunas de cada parte, a \textbf{fase de leitura} do
+combinado leva o dobro do tempo, e o seu pico de memória é
 $5$ a $6\%$ maior --- diferença real, pois a memória se reproduz com variação inferior a
 $0{,}1\%$. Como a leitura é uma parcela pequena de uma importação dominada pela escrita
 (seção~\ref{sec:res-fases}), a vantagem não chega ao tempo total.
 
 Além do desempenho, o modo multifonte tem vantagens de \textbf{organização}. Cada arquivo
-traz apenas as colunas do seu tipo de dado, o que o torna mais fácil de ler, de validar e
+traz apenas as colunas do seu tipo de evento, o que o torna mais fácil de ler, de validar e
 de produzir: cada um pode vir de um sistema diferente e ser atualizado independentemente
 dos demais. A opção \texttt{-{}-source} (seção~\ref{sec:visao-geral}) substitui uma fonte
 isolada --- por exemplo, apenas as compras ---, enquanto no modo combinado só o arquivo
 inteiro pode ser substituído. No modelo de execução em fluxo, a amostra usada para inferir
 os tipos de uma entidade alimentada por mais de uma fonte é lida do primeiro bloco de cada
 arquivo multifonte, ao passo que o arquivo combinado precisa ser percorrido até que cada
-tipo de dado apareça. A vantagem do modo combinado é a simplicidade de um único arquivo,
+tipo de evento apareça. Esse passe adicional de leitura já está incluído nos tempos
+medidos. A vantagem do modo combinado é a simplicidade de um único arquivo,
 formato natural quando a origem dos dados já é um registro único de eventos. Em síntese, a
 escolha entre os dois modos é sobretudo de organização dos dados; em desempenho, o
 multifonte lê mais rápido e ocupa menos memória, sem diferença significativa no tempo
@@ -462,7 +465,7 @@ memória do fluxo cresce justamente onde o seu custo de tempo encolhe.
 
 Um ponto exige cuidado na leitura das medidas de memória. No mesmo ponto de $10\,000$ linhas
 e modo de materialização, a estratégia \textbf{ingênua} exibe um pico \textbf{menor} que a
-em lote --- $14{,}4$~MB contra $95{,}4$~MB no modo multifonte
+estratégia em lote --- $14{,}4$~MB contra $95{,}4$~MB no modo multifonte
 (Tabela~\ref{tab:tradeoff-memoria}). O número não é um erro, e reproduz-se entre campanhas.
 A explicação está na natureza da estratégia em lote: para gravar em lotes, ela
 \textbf{acumula registros em memória} antes de despachá-los. No Neo4j, em particular, a
@@ -508,8 +511,8 @@ importação, das mesmas diferenças de paradigma que a literatura observa na et
 \cite{muniswamaiah2023comparison, vanlanduyt2023comparative}.
 
 Os dois modos de importação empatam no tempo total, nos dois modelos de execução (QP2); o
-multifonte lê duas vezes mais rápido e ocupa de $5$ a $6\%$ menos memória, por evitar as
-células vazias do arquivo combinado, e tem vantagens de organização. Quanto à escalabilidade (QP3), o tempo cresce de forma
+multifonte lê duas vezes mais rápido e ocupa de $5$ a $6\%$ menos memória, por ler
+arquivos menores, sem células vazias, que não precisam ser separados por tipo de evento, e tem vantagens de organização. Quanto à escalabilidade (QP3), o tempo cresce de forma
 aproximadamente proporcional ao volume, governado pela fase de escrita, enquanto a memória
 segue o modelo de execução escolhido.
 
