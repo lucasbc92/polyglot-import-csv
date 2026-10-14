@@ -185,47 +185,31 @@ def _cast_column_vectorized(series: pd.Series, kind: str) -> "tuple[pd.Series, i
         py = ts.dt.to_pydatetime()
         # Unlike integer/float, cast_value's datetime branch has no
         # try/except fallback: an unparseable value always becomes None,
-        # never the original text (see cast_value above). The resulting
-        # VALUE stays identical between strategies here. The WARNING does
-        # not: cast_value's identity check (`v is orig`) in cast_frame's
-        # naive branch can never match for datetime, since cast_value
-        # returns a new None rather than the original object on failure, so
-        # naive can never report a non-zero datetime fallback count. This
-        # branch can detect the failure precisely (ts.isna()) and does warn.
-        # This asymmetry is a deliberate, owner-approved deviation (not a
-        # bug to fix): a silently NULLed timestamp is real data loss worth
-        # surfacing, and log output does not affect the timing the
-        # benchmark measures.
+        # never the original text (see cast_value above), and the value here
+        # matches it. This path also detects the failure (ts.isna()) and
+        # warns, which a per-cell identity check could not: a silently
+        # NULLed timestamp is real data loss worth surfacing.
         vals = [None if (e or b) else d for e, b, d in zip(empty, bad, py)]
         return pd.Series(vals, index=series.index, dtype=object), fallbacks
 
     return original, 0
 
 
-def cast_frame(df: pd.DataFrame, kinds: Dict[str, str], *, strategy: str = "optimized") -> pd.DataFrame:
+def cast_frame(df: pd.DataFrame, kinds: Dict[str, str]) -> pd.DataFrame:
     """Return a copy with typed columns converted to native values.
 
-    ``strategy='naive'`` casts cell by cell (the original path);
-    ``strategy='optimized'`` casts per column with pandas. Both yield identical
-    values and element types. Only integer/float/boolean/datetime columns are
-    converted (empty cells become None); string columns keep raw values.
+    Casts per column with pandas; the values and element types equal those of
+    ``cast_value`` applied cell by cell. Only integer/float/boolean/datetime
+    columns are converted (empty cells become None); string columns keep raw
+    values.
     """
     out = df.copy()
     for col in out.columns:
         kind = kinds.get(col, "string")
         if kind not in ("integer", "float", "boolean", "datetime"):
             continue
-        if strategy == "optimized":
-            result, fallbacks = _cast_column_vectorized(out[col], kind)
-            out[col] = result
-        else:
-            values = [cast_value(v, kind) for v in out[col]]
-            fallbacks = sum(
-                1
-                for orig, v in zip(out[col], values)
-                if v is orig and orig is not None and orig != ""
-            )
-            out[col] = pd.Series(values, index=out.index, dtype=object)
+        result, fallbacks = _cast_column_vectorized(out[col], kind)
+        out[col] = result
         if fallbacks:
             # Datetime failures become None (cast_value has no text fallback
             # for datetime, see above); integer/float failures stay as text.
