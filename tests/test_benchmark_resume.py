@@ -16,9 +16,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import run_benchmarks as rb  # noqa: E402
 
 
-def _labeled(size, mode, execution, repetition, *, strategy="optimized", seconds=1.0):
+def _labeled(size, mode, execution, repetition, *, seconds=1.0):
     return {
-        "size": size, "mode": mode, "strategy": strategy,
+        "size": size, "mode": mode,
         "execution": execution, "repetition": repetition,
         "peak_memory_mb": 1.0,
         "records": [{"backend": "postgres", "entity": "products",
@@ -28,7 +28,7 @@ def _labeled(size, mode, execution, repetition, *, strategy="optimized", seconds
 
 def _matrix(tmp_path, seen, **kwargs):
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides, strategy, execution):
+                      only, create_schema, source_overrides, execution):
         seen.append(execution)
         collector.record("postgres", "products", "write", rows=10, seconds=0.1)
         return []
@@ -83,7 +83,7 @@ def test_checkpoints_written_during_a_resume_include_the_earlier_runs(tmp_path):
 
 def test_resume_reads_runs_whose_axes_match(tmp_path):
     meta = {"seed": 42, "sizes": [1000], "modes": ["multi"],
-            "strategies": ["optimized"], "executions": ["stream"], "repetitions": 3}
+            "executions": ["stream"], "repetitions": 3}
     path = tmp_path / rb.CHECKPOINT_NAME
     runs = [_labeled(1000, "multi", "stream", 0)]
     path.write_text(json.dumps({"metadata": meta, "runs": runs}), encoding="utf-8")
@@ -97,7 +97,7 @@ def test_resume_without_a_checkpoint_starts_fresh(tmp_path):
 
 def test_resume_refuses_a_checkpoint_from_a_different_matrix(tmp_path):
     meta = {"seed": 42, "sizes": [1000], "modes": ["multi"],
-            "strategies": ["optimized"], "executions": ["stream"], "repetitions": 3}
+            "executions": ["stream"], "repetitions": 3}
     path = tmp_path / rb.CHECKPOINT_NAME
     path.write_text(
         json.dumps({"metadata": meta, "runs": [_labeled(1000, "multi", "stream", 0)]}),
@@ -111,7 +111,7 @@ def test_resume_refuses_a_checkpoint_from_a_different_matrix(tmp_path):
 
 def test_resume_names_every_axis_that_differs(tmp_path):
     meta = {"seed": 42, "sizes": [1000], "modes": ["multi"],
-            "strategies": ["optimized"], "executions": ["stream"], "repetitions": 3}
+            "executions": ["stream"], "repetitions": 3}
     path = tmp_path / rb.CHECKPOINT_NAME
     path.write_text(json.dumps({"metadata": meta, "runs": []}), encoding="utf-8")
 
@@ -151,3 +151,25 @@ def test_a_crashing_matrix_is_recorded_in_the_session_log(tmp_path, monkeypatch)
     logged = "\n".join(p.read_text(encoding="utf-8") for p in log_dir.glob("*.log"))
     assert "kaboom-in-the-matrix" in logged
     assert "Traceback" in logged
+
+
+def test_resume_refuses_a_checkpoint_with_naive_runs(tmp_path):
+    meta = {"seed": 42, "sizes": [1000], "modes": ["multi"],
+            "executions": ["materialize"], "repetitions": 3}
+    naive_run = dict(_labeled(1000, "multi", "materialize", 0), strategy="naive")
+    path = tmp_path / rb.CHECKPOINT_NAME
+    path.write_text(json.dumps({"metadata": meta, "runs": [naive_run]}), encoding="utf-8")
+
+    # Mixing row-at-a-time timings into the batch medians would corrupt them.
+    with pytest.raises(ValueError, match="naive"):
+        rb.resume_runs(path, dict(meta))
+
+
+def test_resume_accepts_runs_labeled_optimized_by_older_versions(tmp_path):
+    meta = {"seed": 42, "sizes": [1000], "modes": ["multi"],
+            "executions": ["stream"], "repetitions": 3}
+    run = dict(_labeled(1000, "multi", "stream", 0), strategy="optimized")
+    path = tmp_path / rb.CHECKPOINT_NAME
+    path.write_text(json.dumps({"metadata": meta, "runs": [run]}), encoding="utf-8")
+
+    assert rb.resume_runs(path, dict(meta)) == [run]
