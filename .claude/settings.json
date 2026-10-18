@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "complete@policyengine-claude": true
+  }
+}
