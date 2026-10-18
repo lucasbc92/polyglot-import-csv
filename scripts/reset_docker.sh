@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Rebuild the example DBMS stack from scratch, keeping the downloaded images.
 #
-# Removes this project's containers, network and volumes (named and anonymous,
-# so every database starts empty), prunes unused anonymous volumes left behind by
-# earlier runs, then starts all services and waits until they are healthy.
-# Images are kept, so nothing is downloaded again (run_example.sh --fresh-start
-# also removes and re-pulls the images).
+# `docker compose down --volumes` removes this project's containers, network and
+# volumes, so every database starts empty; then all services are started and
+# waited on until they are healthy. Images are kept, so nothing is downloaded
+# again (run_example.sh --fresh-start also removes and re-pulls the images).
+#
+# Unused anonymous volumes left on the Docker host may belong to any project,
+# so they are only listed; in a terminal the script asks before removing them.
 #
 # Usage: ./scripts/reset_docker.sh
 set -euo pipefail
@@ -16,7 +18,7 @@ cd "${ROOT}"
 source "${ROOT}/scripts/console.sh"
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
   exit 0
 fi
 
@@ -41,12 +43,31 @@ log_ok "Daemon is responding"
 log_section "Remove containers, network and volumes"
 run_logged docker compose down --volumes --remove-orphans
 
-log_section "Prune unused anonymous volumes"
-# Docker >= 23 prunes only anonymous volumes here; named volumes need --all.
-run_logged docker volume prune --force
+log_section "Unused anonymous volumes"
+# down --volumes already removed this project's; what is left carries no
+# compose project label, so it cannot be told apart from other projects' data.
+dangling="$(docker volume ls -q --filter dangling=true \
+  --filter label=com.docker.volume.anonymous)"
+if [[ -z "${dangling}" ]]; then
+  log_dim "None"
+else
+  count="$(printf '%s\n' "${dangling}" | wc -l | tr -d ' ')"
+  log_warn "${count} unused anonymous volume(s); they may belong to ANY project on this Docker host."
+  if [[ -t 0 ]]; then
+    read -r -p "Remove them too? [y/N] " answer || answer=""
+    if [[ "${answer}" == "y" || "${answer}" == "Y" ]]; then
+      # shellcheck disable=SC2086  # one volume name per word
+      run_logged docker volume rm ${dangling}
+    else
+      log_dim "Kept"
+    fi
+  else
+    log_dim "Not a terminal, so kept (run the script in a terminal to be asked)."
+  fi
+fi
 
 log_section "Start the stack"
-run_logged docker compose up --detach --wait --force-recreate
+run_logged docker compose up --detach --wait
 run_logged docker compose ps
 
 log_done "Stack recreated with empty databases"
