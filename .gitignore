@@ -45,12 +45,9 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-# PyInstaller / py2app output under dist/; manter apenas executáveis pequenos se desejar
-dist/*
-!dist/.gitkeep
-!dist/polyglotimportcsv.exe
-# Build local (~70 MB): pyinstaller polyglotimportcsv.spec
-dist/polyglotimportcsv_cmdline.exe
+# PyInstaller output (pyinstaller polyglotimportcsv.spec); os executáveis são
+# publicados nas releases do GitHub, nunca versionados
+dist/
 
 # Plugins Neo4j (binários grandes; obter do site Neo4j/APOC)
 infra/neo4j/plugins/*.jar

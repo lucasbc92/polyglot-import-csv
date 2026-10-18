@@ -128,12 +128,14 @@ Both write the same 27 494 rows.
    There is no per-DBMS or per-phase breakdown for streaming; the `read`/`map`
    columns read 0.00 for stream rows and must not be presented as "streaming does
    no reading".
-5. **Naive was measured only at 10k, materialize only.** Streaming ignores
-   `--strategy naive` by design (`runner.py:136`). State the scope.
+5. **Naive was measured only at 10k, materialize only.** In 1.1.0, streaming ignores
+   `--strategy naive` by design (`v1.1.0:src/polyglotimportcsv/runner.py:251`).
+   State the scope.
 6. **Naive shows a *lower* peak than optimized** (14.4 vs 95.4 MB at 10k). This is
-   real and reproducible: the optimized Neo4j path builds the whole relationship
-   parameter list in memory (`neo4j_importer.py:287`) while naive iterates row by
-   row (`:283`). Batching trades memory for throughput. Explain it or omit it —
+   real and reproducible: in 1.1.0, the optimized Neo4j path builds the whole
+   relationship parameter list in memory
+   (`v1.1.0:src/polyglotimportcsv/importers/neo4j_importer.py:287`) while naive
+   iterates row by row (`:283`). Batching trades memory for throughput. Explain it or omit it —
    do not present it as an anomaly.
 
 ## Português (BR)
@@ -274,11 +276,13 @@ Concentrado no mapeamento (38.54 → 0.91 s, 42×) e na escrita (95.36 → 12.44
    leitura+mapeamento+escrita fundidos. Não há detalhamento por SGBD ou por
    fase para o streaming; as colunas `read`/`map` leem 0.00 nas linhas de
    stream e não devem ser apresentadas como "o streaming não lê nada".
-5. **O naive só foi medido em 10k, só em materialize.** O streaming ignora
-   `--strategy naive` por design (`runner.py:136`). Deixe esse escopo claro.
+5. **O naive só foi medido em 10k, só em materialize.** Na versão 1.1.0, o
+   streaming ignora `--strategy naive` por design
+   (`v1.1.0:src/polyglotimportcsv/runner.py:251`). Deixe esse escopo claro.
 6. **O naive mostra pico *menor* que o optimized** (14.4 vs 95.4 MB em 10k).
-   Isso é real e reproduzível: o caminho otimizado do Neo4j monta a lista
-   inteira de parâmetros do relacionamento em memória
-   (`neo4j_importer.py:287`), enquanto o naive itera linha a linha (`:283`). O
+   Isso é real e reproduzível: na versão 1.1.0, o caminho otimizado do Neo4j
+   monta a lista inteira de parâmetros do relacionamento em memória
+   (`v1.1.0:src/polyglotimportcsv/importers/neo4j_importer.py:287`), enquanto o
+   naive itera linha a linha (`:283`). O
    agrupamento em lotes troca memória por vazão. Explique isso ou omita — não
    apresente como uma anomalia.

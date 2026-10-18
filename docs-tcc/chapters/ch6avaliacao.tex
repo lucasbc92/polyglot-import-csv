@@ -5,7 +5,7 @@ Este capítulo avalia empiricamente o desempenho da PolyglotImportCSV. A avalia�
 listada como objetivo específico no Capítulo~\ref{cap:introducao} e apoia-se diretamente
 no instrumento de medição descrito na seção~\ref{sec:observabilidade} --- o subsistema de
 métricas, que cronometra cada fase da importação e registra o pico de memória por execução
---- e nos dois eixos de configuração descritos na seção~\ref{sec:execucao-estrategias}: a
+--- e nos dois fatores descritos na seção~\ref{sec:execucao-estrategias}: a
 estratégia de escrita (ingênua \textit{versus} em lote) e o modelo de
 execução (\texttt{materialize} \textit{versus} \texttt{stream}). O objetivo não é eleger o
 ``melhor'' SGBD --- os cinco atendem a modelos de dados distintos --- mas caracterizar o
@@ -310,7 +310,7 @@ memória.
     \bottomrule
   \end{tabular}
   \par\vspace{4pt}
-  {\footnotesize Fonte: Elaborado pelo autor (2026). Tamanho, colunas e células vazias de \texttt{data/benchmark/generated/100000/}; tempos de \texttt{benchmarks/timings/}; memória de \texttt{benchmarks/}.}
+  {\footnotesize Fonte: Elaborado pelo autor (2026). Tamanho, colunas e células vazias de \texttt{data/benchmark/generated/100000/}; tempos de \texttt{benchmarks/timings/}; memória de \texttt{benchmarks/}. Tamanho em MB de $10^6$ bytes; memória em MB de $2^{20}$ bytes (MiB).}
 \end{table}
 
 No \textbf{tempo total}, os dois modos empatam: o combinado é cerca de $8\%$ mais lento na

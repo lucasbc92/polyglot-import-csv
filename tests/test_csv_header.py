@@ -44,3 +44,16 @@ def test_a_column_mapped_by_name_is_not_found_without_a_header(tmp_path):
     with pytest.raises(MappingError, match="product_id"):
         bound = resolve_backend_entities(bcfg, sources, {})
         validate_backend_entities("postgres", bcfg, bound)
+
+
+def test_automatic_mapping_imports_without_a_header_and_loses_the_first_row(tmp_path):
+    # No error to catch the missing header: the first row's values become the
+    # column names, and that row is not imported.
+    _write(tmp_path)
+    sources = load_sources({"stock": "stock.csv"}, tmp_path)
+    bcfg = {"entities": {"stock": {}}}
+    bound = resolve_backend_entities(bcfg, sources, {})
+    validate_backend_entities("postgres", bcfg, bound)
+    stock = bound["stock"]
+    assert len(stock.df) == 2
+    assert list(stock.cfg["columns"]) == ["1", "Phone", "10"]

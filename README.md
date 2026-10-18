@@ -170,6 +170,10 @@ import is preceded by a clean, so every measurement is a cold load:
     python scripts/run_benchmarks.py --sizes 1000,10000,100000 \
       --modes multi,combined --repetitions 3
 
+`benchmarks/` (the default `--out`) keeps the report's campaigns, whose
+`benchmark_results.csv` has an older header, so new runs should pass `--out` with
+another folder; otherwise the script stops before measuring anything.
+
 A crash part-way through does not cost the runs already measured: they are written
 to `benchmarks/benchmark_checkpoint.json` after every import. Re-run with the same
 axis flags plus `--resume` to measure only the missing cells:
@@ -391,6 +395,10 @@ precedida de uma limpeza, então cada medição é uma carga a frio:
 
     python scripts/run_benchmarks.py --sizes 1000,10000,100000 \
       --modes multi,combined --repetitions 3
+
+`benchmarks/` (o `--out` padrão) guarda as campanhas do relatório, cujo
+`benchmark_results.csv` tem um cabeçalho mais antigo, então novas execuções devem
+passar `--out` com outra pasta; caso contrário o script para antes de medir qualquer coisa.
 
 Uma queda no meio da matriz não custa as execuções já medidas: elas são gravadas em
 `benchmarks/benchmark_checkpoint.json` após cada importação. Rode de novo com os

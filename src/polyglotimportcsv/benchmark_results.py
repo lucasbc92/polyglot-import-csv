@@ -6,7 +6,7 @@ import statistics
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-from polyglotimportcsv.benchmark_io import write_json_and_csv
+from polyglotimportcsv.benchmark_io import check_csv_header, write_json_and_csv
 # Re-exported: the consolidated report and the terminal table exclude the same
 # phases, and callers already import the name from here.
 from polyglotimportcsv.metrics import EXCLUDED_PHASES
@@ -15,6 +15,7 @@ _RESULT_FIELDS = (
     "timestamp", "size", "mode", "execution", "backend", "entity",
     "phase", "rows", "median_seconds", "rows_per_second", "peak_memory_mb",
 )
+_RESULTS_CSV = "benchmark_results.csv"
 
 
 def median_results(labeled_runs: List[Dict[str, object]]) -> List[Dict[str, object]]:
@@ -67,6 +68,11 @@ def write_consolidated(
     """Write ``benchmark_run_<timestamp>.json`` and append ``benchmark_results.csv``."""
     return write_json_and_csv(
         out_dir, metadata, results,
-        json_prefix="benchmark_run", csv_name="benchmark_results.csv",
+        json_prefix="benchmark_run", csv_name=_RESULTS_CSV,
         csv_fields=_RESULT_FIELDS, payload_key="results",
     )
+
+
+def check_consolidated_csv(out_dir: "str | Path" = "benchmarks") -> None:
+    """Raise ``ValueError`` if ``write_consolidated`` would refuse ``out_dir``'s CSV."""
+    check_csv_header(Path(out_dir) / _RESULTS_CSV, _RESULT_FIELDS)
