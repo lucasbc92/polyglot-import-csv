@@ -6,11 +6,11 @@ listada como objetivo específico no Capítulo~\ref{cap:introducao} e apoia-se d
 no instrumento de medição descrito na seção~\ref{sec:observabilidade} --- o subsistema de
 métricas, que cronometra cada fase da importação e registra o pico de memória por execução
 --- e nos dois eixos de configuração descritos na seção~\ref{sec:execucao-estrategias}: a
-estratégia de escrita (\texttt{naive} \textit{versus} \texttt{optimized}) e o modelo de
+estratégia de escrita (ingênua \textit{versus} em lote) e o modelo de
 execução (\texttt{materialize} \textit{versus} \texttt{stream}). O objetivo não é eleger o
 ``melhor'' SGBD --- os cinco atendem a modelos de dados distintos --- mas caracterizar o
 custo de importar um mesmo conjunto de dados para cinco paradigmas e quantificar o ganho
-de cada uma das duas estratégias de desempenho da ferramenta.
+da escrita em lote e do modelo de execução em fluxo.
 
 A prática de comparar sistemas de dados sob uma carga sintética controlada e reproduzível
 segue a tradição consolidada por \citeonline{cooper2010benchmarking} com o \textit{Yahoo!
@@ -31,12 +31,13 @@ resultados da seção~\ref{sec:resultados} respondem:
   \item \textbf{QP1 --- Custo por SGBD.} Qual é o \textit{throughput} de escrita de cada
         SGBD e como o tempo total de uma importação se decompõe entre as fases de leitura,
         seleção, mapeamento e escrita?
-  \item \textbf{QP2 --- Modos de importação.} Importar a partir de um CSV por entidade
-        (modo multifonte) ou de um único CSV combinado impõe sobrecustos distintos?
+  \item \textbf{QP2 --- Modos de importação.} Importar a partir de um CSV por tipo de evento
+        (modo multifonte) ou de um único CSV combinado impõe custos distintos, e que
+        vantagens tem cada modo?
   \item \textbf{QP3 --- Escalabilidade.} Como o tempo e a memória evoluem ao multiplicar o
         volume de dados por dez, de mil a cem mil linhas?
   \item \textbf{QP4 --- Estratégia de escrita.} Qual é o ganho de desempenho da estratégia
-        otimizada (vetorização e escrita em lote) sobre a ingênua (linha a linha)?
+        em lote (conversão vetorizada e gravação em lotes) sobre a ingênua (linha a linha)?
   \item \textbf{QP5 --- Modelo de execução.} Qual é o custo, em tempo e em pico de
         memória, do modo de fluxo em relação ao de materialização?
   \item \textbf{QP6 --- Memória limitada.} O pico de memória do modo de fluxo permanece
@@ -62,8 +63,8 @@ um conjunto de dados fixo, segue a mesma orientação metodológica do YCSB
 \label{sec:protocolo-medicao}
 
 Cada célula experimental é definida por uma combinação de \textbf{tamanho} ($N \in \{1000,
-10\,000, 100\,000\}$), \textbf{modo} (multifonte ou combinado), \textbf{estratégia}
-(\texttt{naive} ou \texttt{optimized}), \textbf{modelo de execução} (\texttt{materialize}
+10\,000, 100\,000\}$), \textbf{modo} (multifonte ou combinado), \textbf{estratégia de
+escrita} (ingênua ou em lote), \textbf{modelo de execução} (\texttt{materialize}
 ou \texttt{stream}) e é repetida \textbf{três vezes}. Antes de cada repetição, os cinco
 SGBDs são \textbf{limpos} (\textit{cold-load}): as estruturas de destino são truncadas, de
 modo que nenhuma repetição se beneficia de dados ou de caches deixados pela anterior. O
@@ -123,22 +124,23 @@ se mostrará relevante na análise da fase de escrita.
 
 A matriz completa combina os três tamanhos, os dois modos, as duas estratégias e os dois
 modelos de execução. Nem toda combinação é medida em todos os pontos: a estratégia
-\texttt{naive} --- a implementação original da ferramenta, do TCC1
+ingênua --- a implementação original da ferramenta, do TCC1
 (seção~\ref{sec:estrategias-escrita}) --- serve de linha de base e foi medida apenas no
-ponto $N = 10\,000$, no modo de
-materialização, pois o modo de fluxo emprega sempre a via otimizada por projeto
-(seção~\ref{sec:modelos-execucao}). Cada resultado a seguir indica o seu escopo.
+ponto $N = 10\,000$, no modo de materialização, já que o modo de fluxo sempre gravou em
+lote (seção~\ref{sec:modelos-execucao}). A estratégia ingênua permanece disponível até a
+versão 1.1.0 da ferramenta, a última que a contém; nas versões seguintes, a ferramenta
+grava sempre em lote. Cada resultado a seguir indica o seu escopo.
 
 \section{Resultados}
 \label{sec:resultados}
 
-\subsection{Estratégia de Escrita: Otimizada \textit{versus} Ingênua (QP4)}
+\subsection{Estratégia de Escrita: Em Lote \textit{versus} Ingênua (QP4)}
 \label{sec:res-estrategia}
 
 A Tabela~\ref{tab:naive-optimized} contrasta as duas estratégias de escrita no ponto
-$N = 10\,000$, no modo de materialização. A via otimizada importa o mesmo conjunto de dados
+$N = 10\,000$, no modo de materialização. A estratégia em lote importa o mesmo conjunto de dados
 --- as mesmas \num{27494} linhas gravadas --- entre $8{,}5$ e $9{,}3$ vezes mais rápido que
-a via ingênua. O ganho concentra-se, como esperado, nas duas fases que a otimização ataca:
+a via ingênua. O ganho concentra-se, como esperado, nas duas fases que a estratégia em lote ataca:
 o mapeamento (conversão de tipos), acelerado cerca de $42\times$ pela vetorização, e a
 escrita, acelerada $7{,}7\times$ pela gravação em lote. A leitura e a seleção, que a
 estratégia não altera, permanecem estáveis.
@@ -152,10 +154,10 @@ estratégia não altera, permanecem estáveis.
     \textbf{Modo} & \textbf{Estratégia} & \textbf{Mapeamento} & \textbf{Escrita} & \textbf{Total} & \textbf{Ganho} \\
     \midrule
     \multirow{2}{*}{multifonte} & ingênua   & 38{,}54 & 95{,}36 & 135{,}74 & --- \\
-                                & otimizada &  0{,}91 & 12{,}44 &  14{,}54 & $9{,}3\times$ \\
+                                & em lote  &  0{,}91 & 12{,}44 &  14{,}54 & $9{,}3\times$ \\
     \midrule
     \multirow{2}{*}{combinado}  & ingênua   & ---     & ---     & 138{,}44 & --- \\
-                                & otimizada & ---     & ---     &  16{,}30 & $8{,}5\times$ \\
+                                & em lote  & ---     & ---     &  16{,}30 & $8{,}5\times$ \\
     \bottomrule
   \end{tabular}
   \par\vspace{4pt}
@@ -184,7 +186,7 @@ estratégia não altera, permanecem estáveis.
     ]
       \addplot coordinates {(multifonte,135.74)[135,74] (combinado,138.44)[138,44]};
       \addplot coordinates {(multifonte,14.54)[14,54] (combinado,16.30)[16,30]};
-      \legend{ingênua, otimizada}
+      \legend{ingênua, em lote}
     \end{axis}
   \end{tikzpicture}
   \caption{Tempo total de importação por estratégia de escrita ($N = 10\,000$, materialização; eixo vertical em escala logarítmica). Campanha sem instrumentação de memória.}
@@ -193,21 +195,21 @@ estratégia não altera, permanecem estáveis.
   {\footnotesize Fonte: Elaborado pelo autor (2026), a partir de \texttt{benchmarks/timings-naive/}.}
 \end{figure}
 
-Dado esse ganho, e por a estratégia otimizada ser o padrão da ferramenta, todos os demais
-resultados deste capítulo empregam \texttt{optimized}. A estratégia ingênua cumpre aqui o
+Todos os demais resultados deste capítulo empregam a estratégia em lote, a única da versão
+atual da ferramenta. A estratégia ingênua cumpre aqui o
 seu papel exclusivamente metodológico: a linha de base que dá sentido ao número
 ``$9{,}3\times$''.
 
 \subsection{Decomposição por Fase e Escrita por SGBD (QP1)}
 \label{sec:res-fases}
 
-Fixada a estratégia otimizada, a Tabela~\ref{tab:fases-100k} decompõe uma importação de
+Com a estratégia em lote, a Tabela~\ref{tab:fases-100k} decompõe uma importação de
 $N = 100\,000$ linhas (multifonte, materialização) nas suas quatro fases. A escrita nos
 bancos domina o custo, respondendo por cerca de $91\%$ do tempo total; a leitura e o
 mapeamento, juntos, respondem por menos de $10\%$, e a seleção é desprezível.
 
 \begin{table}[H]
-  \caption{Tempo por fase de uma importação otimizada ($N = 100\,000$, multifonte, materialização), em segundos. Campanha sem instrumentação de memória.}
+  \caption{Tempo por fase de uma importação ($N = 100\,000$, multifonte, materialização), em segundos. Campanha sem instrumentação de memória.}
   \label{tab:fases-100k}
   \centering
   \begin{tabular}{l r r}
@@ -234,7 +236,7 @@ grandeza: o MongoDB grava a cerca de \num{14431}~linhas/s, enquanto o Cassandra 
 $912$~linhas/s.
 
 \begin{table}[H]
-  \caption{Escrita por SGBD em uma importação otimizada ($N = 100\,000$, multifonte, materialização). Campanha sem instrumentação de memória.}
+  \caption{Escrita por SGBD em uma importação ($N = 100\,000$, multifonte, materialização). Campanha sem instrumentação de memória.}
   \label{tab:escrita-sgbd}
   \centering
   \begin{tabular}{l r r r}
@@ -270,7 +272,7 @@ $912$~linhas/s.
       \addplot coordinates {(912,Cassandra) (3901,Neo4j) (7644,PostgreSQL) (10865,Redis) (14431,MongoDB)};
     \end{axis}
   \end{tikzpicture}
-  \caption{\textit{Throughput} de escrita por SGBD ($N = 100\,000$, multifonte, materialização, estratégia otimizada). Campanha sem instrumentação de memória.}
+  \caption{\textit{Throughput} de escrita por SGBD ($N = 100\,000$, multifonte, materialização, estratégia em lote). Campanha sem instrumentação de memória.}
   \label{fig:throughput-sgbd}
   \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026), a partir de \texttt{benchmarks/timings/}.}
@@ -284,30 +286,62 @@ SGBD em vez de tratá-la como um bloco único.
 \subsection{Modos de Importação: Multifonte \textit{versus} Combinado (QP2)}
 \label{sec:res-modos}
 
-Os dois modos de importação --- um CSV por entidade ou um único CSV combinado --- gravam os
-mesmos dados e, como mostra a Tabela~\ref{tab:multi-combined}, têm desempenho muito próximo.
-No ponto de $100\,000$ linhas, o modo combinado é cerca de $8\%$ mais lento em tempo e usa
-cerca de $6\%$ mais memória --- diferenças da ordem da própria incerteza de medição do
-tempo ($\approx 20\%$). Na prática, os dois modos são intercambiáveis em custo, e a escolha
-entre eles é de conveniência de organização dos dados, não de desempenho.
+Os dois modos de importação --- um CSV por tipo de evento ou um único CSV combinado ---
+gravam os mesmos dados. A Tabela~\ref{tab:multi-combined} compara-os no ponto de
+$100\,000$ linhas quanto ao tamanho dos arquivos, à leitura, ao tempo total e ao pico de
+memória.
 
 \begin{table}[H]
-  \caption{Multifonte \textit{versus} combinado ($N = 100\,000$, estratégia otimizada). Tempos e picos de memória provêm de campanhas distintas, conforme indicado.}
+  \caption{Multifonte \textit{versus} combinado ($N = 100\,000$, estratégia em lote). Tempos e picos de memória provêm de campanhas distintas, conforme indicado.}
   \label{tab:multi-combined}
   \centering
-  \begin{tabular}{l r r r r}
+  \begin{tabular}{l r r}
     \toprule
-    & \multicolumn{2}{c}{\textbf{Materialização}} & \multicolumn{2}{c}{\textbf{Fluxo}} \\
-    \cmidrule(lr){2-3} \cmidrule(lr){4-5}
-    \textbf{Modo} & \textbf{Tempo (s)} & \textbf{Pico (MB)} & \textbf{Tempo (s)} & \textbf{Pico (MB)} \\
+    \textbf{Critério} & \textbf{Multifonte} & \textbf{Combinado} \\
     \midrule
-    multifonte & 149{,}93 &  950{,}7 & 165{,}03 & 75{,}9 \\
-    combinado  & 161{,}94 & \num{1009.5} & 181{,}42 & 79{,}8 \\
+    Tamanho dos arquivos (MB)               & 23{,}75 (4 arquivos) & 28{,}55 \\
+    Colunas por arquivo                     & 20, 33, 6 e 7 & 39 \\
+    Células vazias                          & 0\%      & 45\% \\
+    Fase de leitura, materialização (s)     & 7{,}69   & 15{,}15 \\
+    Tempo total, materialização (s)         & 149{,}93 & 161{,}94 \\
+    Tempo total, fluxo (s)                  & 165{,}03 & 181{,}42 \\
+    Pico de memória, materialização (MB)    & 950{,}7  & \num{1009.5} \\
+    Pico de memória, fluxo (MB)             & 75{,}9   & 79{,}8 \\
     \bottomrule
   \end{tabular}
   \par\vspace{4pt}
-  {\footnotesize Fonte: Elaborado pelo autor (2026). Tempo de \texttt{benchmarks/timings/}; memória de \texttt{benchmarks/}.}
+  {\footnotesize Fonte: Elaborado pelo autor (2026). Tamanho, colunas e células vazias de \texttt{data/benchmark/generated/100000/}; tempos de \texttt{benchmarks/timings/}; memória de \texttt{benchmarks/}.}
 \end{table}
+
+No \textbf{tempo total}, os dois modos empatam: o combinado é cerca de $8\%$ mais lento na
+materialização e $10\%$ mais lento no fluxo, diferenças abaixo da incerteza de medição do
+tempo ($\approx 20\%$). O modelo de execução em fluxo, portanto, não favorece um modo em
+relação ao outro: nos dois, ele reduz o pico de memória cerca de $12{,}5$ vezes e custa
+de $10$ a $12\%$ de tempo. As diferenças que se sustentam estão em outros pontos. O arquivo
+combinado é cerca de $20\%$ \textbf{maior}, porque todos os tipos de evento partilham um
+único cabeçalho de 39 colunas e cada linha preenche apenas as do seu tipo: $45\%$ das
+células de dados do arquivo ficam vazias, contra nenhuma nos arquivos do modo multifonte.
+Por isso, e porque a ferramenta separa o arquivo combinado por tipo de evento durante a
+leitura, inferindo os tipos das colunas de cada parte, a \textbf{fase de leitura} do
+combinado leva o dobro do tempo, e o seu pico de memória é
+$5$ a $6\%$ maior --- diferença real, pois a memória se reproduz com variação inferior a
+$0{,}1\%$. Como a leitura é uma parcela pequena de uma importação dominada pela escrita
+(seção~\ref{sec:res-fases}), a vantagem não chega ao tempo total.
+
+Além do desempenho, o modo multifonte tem vantagens de \textbf{organização}. Cada arquivo
+traz apenas as colunas do seu tipo de evento, o que o torna mais fácil de ler, de validar e
+de produzir: cada um pode vir de um sistema diferente e ser atualizado independentemente
+dos demais. A opção \texttt{-{}-source} (seção~\ref{sec:visao-geral}) substitui uma fonte
+isolada --- por exemplo, apenas as compras ---, enquanto no modo combinado só o arquivo
+inteiro pode ser substituído. No modelo de execução em fluxo, a amostra usada para inferir
+os tipos de uma entidade alimentada por mais de uma fonte é lida do primeiro bloco de cada
+arquivo multifonte, ao passo que o arquivo combinado precisa ser percorrido até que cada
+tipo de evento apareça. Esse passe adicional de leitura já está incluído nos tempos
+medidos. A vantagem do modo combinado é a simplicidade de um único arquivo,
+formato natural quando a origem dos dados já é um registro único de eventos. Em síntese, a
+escolha entre os dois modos é sobretudo de organização dos dados; em desempenho, o
+multifonte lê mais rápido e ocupa menos memória, sem diferença significativa no tempo
+total.
 
 \subsection{Modelos de Execução: Memória e Tempo (QP5 e QP6)}
 \label{sec:res-execucao}
@@ -324,7 +358,7 @@ do modo de fluxo é governado pelo tamanho do bloco, não pelo do arquivo, exata
 prevê o seu projeto (seção~\ref{sec:modelos-execucao}).
 
 \begin{table}[H]
-  \caption{Pico de memória por modelo de execução ($N$ crescente, multifonte, estratégia otimizada), em MB. Campanha com instrumentação de memória.}
+  \caption{Pico de memória por modelo de execução ($N$ crescente, multifonte, estratégia em lote), em MB. Campanha com instrumentação de memória.}
   \label{tab:memoria}
   \centering
   \begin{tabular}{r r r r}
@@ -381,7 +415,7 @@ fluxo. Ou seja: \textbf{quanto maior o arquivo, mais barata fica a troca} --- a 
 memória do fluxo cresce justamente onde o seu custo de tempo encolhe.
 
 \begin{table}[H]
-  \caption{Tempo total por modelo de execução ($N$ crescente, multifonte, estratégia otimizada), em segundos. Campanha sem instrumentação de memória.}
+  \caption{Tempo total por modelo de execução ($N$ crescente, multifonte, estratégia em lote), em segundos. Campanha sem instrumentação de memória.}
   \label{tab:tempo-execucao}
   \centering
   \begin{tabular}{r r r r}
@@ -426,14 +460,14 @@ memória do fluxo cresce justamente onde o seu custo de tempo encolhe.
   {\footnotesize Fonte: Elaborado pelo autor (2026), a partir de \texttt{benchmarks/timings/}.}
 \end{figure}
 
-\subsection{Uma Observação sobre o Pico de Memória da Estratégia Otimizada}
+\subsection{Uma Observação sobre o Pico de Memória da Estratégia em Lote}
 \label{sec:res-tradeoff}
 
 Um ponto exige cuidado na leitura das medidas de memória. No mesmo ponto de $10\,000$ linhas
 e modo de materialização, a estratégia \textbf{ingênua} exibe um pico \textbf{menor} que a
-otimizada --- $14{,}4$~MB contra $95{,}4$~MB no modo multifonte
+estratégia em lote --- $14{,}4$~MB contra $95{,}4$~MB no modo multifonte
 (Tabela~\ref{tab:tradeoff-memoria}). O número não é um erro, e reproduz-se entre campanhas.
-A explicação está na natureza da otimização: para gravar em lote, o caminho otimizado
+A explicação está na natureza da estratégia em lote: para gravar em lotes, ela
 \textbf{acumula registros em memória} antes de despachá-los. No Neo4j, em particular, a
 gravação de relacionamentos por \texttt{UNWIND} monta a lista completa de arestas de uma
 entidade em memória antes de submetê-la, ao passo que a via ingênua percorre as arestas uma
@@ -447,7 +481,7 @@ memória maior.
   \centering
   \begin{tabular}{l r r}
     \toprule
-    \textbf{Modo} & \textbf{Ingênua} & \textbf{Otimizada} \\
+    \textbf{Modo} & \textbf{Ingênua} & \textbf{Em lote} \\
     \midrule
     multifonte & 14{,}4 & 95{,}4 \\
     combinado  & 21{,}3 & \num{101.6} \\
@@ -459,8 +493,8 @@ memória maior.
 
 Vale notar que esse acúmulo é justamente o que o \textbf{modo de fluxo} limita: ao processar
 o arquivo em blocos, ele mantém em memória apenas um bloco e os lotes ainda não descarregados
---- e é por isso que o fluxo, mesmo empregando sempre a via otimizada, atinge picos muito
-menores que a materialização otimizada (Tabela~\ref{tab:memoria}). Os dois eixos, portanto,
+--- e é por isso que o fluxo, mesmo gravando em lote, atinge picos muito menores que a
+materialização (Tabela~\ref{tab:memoria}). Os dois eixos, portanto,
 atuam sobre a memória de formas complementares.
 
 \section{Análise e Discussão}
@@ -476,13 +510,13 @@ com verificação de unicidade, ficam atrás. Trata-se de uma manifestação, na
 importação, das mesmas diferenças de paradigma que a literatura observa na etapa de consulta
 \cite{muniswamaiah2023comparison, vanlanduyt2023comparative}.
 
-Os dois modos de importação são equivalentes em custo (QP2), o que confirma, do ponto de
-vista de desempenho, a equivalência de resultados entre eles já assegurada por teste
-(seção~\ref{sec:modelos-execucao}). Quanto à escalabilidade (QP3), o tempo cresce de forma
+Os dois modos de importação empatam no tempo total, nos dois modelos de execução (QP2); o
+multifonte lê duas vezes mais rápido e ocupa de $5$ a $6\%$ menos memória, por ler
+arquivos menores, sem células vazias, que não precisam ser separados por tipo de evento, e tem vantagens de organização. Quanto à escalabilidade (QP3), o tempo cresce de forma
 aproximadamente proporcional ao volume, governado pela fase de escrita, enquanto a memória
 segue o modelo de execução escolhido.
 
-O maior ganho de engenharia está nos dois eixos de desempenho. A estratégia otimizada
+O maior ganho de engenharia está nos dois eixos de desempenho. A estratégia em lote
 acelera a importação em cerca de $9\times$ (QP4), pela vetorização da conversão de tipos e
 pela escrita em lote. O modo de fluxo reduz o pico de memória em $12{,}5\times$ em cem mil
 linhas (QP5), a um custo de tempo de apenas $+10\%$ nesse ponto --- e o achatamento do pico

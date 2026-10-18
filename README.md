@@ -51,8 +51,7 @@ CLI's output into an integrated console. The command shown is the command that
 runs — you can switch the panel to edit mode and type it yourself.
 
 The integrated console shows the CLI's colours: with `FORCE_COLOR` set, the CLI
-writes ANSI escapes even into a pipe. The GUI does not offer `--strategy` (it
-always runs `optimized`) nor `--benchmark`; both remain available in the CLI.
+writes ANSI escapes even into a pipe. The GUI does not offer `--benchmark`, which remains available in the CLI.
 Before a run, the GUI validates both configurations and the CSV headers with
 the CLI's own code. After a run, **Salvar log…** copies the session log, and
 clicking the log path in the status bar opens its folder.
@@ -183,12 +182,10 @@ The databases stay up for the whole matrix, so the first measurements pay the
 warm-up (JVM JIT on Cassandra/Neo4j, DB buffers, OS page cache); sweeping spreads
 that cost over every cell's first pass, and the median across passes drops it.
 
-The matrix defaults to the `optimized` strategy (vectorized casting and batched
-writes). Pass `--strategies naive,optimized` to measure both baselines in a single
-run for a before/after comparison; `naive` reproduces the original row-at-a-time
-behavior. Cassandra, Redis and Neo4j are slow only under `naive` — `optimized`
-batches their writes, so the earlier per-row round-trip cost disappears. The same
-switch exists on a single import: `python -m polyglotimportcsv --strategy naive`.
+The tool has a single write strategy: vectorized type casting and batched
+writes. The row-at-a-time baseline the report compares it against (`naive`) was
+removed in 2.0.0; `benchmarks/naive/` and `benchmarks/timings-naive/` were
+measured before the removal; version 1.1.0 is the last release that has it.
 
 Cassandra absorbs those batched writes at concurrency 64, and a node busy flushing
 or compacting can stop answering for longer than the driver's 10s default request
@@ -217,7 +214,7 @@ It runs the same cell with and without tracing, interleaving the two arms pass b
 pass so both share the warm-up, and prints the overhead per execution path.
 
 Results land in `benchmarks/`: a `benchmark_run_<timestamp>.json` plus an
-append-only `benchmark_results.csv` (`size,mode,strategy,execution,backend,entity,
+append-only `benchmark_results.csv` (`size,mode,execution,backend,entity,
 phase,rows,median_seconds,rows_per_second,peak_memory_mb`) for the report graphs.
 The `filter` phase is left out of both, and of the end-of-run terminal table
 (`metrics.EXCLUDED_PHASES`).
@@ -276,9 +273,7 @@ para um console integrado. O comando exibido é o comando executado — o painel
 pode ser colocado em modo de edição para digitá-lo à mão.
 
 O console integrado mostra as cores da CLI: com `FORCE_COLOR` definido, a CLI
-escreve sequências ANSI mesmo dentro de um *pipe*. A GUI não oferece
-`--strategy` (executa sempre em `optimized`) nem `--benchmark`; ambos continuam
-disponíveis na CLI. Antes de executar, a GUI valida as duas configurações e os
+escreve sequências ANSI mesmo dentro de um *pipe*. A GUI não oferece `--benchmark`, que continua disponível na CLI. Antes de executar, a GUI valida as duas configurações e os
 cabeçalhos dos CSVs com o próprio código da CLI. Depois de executar,
 **Salvar log…** copia o log da sessão, e clicar no caminho do log na barra de
 status abre a pasta correspondente.
@@ -410,18 +405,17 @@ medições pagam o aquecimento (JIT da JVM em Cassandra/Neo4j, buffers dos banco
 page cache do SO); a varredura distribui esse custo pela primeira passada de cada
 célula, e a mediana entre as passadas o descarta.
 
-A matriz usa por padrão a estratégia `optimized` (casting vetorizado e escritas em
-lote). Use `--strategies naive,optimized` para medir as duas linhas de base numa só
-execução (comparação antes/depois); `naive` reproduz o comportamento original linha
-a linha. O Cassandra recebe essas escritas em lote com concorrência 64, e um nó
-ocupado com *flush* ou *compaction* pode parar de responder por mais que os 10s de
-timeout padrão do driver. A sessão usa 30s (`cassandra.connection.request_timeout`
-no `dbms_config.json` sobrescreve), e as linhas que um lote reporta como falhas são
+A ferramenta tem uma única estratégia de escrita: conversão de tipos vetorizada
+e escritas em lote. A linha de base linha a linha com que o relatório a compara
+(`naive`) foi removida na versão 2.0.0; `benchmarks/naive/` e
+`benchmarks/timings-naive/` foram medidos antes da remoção; a versão 1.1.0 é a última que a tem.
+
+O Cassandra recebe as escritas em lote com concorrência 64, e um nó ocupado com
+*flush* ou *compaction* pode parar de responder por mais que os 10s de timeout
+padrão do driver. A sessão usa 30s (`cassandra.connection.request_timeout` no
+`dbms_config.json` sobrescreve), e as linhas que um lote reporta como falhas são
 reenviadas com backoff — reenviar é seguro porque um `INSERT` no Cassandra é um
 upsert pela chave primária. Sem isso, uma resposta lenta derruba a matriz inteira.
-Cassandra, Redis e Neo4j só são lentos sob `naive` — `optimized` agrupa
-suas escritas, eliminando o custo de uma ida ao banco por linha. A mesma opção vale
-para uma importação avulsa: `python -m polyglotimportcsv --strategy naive`.
 
 A matriz também tem um eixo `execution` (padrão `stream`). Use
 `--executions materialize,stream` para comparar os dois caminhos de escrita:
@@ -445,7 +439,7 @@ cada passada (para que ambos dividam o aquecimento), e imprime o custo por camin
 de escrita.
 
 Os resultados vão para `benchmarks/`: um `benchmark_run_<timestamp>.json` e um
-`benchmark_results.csv` append-only (`size,mode,strategy,execution,backend,entity,
+`benchmark_results.csv` append-only (`size,mode,execution,backend,entity,
 phase,rows,median_seconds,rows_per_second,peak_memory_mb`) para os gráficos do relatório.
 A fase `filter` fica de fora dos dois e também da tabela final no terminal
 (`metrics.EXCLUDED_PHASES`).

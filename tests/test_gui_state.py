@@ -25,6 +25,9 @@ def test_strategy_and_benchmark_are_not_form_state():
     options = RunOptions()
     assert not hasattr(options, "strategy")
     assert not hasattr(options, "benchmark")
+    from polyglotimportcsv.gui import state
+    assert not hasattr(state, "STRATEGY")
+    assert "STRATEGY" not in state.__all__
 
 
 @pytest.mark.parametrize("size", [0, -1, 1000001])

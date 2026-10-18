@@ -159,7 +159,6 @@ def run_import(
     sample_size: int = DEFAULT_SAMPLE_SIZE,
     collector: Optional[metrics.MetricsCollector] = None,
     benchmark: bool = False,
-    strategy: str = "optimized",
     execution: str = "stream",
     sink_factories: Optional[Dict[str, SinkFactory]] = None,
 ) -> List[str]:
@@ -206,7 +205,6 @@ def run_import(
                 source_overrides=source_overrides,
                 sink_factories=sink_factories or default_sink_factories(),
                 collector=collector,
-                strategy=strategy,
                 show_data=show_data,
                 sample_size=sample_size,
             )
@@ -222,7 +220,6 @@ def run_import(
             sample_size=sample_size,
             collector=collector,
             benchmark=benchmark,
-            strategy=strategy,
         )
     finally:
         metrics.set_current(prev_collector)
@@ -237,7 +234,6 @@ def _run_stream(
     source_overrides: Optional[Dict[str, str]],
     sink_factories: Dict[str, SinkFactory],
     collector: metrics.MetricsCollector,
-    strategy: str,
     show_data: Optional[bool],
     sample_size: int,
 ) -> List[str]:
@@ -247,10 +243,6 @@ def _run_stream(
     backends_in_cfg = [b for b in BACKENDS if b in config]
     note(f"{len(backends_in_cfg)} backend(s) configured: {', '.join(backends_in_cfg)}")
     _require_dbms(config_path, dbms_config_path, config, only)
-
-    if strategy == "naive":
-        note("streaming always uses the optimized (vectorized/batched) path; "
-             "--strategy naive is ignored under --execution stream")
 
     if create_schema:
         note("DDL will be created lazily per partition (--create-schema)")
@@ -298,7 +290,6 @@ def _run(
     sample_size: int,
     collector: metrics.MetricsCollector,
     benchmark: bool,
-    strategy: str,
 ) -> List[str]:
     mode = "dry-run" if dry_run else "import"
     step("Load config", str(config_path))
@@ -354,15 +345,14 @@ def _run(
         section(f"Backend · {backend}")
         bcfg = config[backend]
         with collector.timed(backend, "*", "map") as t:
-            bound = resolve_backend_entities(bcfg, sources, cast_cache, strategy=strategy)
+            bound = resolve_backend_entities(bcfg, sources, cast_cache)
             t.rows = sum(len(be.df) for be in bound.values())
         validate_backend_entities(backend, bcfg, bound)
         for ename, be in bound.items():
             if len(be.df) == 0:
                 logger.warning("entity %s/%s bound to 0 row(s)", backend, ename)
             dump_entity_frame(backend, ename, be.df, force=show_data, sample_size=sample_size)
-        backend_lines = fn(bcfg, bound, dry_run=dry_run,
-                           create_schema=create_schema, strategy=strategy)
+        backend_lines = fn(bcfg, bound, dry_run=dry_run, create_schema=create_schema)
         log_lines.extend(backend_lines)
         for line in backend_lines:
             _print_backend_line(line)

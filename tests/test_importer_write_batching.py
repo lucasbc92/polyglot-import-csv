@@ -65,24 +65,12 @@ def test_redis_optimized_uses_pipeline_no_per_row_set():
     fake = _FakeRedis()
     run_redis_import(
         {"entities": {}}, {"cart": _redis_entity(2500)},
-        dry_run=False, create_schema=False, strategy="optimized",
+        dry_run=False, create_schema=False,
         client_factory=lambda conn: fake,
     )
     assert fake.set_calls == 0
     assert fake.pipeline_execs == 3          # ceil(2500/1000)
     assert fake.piped_sets == 2500
-
-
-def test_redis_naive_sets_one_per_row():
-    from polyglotimportcsv.importers.redis_importer import run_redis_import
-    fake = _FakeRedis()
-    run_redis_import(
-        {"entities": {}}, {"cart": _redis_entity(2500)},
-        dry_run=False, create_schema=False, strategy="naive",
-        client_factory=lambda conn: fake,
-    )
-    assert fake.set_calls == 2500
-    assert fake.pipeline_execs == 0
 
 
 # ---------- Cassandra ----------
@@ -134,25 +122,13 @@ def test_cassandra_optimized_uses_concurrent_not_per_row(monkeypatch):
     session = _FakeSession()
     ci.run_cassandra_import(
         {"connection": {}}, {"user_activity_log": _cass_entity(2500)},
-        dry_run=False, create_schema=False, strategy="optimized",
+        dry_run=False, create_schema=False,
         session_factory=lambda conn: (_FakeCluster(session), session),
     )
     assert calls["concurrent"] == 1
     assert calls["rows"] == 2500
     # No per-row execute for INSERTs (execute() only used for DDL, skipped here)
     assert all("INSERT" not in str(s) for s, _ in session.executes)
-
-
-def test_cassandra_naive_executes_one_per_row():
-    import polyglotimportcsv.importers.cassandra_importer as ci
-    session = _FakeSession()
-    ci.run_cassandra_import(
-        {"connection": {}}, {"user_activity_log": _cass_entity(2500)},
-        dry_run=False, create_schema=False, strategy="naive",
-        session_factory=lambda conn: (_FakeCluster(session), session),
-    )
-    insert_execs = [e for e in session.executes if e[1] is not None]
-    assert len(insert_execs) == 2500
 
 
 def test_cassandra_optimized_raises_when_driver_unavailable(monkeypatch):
@@ -167,7 +143,7 @@ def test_cassandra_optimized_raises_when_driver_unavailable(monkeypatch):
     try:
         ci.run_cassandra_import(
             {"connection": {}}, {"user_activity_log": _cass_entity(5)},
-            dry_run=False, create_schema=False, strategy="optimized",
+            dry_run=False, create_schema=False,
             session_factory=lambda conn: (_FakeCluster(session), session),
         )
         assert False, "expected ImportExecutionError"
@@ -229,7 +205,7 @@ def test_neo4j_optimized_batches_nodes_with_unwind():
     rec = {"run": [], "tx_run": []}
     ni.run_neo4j_import(
         {"connection": {}}, _neo_entities(2500),
-        dry_run=False, create_schema=True, strategy="optimized",
+        dry_run=False, create_schema=True,
         driver_factory=lambda conn: _FakeDriver(rec),
     )
     # Nodes written in UNWIND batches inside execute_write, not one run() per row.
@@ -239,18 +215,6 @@ def test_neo4j_optimized_batches_nodes_with_unwind():
     assert len(node_batches) == 3          # ceil(2500/1000)
     # A uniqueness constraint was created.
     assert any("CONSTRAINT" in q and "UNIQUE" in q for q, _ in rec["run"])
-
-
-def test_neo4j_naive_runs_one_merge_per_row():
-    import polyglotimportcsv.importers.neo4j_importer as ni
-    rec = {"run": [], "tx_run": []}
-    ni.run_neo4j_import(
-        {"connection": {}}, _neo_entities(2500),
-        dry_run=False, create_schema=False, strategy="naive",
-        driver_factory=lambda conn: _FakeDriver(rec),
-    )
-    merges = [q for q, _ in rec["run"] if "MERGE (n" in q]
-    assert len(merges) == 2500
 
 
 def test_neo4j_optimized_dedupes_nodes_first_wins_and_warns(caplog):
@@ -265,7 +229,7 @@ def test_neo4j_optimized_dedupes_nodes_first_wins_and_warns(caplog):
     with caplog.at_level(logging.WARNING, logger="polyglotimportcsv.importers.neo4j_importer"):
         ni.run_neo4j_import(
             {"connection": {}}, {"User": user},
-            dry_run=False, create_schema=False, strategy="optimized",
+            dry_run=False, create_schema=False,
             driver_factory=lambda conn: _FakeDriver(rec),
         )
     node_batches = [p for q, p in rec["tx_run"] if "UNWIND" in q and "MERGE (n" in q]
@@ -325,7 +289,7 @@ def test_neo4j_optimized_batches_relationships_with_unwind():
     entities, bcfg = _neo_rel_fixture(1500, bad_row=True)
     ni.run_neo4j_import(
         bcfg, entities,
-        dry_run=False, create_schema=False, strategy="optimized",
+        dry_run=False, create_schema=False,
         driver_factory=lambda conn: _FakeDriver(rec),
     )
     rel_batches = [
@@ -344,19 +308,20 @@ def test_neo4j_optimized_batches_relationships_with_unwind():
     assert "rating" in sample["rprops"]
 
 
-def test_neo4j_naive_relationship_skips_null_ids_and_runs_one_merge_per_row():
-    import polyglotimportcsv.importers.neo4j_importer as ni
-    rec = {"run": [], "tx_run": []}
-    entities, bcfg = _neo_rel_fixture(50, bad_row=True)
-    ni.run_neo4j_import(
-        bcfg, entities,
-        dry_run=False, create_schema=False, strategy="naive",
-        driver_factory=lambda conn: _FakeDriver(rec),
+def test_importers_have_no_strategy_and_no_row_at_a_time_writers():
+    import inspect
+    from polyglotimportcsv.importers import (
+        cassandra_importer, mongodb_importer, neo4j_importer,
+        postgres_importer, redis_importer,
     )
-    rel_runs = [(q, p) for q, p in rec["run"] if "MERGE (a)" in q]
-    assert len(rel_runs) == 49                          # one row skipped (null product_id)
-    q, params = rel_runs[0]
-    assert "$a_id" in q and "$b_id" in q and "]->(b)" in q
-    assert {"a_id", "b_id", "rprops"} <= set(params.keys())
-    assert any(k.startswith("mk_") for k in params.keys())
-    assert "order_number" not in params["rprops"]        # merge key excluded from rprops
+    fns = (
+        postgres_importer.run_postgres_import, mongodb_importer.run_mongodb_import,
+        redis_importer.run_redis_import, cassandra_importer.run_cassandra_import,
+        neo4j_importer.run_neo4j_import,
+    )
+    for fn in fns:
+        assert "strategy" not in inspect.signature(fn).parameters, fn.__name__
+    assert not hasattr(redis_importer, "_write_naive")
+    assert not hasattr(cassandra_importer, "_write_naive")
+    assert not hasattr(neo4j_importer, "_merge_nodes_naive")
+    assert not hasattr(neo4j_importer, "_merge_rels_naive")

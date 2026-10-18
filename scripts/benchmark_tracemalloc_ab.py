@@ -120,8 +120,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help="Passes per arm; the median is reported (default: 3).")
     parser.add_argument("--only", default="",
                         help=f"Comma-separated backends (default: all). Choices: {', '.join(_ALL_BACKENDS)}.")
-    parser.add_argument("--strategy", default="optimized",
-                        help="Strategy: naive or optimized (default: optimized).")
     parser.add_argument("--seed", type=int, default=42, help="Generator seed (default: 42).")
     parser.add_argument("--dbms-config", type=Path, default=Path("data/ecommerce/dbms_config.json"))
     parser.add_argument("--config-dir", type=Path, default=Path("data/ecommerce"))
@@ -137,7 +135,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     def one_pass(trace_memory: bool) -> List[Dict[str, Any]]:
         return run_matrix(
             sizes=[args.size], modes=[args.mode], repetitions=1,
-            strategies=[args.strategy], executions=executions,
+            executions=executions,
             dbms_config_path=args.dbms_config, config_dir=args.config_dir,
             data_dir=args.data_dir, seed=args.seed, only=only,
             cleaners=CLEANERS, importer=run_import, load_cfg=load_config,
@@ -156,7 +154,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     rows = summarize(traced, untraced)
     print_rich(
-        Text(f"cell: size={args.size} mode={args.mode} strategy={args.strategy}, "
+        Text(f"cell: size={args.size} mode={args.mode}, "
              f"{args.repetitions} pass(es) per arm", style="dim"),
         level=_ALWAYS,
     )
