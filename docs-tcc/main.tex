@@ -413,10 +413,10 @@
   (chave-valor), MongoDB (documento), Apache Cassandra (colunar) e Neo4j (grafo). A
   importação admite dois modos de entrada --- um arquivo CSV por entidade ou um único CSV
   combinado --- e realiza a conversão nativa aos tipos de cada SGBD, com observabilidade e
-  métricas por fase de execução. São oferecidas duas estratégias de desempenho: a escrita
-  em lote otimizada e um modelo de execução em fluxo, de memória limitada, capaz de importar
+  métricas por fase de execução. O desempenho apoia-se em dois recursos: a escrita em lote,
+  com conversão vetorizada de tipos, e um modelo de execução em fluxo, de memória limitada, capaz de importar
   arquivos maiores que a memória disponível. Uma avaliação empírica com dados reais
-  quantificou esses ganhos: a escrita otimizada acelerou a importação em cerca de nove vezes
+  quantificou esses ganhos: a escrita em lote acelerou a importação em cerca de nove vezes em relação à gravação linha a linha
   e o modo de fluxo reduziu o pico de memória em mais de doze vezes no maior volume medido,
   mantendo-o constante em relação ao tamanho do arquivo. Não foram identificadas ferramentas
   equivalentes que realizem, a partir de arquivos CSV e de regras declarativas, a importação
@@ -449,10 +449,10 @@
   (key-value), MongoDB (document), Apache Cassandra (columnar), and Neo4j (graph). The
   import supports two input modes --- one CSV file per entity or a single combined CSV ---
   and performs native type casting to each DBMS, with observability and per-phase execution
-  metrics. Two performance strategies are offered: optimized batch writing and a streaming
+  metrics. Performance rests on two features: batch writing, with vectorized type casting, and a streaming
   execution model, with bounded memory, able to import files larger than available memory.
-  An empirical evaluation with real data quantified these gains: optimized writing sped up
-  the import by roughly nine times, and the streaming mode reduced peak memory by more than
+  An empirical evaluation with real data quantified these gains: batch writing sped up
+  the import by roughly nine times over row-by-row writing, and the streaming mode reduced peak memory by more than
   twelve times at the largest measured volume, keeping it constant with respect to file
   size. No equivalent tools were identified that perform, from CSV files and declarative
   rules, the simultaneous import to multiple data paradigms, which highlights the
