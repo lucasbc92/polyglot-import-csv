@@ -13,12 +13,12 @@ e conexão e validado por JSON Schema antes de qualquer escrita, com dois modos 
 um arquivo por entidade (multifonte) e um único CSV combinado; (ii) o mapeamento declarativo
 de colunas com conversão nativa aos tipos de cada SGBD; (iii) uma camada de observabilidade e
 um subsistema de métricas que instrumentam cada fase da importação; (iv) dois eixos de
-desempenho --- a estratégia de escrita otimizada, com vetorização e gravação em lote, e o
+desempenho --- a estratégia de escrita em lote, com conversão vetorizada e gravação em lotes, e o
 modelo de execução em fluxo, de memória limitada; e (v) uma avaliação empírica com dados reais
 que quantifica o custo de importar para os cinco paradigmas e o ganho de cada eixo.
 
 A avaliação (Capítulo~\ref{cap:avaliacao}) confirmou os objetivos traçados. A estratégia
-otimizada acelerou a importação em cerca de nove vezes sobre a linha de base ingênua, e o modo
+em lote acelerou a importação em cerca de nove vezes sobre a linha de base ingênua, e o modo
 de execução em fluxo reduziu o pico de memória em mais de doze vezes no maior volume medido,
 mantendo-o constante em relação ao tamanho do arquivo --- o que habilita a importação de
 arquivos maiores que a memória disponível. A equivalência dos dados gravados entre os dois

@@ -17,7 +17,9 @@ from typing import Any, Dict, List, Optional, Sequence
 # scripts/ is on sys.path[0] when run as `python scripts/run_benchmarks.py`.
 from inspect_persisted_data import CLEANERS
 
-from polyglotimportcsv.benchmark_results import median_results, write_consolidated
+from polyglotimportcsv.benchmark_results import (
+    check_consolidated_csv, median_results, write_consolidated,
+)
 from polyglotimportcsv.benchmark_runner import run_matrix
 from polyglotimportcsv.config_parser import load_config
 from polyglotimportcsv.metrics import environment_metadata
@@ -144,6 +146,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                  "trace_memory": args.trace_memory,
                  "repetitions": args.repetitions,
                  "executions": executions})
+
+    # The results CSV is only appended after the whole matrix ran: refuse an
+    # old one now, not hours from now.
+    try:
+        check_consolidated_csv(args.out)
+    except ValueError as e:
+        logging.getLogger(__name__).error(
+            "%s Or pass --out <another folder> to write the new results there.", e
+        )
+        return 2
 
     completed: List[Dict[str, Any]] = []
     if args.resume:
