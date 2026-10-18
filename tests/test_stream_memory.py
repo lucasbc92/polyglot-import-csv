@@ -178,7 +178,7 @@ def test_stream_matches_materialize_rows():
 
     # --- Materialize path: reproduce what run_import would deliver, DB-free ---
     sources = load_sources(config["sources"], base_dir, overrides)
-    bound = resolve_backend_entities(config[dbms], sources, {}, strategy="optimized")
+    bound = resolve_backend_entities(config[dbms], sources, {})
     mat_rows: Dict[str, pd.DataFrame] = {}
     for ename, be in bound.items():
         filters = be.cfg.get("filters") or []
@@ -246,7 +246,7 @@ def test_stream_union_matches_materialize_rows():
 
     # --- Materialize path ---
     sources = load_sources(config["sources"], base_dir, overrides)
-    bound = resolve_backend_entities(config[dbms], sources, {}, strategy="optimized")
+    bound = resolve_backend_entities(config[dbms], sources, {})
     mat_rows = {}
     for ename, be in bound.items():
         filters = be.cfg.get("filters") or []
@@ -352,7 +352,7 @@ def test_stream_union_and_rel_purchased_matches_materialize():
 
     # --- Materialize edge rows for PURCHASED ---
     sources = load_sources(config["sources"], base_dir, overrides)
-    bound = resolve_backend_entities(config[dbms], sources, {}, strategy="optimized")
+    bound = resolve_backend_entities(config[dbms], sources, {})
     rspec = config[dbms]["relationships"]["PURCHASED"]
     from_be = bound[rspec["from"]]
     f1 = [x for x in (from_be.cfg.get("filters") or []) if x.get("operator") != "each"]

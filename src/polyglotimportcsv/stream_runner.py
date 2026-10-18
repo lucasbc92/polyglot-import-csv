@@ -148,7 +148,7 @@ def _process_chunk(
     filters = binding.cfg.get("filters") or []
     non_each = [f for f in filters if f.get("operator") != "each"]
     filtered = apply_filters(working, non_each, binding.kinds)
-    casted = cast_frame(filtered, binding.kinds, strategy="optimized")
+    casted = cast_frame(filtered, binding.kinds)
     return casted, filters
 
 

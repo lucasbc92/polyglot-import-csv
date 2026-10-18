@@ -135,7 +135,7 @@ def test_manual_only_columns_returns_copy_not_original(sources):
     assert ecfg["columns"]["product_id"] == {"is_key": True}
 
 
-def test_resolve_uses_strategy_for_casting():
+def test_resolve_reuses_the_cached_cast_for_the_same_binding():
     import pandas as pd
     from polyglotimportcsv.sources import SOURCE_COLUMN, SourceData
     from polyglotimportcsv.mapping_resolver import resolve_backend_entities
@@ -146,7 +146,8 @@ def test_resolve_uses_strategy_for_casting():
                     file_header=["n"])
     bcfg = {"entities": {"E": {"source": "s", "columns": {"n": {}}}}}
     cache: dict = {}
-    resolve_backend_entities(bcfg, {"s": sd}, cache, strategy="naive")
-    resolve_backend_entities(bcfg, {"s": sd}, cache, strategy="optimized")
-    # Distinct strategies must not share a cached frame.
-    assert len({k for k in cache}) == 2
+    first = resolve_backend_entities(bcfg, {"s": sd}, cache)
+    second = resolve_backend_entities(bcfg, {"s": sd}, cache)
+    assert len(cache) == 1
+    assert first["E"].df is second["E"].df
+    assert list(first["E"].df["n"]) == [1, 2]

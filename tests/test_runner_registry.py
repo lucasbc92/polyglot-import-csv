@@ -14,7 +14,7 @@ CFG = ROOT / "data" / "ecommerce" / "import_config.json"
 def test_run_import_with_stub_registry():
     calls: list[str] = []
 
-    def stub_postgres(cfg, entities, *, dry_run, create_schema, strategy="optimized"):
+    def stub_postgres(cfg, entities, *, dry_run, create_schema):
         calls.append("postgres")
         assert isinstance(entities, dict) and entities, "expected bound entities"
         return ["[postgres] stub"]
@@ -92,7 +92,7 @@ def test_run_import_materialize_does_not_stream(monkeypatch):
 
     calls: list[str] = []
 
-    def stub(cfg, entities, *, dry_run, create_schema, strategy="optimized"):
+    def stub(cfg, entities, *, dry_run, create_schema):
         calls.append("postgres")
         return ["[postgres] stub"]
 
@@ -111,7 +111,7 @@ def test_run_import_dry_run_stays_materialize_even_if_stream(monkeypatch):
 
     calls: list[str] = []
 
-    def stub(cfg, entities, *, dry_run, create_schema, strategy="optimized"):
+    def stub(cfg, entities, *, dry_run, create_schema):
         calls.append("postgres")
         return ["[postgres] stub"]
 
@@ -133,7 +133,7 @@ def test_run_import_dumps_bound_entities(monkeypatch):
 
     monkeypatch.setattr("polyglotimportcsv.runner.dump_entity_frame", fake_dump)
 
-    def stub(cfg, entities, *, dry_run, create_schema, strategy="optimized"):
+    def stub(cfg, entities, *, dry_run, create_schema):
         return ["[postgres] stub"]
 
     run_import(CFG, dry_run=True, only=["postgres"], importers={"postgres": stub})

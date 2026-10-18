@@ -3,12 +3,14 @@
 import csv
 import json
 
+import pytest
+
 from polyglotimportcsv import benchmark_results as br
 
 
 def _run(size, mode, rep, seconds, peak=12.5):
     return {
-        "size": size, "mode": mode, "strategy": "optimized",
+        "size": size, "mode": mode,
         "execution": "materialize", "peak_memory_mb": peak, "repetition": rep,
         "records": [{
             "backend": "postgres", "entity": "products", "phase": "write",
@@ -116,7 +118,7 @@ def test_group_order_preserved():
     # products, write before read. median_results must preserve first-seen
     # group order (via the `order` list), not fall back to dict/set iteration.
     run = {
-        "size": 1000, "mode": "multi", "strategy": "optimized",
+        "size": 1000, "mode": "multi",
         "execution": "materialize", "peak_memory_mb": 8.0, "repetition": 0,
         "records": [
             {"backend": "redis", "entity": "orders", "phase": "write",
@@ -134,3 +136,20 @@ def test_group_order_preserved():
         ("postgres", "products", "write"),
         ("redis", "customers", "read"),
     ]
+
+
+def test_result_fields_have_no_strategy_column():
+    assert "strategy" not in br._RESULT_FIELDS
+
+
+def test_appending_to_a_csv_with_the_old_header_is_refused_and_leaves_it_intact(tmp_path):
+    old = tmp_path / "benchmark_results.csv"
+    content = ("timestamp,size,mode,strategy,execution,backend,entity,phase,rows,"
+               "median_seconds,rows_per_second,peak_memory_mb\n"
+               "2026-08-01,1000,multi,optimized,stream,(stream),*,write,10,1.0,10.0,5.0\n")
+    old.write_text(content, encoding="utf-8")
+    results = br.median_results([_run(1000, "multi", 0, 0.2)])
+
+    with pytest.raises(ValueError, match="header mismatch"):
+        br.write_consolidated(results, {"timestamp": "t"}, out_dir=tmp_path)
+    assert old.read_text(encoding="utf-8") == content

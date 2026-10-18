@@ -2,16 +2,15 @@
 
 Every option the form can set is written out in full, including the ones left
 at the CLI's own default. Emitting only the differences made the command
-shorter but made three controls look broken: selecting "optimized", "stream" or
-"Criar esquema" — each already the default — changed nothing on screen, so the
-click seemed to have been ignored. A visible, complete command is worth more
-here than a short one, because the panel doubles as documentation of what will
+shorter but made two controls look broken: selecting "stream" or "Criar
+esquema" — each already the default — changed nothing on screen, so the click
+seemed to have been ignored. A visible, complete command is worth more here
+than a short one, because the panel doubles as documentation of what will
 actually run.
 
 ``--dry-run`` is a switch with no negative form in the CLI, so its absence is
-its default. ``--strategy optimized`` is written even though the form offers
-no choice: it is what runs, and the command shows what runs. The data display
-is always spelled out: ``--sample N``, ``--show-data`` or ``--no-data``.
+its default. The data display is always spelled out: ``--sample N``,
+``--show-data`` or ``--no-data``.
 """
 
 from __future__ import annotations
@@ -21,7 +20,7 @@ import re
 import shlex
 from typing import List, Optional, Sequence, Tuple
 
-from polyglotimportcsv.gui.state import STRATEGY, RunOptions
+from polyglotimportcsv.gui.state import RunOptions
 
 PROGRAM = "polyglotimportcsv"
 
@@ -35,7 +34,6 @@ def build_argv(options: RunOptions) -> List[str]:
         argv += ["--dbms-config", str(options.dbms_config_path)]
     if options.only:
         argv += ["--only", ",".join(options.only)]
-    argv += ["--strategy", STRATEGY]
     argv += ["--execution", options.execution]
     if options.dry_run:
         argv.append("--dry-run")

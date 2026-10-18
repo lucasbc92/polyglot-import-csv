@@ -18,7 +18,6 @@ def test_the_default_state_spells_every_option_out():
     """
     assert build_argv(RunOptions(config_path=CFG)) == [
         "--config", str(CFG),
-        "--strategy", "optimized",
         "--execution", "stream",
         "--create-schema",
         "--log-level", "INFO",
@@ -38,10 +37,21 @@ def test_only_is_comma_joined():
     assert argv[argv.index("--only") + 1] == "postgres,redis"
 
 
-def test_strategy_is_always_optimized_and_execution_follows_the_form():
+def test_execution_follows_the_form_and_no_strategy_is_written():
     argv = build_argv(RunOptions(config_path=CFG, execution="materialize"))
-    assert argv[argv.index("--strategy") + 1] == "optimized"
     assert argv[argv.index("--execution") + 1] == "materialize"
+    assert "--strategy" not in argv
+
+
+def test_no_combination_of_options_writes_strategy():
+    for options in (
+        RunOptions(config_path=CFG),
+        RunOptions(config_path=CFG, execution="materialize", dry_run=True),
+        RunOptions(config_path=CFG, show_data=True, only=("redis",)),
+        RunOptions(config_path=CFG, show_data=False, create_schema=False),
+    ):
+        assert "--strategy" not in build_argv(options)
+        assert "--strategy" not in build_check_argv(options)
 
 
 def test_benchmark_is_never_emitted():
@@ -112,7 +122,6 @@ def test_argv_follows_the_order_of_the_spec_table():
         "--config", str(CFG),
         "--dbms-config", str(dbms),
         "--only", "postgres,redis",
-        "--strategy", "optimized",
         "--execution", "materialize",
         "--dry-run",
         "--no-create-schema",
@@ -150,7 +159,6 @@ def test_argv_order_is_stable_when_options_are_at_their_defaults():
     assert argv == [
         "--config", str(CFG),
         "--only", "postgres",
-        "--strategy", "optimized",
         "--execution", "stream",
         "--create-schema",
         "--log-level", "INFO",

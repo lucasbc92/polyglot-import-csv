@@ -17,13 +17,10 @@ from polyglotimportcsv.reporting import DEFAULT_SAMPLE_SIZE
 DBMS_NAMES = ("postgres", "redis", "mongodb", "cassandra", "neo4j")
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
 EXECUTIONS = ("stream", "materialize")
-#: The GUI always writes with the optimized strategy. ``naive`` is kept in the
-#: CLI only, as the baseline the evaluation chapter measures against.
-STRATEGY = "optimized"
 MAX_SAMPLE_SIZE = 1000000
 
 __all__ = [
-    "DBMS_NAMES", "LOG_LEVELS", "EXECUTIONS", "STRATEGY", "DEFAULT_SAMPLE_SIZE",
+    "DBMS_NAMES", "LOG_LEVELS", "EXECUTIONS", "DEFAULT_SAMPLE_SIZE",
     "MAX_SAMPLE_SIZE", "RunOptions", "validate",
 ]
 

@@ -6,8 +6,8 @@ Same matrix engine as ``run_benchmarks.py`` — this only changes the defaults
 wall-clock estimate first, because a 100k run over the row-at-a-time backends
 takes hours rather than minutes.
 
-Three importers still write one row per round trip (cassandra, redis, neo4j),
-so they are excluded by default. Pass ``--only`` to override:
+Cassandra, Redis and Neo4j are the slowest writers at 100k, so they are excluded
+by default. Pass ``--only`` to override:
 
     python scripts/run_benchmarks_100k.py
     python scripts/run_benchmarks_100k.py --only postgres,mongodb,redis
@@ -33,8 +33,8 @@ ROW_AT_A_TIME_BACKENDS = ("cassandra", "redis", "neo4j")
 
 #: Median rows/s measured per phase on the 1k+10k matrix (benchmark.log,
 #: 12 runs). Used only for the pre-run estimate below, never for reporting.
-#: These are NAIVE-path (row-at-a-time) measurements; the optimized strategy
-#: batches writes and understates the effort estimated from these rates.
+#: These were measured with the row-at-a-time writers of version 1.1.0; the
+#: batched writers are faster, so the estimate is an upper bound.
 MEASURED_ROWS_PER_S: Dict[str, Dict[str, float]] = {
     "postgres": {"map": 610, "write": 8101},
     "mongodb": {"map": 7.5e6, "write": 20184},
@@ -103,8 +103,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help="Comma-separated input modes (default: multi,combined).")
     parser.add_argument("--repetitions", type=int, default=3,
                         help="Runs per (size, mode); the median is reported (default: 3).")
-    parser.add_argument("--strategies", default="optimized",
-                        help="Comma-separated strategies forwarded to the matrix (default: optimized).")
     parser.add_argument("--out", default="benchmarks/100k",
                         help="Output directory (default: benchmarks/100k, kept apart "
                              "from the 1k/10k results).")
@@ -117,10 +115,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     runs = len(modes) * args.repetitions
 
     _report_estimate(backends, args.size, runs)
-    slow = [b for b in backends if b in ROW_AT_A_TIME_BACKENDS]
-    if slow and "naive" in [s.strip() for s in args.strategies.split(",")]:
-        print(f"Warning: {', '.join(slow)} write one row per round trip. At 100k this "
-              f"measures the client loop, not the database.\n")
     if args.estimate_only:
         return 0
 
@@ -129,7 +123,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "--modes", ",".join(modes),
         "--repetitions", str(args.repetitions),
         "--only", ",".join(backends),
-        "--strategies", args.strategies,
         "--out", args.out,
         *passthrough,
     ]

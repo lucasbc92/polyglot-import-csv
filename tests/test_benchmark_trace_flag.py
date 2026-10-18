@@ -64,7 +64,7 @@ def test_tracing_mode_is_recorded_in_the_run_metadata(tmp_path, monkeypatch):
 
 def test_resume_refuses_a_checkpoint_measured_with_the_other_tracing_mode(tmp_path):
     meta = {"seed": 42, "sizes": [1000], "modes": ["multi"],
-            "strategies": ["optimized"], "executions": ["stream"],
+            "executions": ["stream"],
             "repetitions": 3, "trace_memory": True}
     path = tmp_path / rb.CHECKPOINT_NAME
     path.write_text(json.dumps({"metadata": meta, "runs": []}), encoding="utf-8")
@@ -76,7 +76,7 @@ def test_resume_refuses_a_checkpoint_measured_with_the_other_tracing_mode(tmp_pa
 
 def test_resume_accepts_a_checkpoint_from_the_same_tracing_mode(tmp_path):
     meta = {"seed": 42, "sizes": [1000], "modes": ["multi"],
-            "strategies": ["optimized"], "executions": ["stream"],
+            "executions": ["stream"],
             "repetitions": 3, "trace_memory": False}
     path = tmp_path / rb.CHECKPOINT_NAME
     path.write_text(json.dumps({"metadata": meta, "runs": []}), encoding="utf-8")
@@ -87,7 +87,7 @@ def test_untraced_runs_consolidate_with_an_empty_peak():
     """An untraced run carries peak_memory_mb=None; consolidation must not choke."""
     from polyglotimportcsv.benchmark_results import median_results
 
-    runs = [{"size": 1000, "mode": "multi", "strategy": "optimized",
+    runs = [{"size": 1000, "mode": "multi",
              "execution": "stream", "repetition": r, "peak_memory_mb": None,
              "records": [{"backend": "postgres", "entity": "p", "phase": "write",
                           "rows": 10, "seconds": 0.1 * (r + 1)}]}

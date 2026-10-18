@@ -1,11 +1,11 @@
-"""The optimized (vectorized) cast_frame must equal the naive (per-cell) one."""
+"""cast_frame (vectorized) must equal cast_value applied cell by cell."""
 
 import logging
 import math
 
 import pandas as pd
 
-from polyglotimportcsv.casting import cast_frame
+from polyglotimportcsv.casting import cast_frame, cast_value
 
 
 def _frame():
@@ -84,23 +84,40 @@ def _values_match(a, b):
     return a == b
 
 
-def test_optimized_equals_naive_cell_by_cell():
+def _cell_by_cell(df, kinds):
+    """Reference: cast_value on every cell of the typed columns, as one list per column."""
+    out = {}
+    for col in df.columns:
+        kind = kinds.get(col, "string")
+        if kind in ("integer", "float", "boolean", "datetime"):
+            out[col] = [cast_value(v, kind) for v in df[col]]
+        else:
+            out[col] = list(df[col])
+    return out
+
+
+def test_vectorized_equals_cast_value_cell_by_cell():
     df = _frame()
-    naive = cast_frame(df, _KINDS, strategy="naive")
-    opt = cast_frame(df, _KINDS, strategy="optimized")
-    assert list(naive.columns) == list(opt.columns)
-    for col in naive.columns:
-        n, o = list(naive[col]), list(opt[col])
-        assert len(n) == len(o), f"column {col!r}: naive={n} optimized={o}"
-        for a, b in zip(n, o):
+    expected = _cell_by_cell(df, _KINDS)
+    got = cast_frame(df, _KINDS)
+    assert list(got.columns) == list(df.columns)
+    for col in df.columns:
+        e, g = expected[col], list(got[col])
+        assert len(e) == len(g), f"column {col!r}: expected={e} got={g}"
+        for a, b in zip(e, g):
             assert type(a) is type(b), f"{col!r}: {type(a)} vs {type(b)}"
-            assert _values_match(a, b), f"column {col!r}: naive={n} optimized={o}"
+            assert _values_match(a, b), f"column {col!r}: expected={e} got={g}"
+
+
+def test_cast_frame_has_no_strategy_parameter():
+    import inspect
+    assert "strategy" not in inspect.signature(cast_frame).parameters
 
 
 def test_optimized_preserves_unparseable_as_text_and_warns(caplog):
     df = _frame()
     with caplog.at_level(logging.WARNING):
-        opt = cast_frame(df, _KINDS, strategy="optimized")
+        opt = cast_frame(df, _KINDS)
     # 'notanumber' stays as the original string, not None
     assert list(opt["bad"]) == [1, None, "notanumber", 4, None, None]
     assert any("could not be cast" in r.message for r in caplog.records)
@@ -115,7 +132,7 @@ def test_optimized_integer_column_boundary_and_overflow_in_same_column():
     a strict magnitude check on the resulting float can't tell them apart,
     so the fix must decide from pd.to_numeric's result dtype instead."""
     df = _frame()
-    opt = cast_frame(df, _KINDS, strategy="optimized")
+    opt = cast_frame(df, _KINDS)
     expected = [
         99999999999999999999999,
         9007199254740993,
@@ -136,6 +153,6 @@ def test_optimized_int64_fast_path_unaffected_by_empties_and_other_overflow():
     with empty cells in the same column and an overflowing column
     elsewhere in the frame."""
     df = _frame()
-    opt = cast_frame(df, _KINDS, strategy="optimized")
+    opt = cast_frame(df, _KINDS)
     expected = [100, 200, 300, 9223372036854775807, -9223372036854775808, None]
     assert list(opt["i_int64"]) == expected

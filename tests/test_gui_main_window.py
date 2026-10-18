@@ -55,11 +55,11 @@ def test_window_opens_showing_the_defaults_it_would_run_with(window):
     """Q1: no configuration chosen yet, but the options still have values.
 
     Before, the command was the bare program name until something was changed,
-    which hid the fact that a run already had a strategy, an execution mode and
-    a log level picked out for it.
+    which hid the fact that a run already had an execution mode and a log level
+    picked out for it.
     """
     assert window.console_panel.command_text() == (
-        "polyglotimportcsv --strategy optimized --execution stream "
+        "polyglotimportcsv --execution stream "
         "--create-schema --log-level INFO --sample 50"
     )
 

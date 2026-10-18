@@ -54,7 +54,6 @@ python -m polyglotimportcsv \
   [--create-schema / --no-create-schema] \
   [--only postgres,redis] \
   [--execution stream|materialize] \
-  [--strategy optimized|naive] \
   [--log-level INFO] \
   [--sample N | --show-data | --no-data] \
   [--benchmark]
@@ -83,10 +82,9 @@ armazenamento necessárias (tabelas no PostgreSQL, \textit{keyspace} e tabelas n
 Cassandra) antes de gravar os dados, sendo a criação ativada por padrão; e
 \texttt{-{}-only} restringe a execução a um subconjunto dos SGBDs configurados (por
 exemplo, \texttt{-{}-only postgres,redis}). O segundo define \textbf{como} importar:
-\texttt{-{}-execution} e \texttt{-{}-strategy} escolhem, respectivamente, o modelo de
-execução (\texttt{stream}, o padrão, ou \texttt{materialize}) e a estratégia de escrita
-(\texttt{optimized}, o padrão, ou \texttt{naive}), descritos na
-Seção~\ref{sec:execucao-estrategias}. O terceiro conjunto governa a
+\texttt{-{}-execution} escolhe o modelo de execução (\texttt{stream}, o padrão, ou
+\texttt{materialize}), descrito na Seção~\ref{sec:modelos-execucao}. O terceiro conjunto
+governa a
 \textbf{observabilidade} da execução --- \texttt{-{}-log-level} ajusta o nível de detalhe
 das mensagens no terminal; \texttt{-{}-sample}~\texttt{N} exibe as primeiras
 \texttt{N} linhas de cada entidade (50, por padrão), enquanto \texttt{-{}-show-data}
@@ -261,6 +259,14 @@ idêntico nos dois modos. Em ambos, cada linha recebe ainda uma \textbf{pseudo-c
 \texttt{\_source} com a sua origem --- o nome da fonte, no modo multifonte, ou o valor da
 coluna de origem, no modo combinado ---, que pode ser mapeada como qualquer outra
 coluna (um exemplo aparece na Listagem~\ref{lst:cassandra-import}).
+
+Nos dois modos, a \textbf{primeira linha de todo CSV é o seu cabeçalho}: é dela que vêm
+os nomes das colunas, aos quais o mapeamento se refere. O cabeçalho é, portanto,
+\textbf{obrigatório}, e a ferramenta não tem como distingui-lo de uma linha de dados. Em
+um CSV sem cabeçalho, a primeira linha de dados seria tomada como nomes de coluna e não
+seria importada; as colunas declaradas no mapeamento não seriam encontradas, e a execução
+terminaria com erro na validação (Seção~\ref{sec:validacao}). No modo combinado, a
+primeira coluna do cabeçalho é a coluna de origem.
 
 \subsubsection{Blocos de SGBD}
 \label{sec:blocos-sgbd}
@@ -1309,33 +1315,35 @@ viabiliza a coleta sistemática de resultados reproduzíveis, explorada no
 Capítulo~\ref{cap:avaliacao}.
 
 
-\section{Modelos de Execução e Estratégias de Escrita}
+\section{Estratégia de Escrita e Modelos de Execução}
 \label{sec:execucao-estrategias}
 
-A forma como a ferramenta \textbf{converte} os valores lidos e os \textbf{grava} no SGBD
-não é única: a importação é parametrizada por dois eixos independentes, expostos na CLI e
-com um valor-padrão eficiente. O primeiro, a \textbf{estratégia de escrita}
-(\texttt{-{}-strategy}), decide se a conversão de tipos e a gravação ocorrem linha a linha
-ou em lote. O segundo, o \textbf{modelo de execução} (\texttt{-{}-execution}), decide se o
+O desempenho de uma importação depende de dois aspectos do projeto da ferramenta. O
+primeiro é a \textbf{estratégia de escrita}: a forma como os valores lidos são
+\textbf{convertidos} aos tipos nativos e \textbf{gravados} no SGBD, linha a linha ou em
+lote. O segundo é o \textbf{modelo de execução} (\texttt{-{}-execution}), que decide se o
 arquivo é carregado por inteiro na memória antes de ser gravado ou se é processado em
-fluxo, com consumo de memória limitado. Ambos os eixos são os fatores controlados na
-avaliação de desempenho do Capítulo~\ref{cap:avaliacao}; esta seção descreve o que cada um
-significa em termos de projeto e implementação.
+fluxo, com consumo de memória limitado. Ambos são os fatores controlados na avaliação de
+desempenho do Capítulo~\ref{cap:avaliacao}; esta seção descreve o que cada um significa em
+termos de projeto e implementação.
 
-\subsection{Estratégias de Escrita}
+\subsection{Evolução da Estratégia de Escrita}
 \label{sec:estrategias-escrita}
 
-A opção \texttt{-{}-strategy} admite dois valores. Na estratégia \textbf{ingênua}
-(\texttt{naive}), a ferramenta percorre os registros \textbf{um a um}: cada célula é
-convertida ao tipo nativo por uma chamada individual e cada linha é gravada no SGBD por um
-comando próprio. Esse caminho é simples e serve de \textbf{referência de comparação}, mas
-paga, por linha, o custo de uma conversão isolada e de uma ida e volta à rede (e, quando
-aplicável, de uma confirmação de transação). Na estratégia \textbf{otimizada}
-(\texttt{optimized}, o padrão), esses dois custos são amortizados. A conversão de tipos
-passa a ser \textbf{vetorizada} --- realizada uma vez por coluna, sobre todo o conjunto de
-valores, em vez de célula a célula ---, produzindo exatamente os mesmos valores e tipos que
-o caminho ingênuo. A gravação passa a ser feita em \textbf{lote}: um único comando carrega
-muitos registros de uma vez, reduzindo drasticamente o número de idas e vindas à rede.
+A primeira implementação da ferramenta, desenvolvida na primeira etapa deste Trabalho de
+Conclusão de Curso (TCC1), adotava a estratégia aqui chamada de \textbf{ingênua}
+(\textit{naive}): os registros eram percorridos \textbf{um a um}, cada célula era
+convertida ao tipo nativo por uma chamada individual e cada linha era gravada no SGBD por
+um comando próprio. Esse caminho é simples, mas paga, por linha, o custo de uma conversão
+isolada e de uma ida e volta à rede (e, quando aplicável, de uma confirmação de transação).
+
+No TCC2, a ferramenta evoluiu para a estratégia \textbf{em lote} (\textit{batch}), que
+amortiza esses dois custos processando os dados em blocos. A conversão de tipos passou a
+ser \textbf{vetorizada}: realizada uma vez por coluna, sobre todo o conjunto de valores, em
+vez de célula a célula, produzindo exatamente os mesmos valores e tipos que a conversão
+individual. A gravação passou a ser feita em \textbf{lotes}: um único comando carrega
+muitos registros de uma vez, reduzindo drasticamente o número de idas e vindas à rede. A
+estratégia em lote é a única da ferramenta; não há opção para escolher outra.
 
 Cada SGBD implementa o lote com o recurso idiomático do seu respectivo controlador
 (\textit{driver}): no \textbf{PostgreSQL}, a inserção em lote de \texttt{execute\_values};
@@ -1343,15 +1351,11 @@ no \textbf{MongoDB}, a inserção múltipla de \texttt{insert\_many}; no \textbf
 execução concorrente de comandos preparados (com grau de concorrência 64 dentro de cada
 lote); no \textbf{Redis}, o enfileiramento de comandos em um \textit{pipeline} despachado
 de uma só vez; e no \textbf{Neo4j}, a cláusula \texttt{UNWIND} aplicada a uma lista de
-registros, seguida de \texttt{MERGE}, sobre um rótulo com restrição de unicidade. Como as
-duas estratégias produzem resultados idênticos, diferindo apenas no custo, a estratégia
-ingênua tem valor sobretudo metodológico: é a \textit{linha de base} contra a qual o ganho
-da via otimizada é medido no Capítulo~\ref{cap:avaliacao}. A estratégia ingênua corresponde
-à implementação original da ferramenta, desenvolvida na primeira etapa deste Trabalho de
-Conclusão de Curso (TCC1), e foi mantida no TCC2 apenas como referência de comparação. Por
-isso, continua acessível pela CLI (\texttt{-{}-strategy naive}), mas não é oferecida na
-interface gráfica (Seção~\ref{sec:interface-grafica}), que emprega sempre a estratégia
-otimizada.
+registros, seguida de \texttt{MERGE}, sobre um rótulo com restrição de unicidade.
+
+A estratégia ingênua permanece descrita neste trabalho porque é a \textit{linha de base}
+contra a qual o ganho da estratégia em lote é medido no Capítulo~\ref{cap:avaliacao}: as
+duas gravam os mesmos dados, e a comparação isola o custo de cada uma.
 
 \subsection{Modelos de Execução: Materialização e \textit{Streaming}}
 \label{sec:modelos-execucao}
@@ -1388,8 +1392,7 @@ O processamento de cada bloco reproduz, em pequena escala, o pipeline de importa
 o primeiro bloco de uma entidade, o orquestrador realiza um \textbf{vínculo tardio}: infere
 os tipos das colunas a partir daquela amostra --- prevalecendo sempre um tipo declarado
 explicitamente na configuração sobre o inferido --- e reutiliza esse vínculo para os blocos
-seguintes. A cada bloco, aplica os filtros de seleção, converte os tipos (sempre pela via
-otimizada, vetorizada) e roteia as linhas para as suas partições de destino, acumulando-as
+seguintes. A cada bloco, aplica os filtros de seleção, converte os tipos (de forma vetorizada) e roteia as linhas para as suas partições de destino, acumulando-as
 em áreas de espera; quando uma partição acumula registros suficientes, um lote é descarregado
 ao adaptador correspondente. Duas particularidades merecem nota: a gravação de
 \textbf{relacionamentos} no Neo4j exige um \textbf{segundo passe} sobre as fontes (as arestas
@@ -1397,20 +1400,19 @@ só podem ser criadas depois que todos os nós de destino existem), realizado ta
 com memória limitada; e o modo de fluxo suporta \textbf{fontes-união}, em que uma mesma
 entidade é alimentada por mais de um CSV.
 
-Por fim, os dois eixos se articulam com o restante da ferramenta. A estratégia ingênua só
-faz sentido no modo de materialização, que reproduz a referência linha a linha; o modo de
-fluxo emprega sempre a via otimizada. A equivalência dos dados gravados entre os dois
+Por fim, a escolha do modelo de execução não altera o resultado. A equivalência dos dados
+gravados entre os dois
 modelos de execução --- mesmas partições, mesmas contagens e mesmas conversões --- é
 assegurada por testes automatizados, de modo que a escolha entre materialização e fluxo é
 uma decisão de \textbf{custo}, não de \textbf{correção}. É justamente esse custo --- tempo de
 importação e, sobretudo, pico de memória --- que a avaliação do Capítulo~\ref{cap:avaliacao}
-quantifica, varrendo sistematicamente os dois eixos aqui descritos.
+quantifica, varrendo sistematicamente os dois aspectos aqui descritos.
 
 \section{Interface Gráfica}
 \label{sec:interface-grafica}
 
 Todas as capacidades descritas até aqui são acionadas por uma interface de linha de comando
-governada por treze opções, que precisam ser digitadas corretamente a cada execução e cujos
+governada por doze opções, que precisam ser digitadas corretamente a cada execução e cujos
 erros de sintaxe só se manifestam depois que o comando é submetido. Para reduzir essa barreira
 --- sem esconder a ferramenta de quem deseja aprendê-la --- foi construída uma
 \textbf{interface gráfica} \textit{desktop} sobre a CLI já existente. O princípio que orienta
@@ -1439,11 +1441,11 @@ criação de esquema, o nível de \textit{log} e a exibição de dados --- uma a
 primeiras linhas de cada entidade, em quantidade escolhida pelo usuário, todos os dados ou
 nenhum. Ao lado de cada opção cujo nome não se explica sozinho há um \textbf{ícone de ajuda}
 que, ao receber o cursor ou um clique, descreve o efeito da opção; o de \texttt{stream}, por
-exemplo, explica que a memória usada não cresce com o tamanho do arquivo. Duas opções da CLI
-não aparecem no formulário: a estratégia de escrita, fixada em \texttt{optimized}, e o
-registro de métricas de \textit{benchmark}. Ambas são instrumentos da avaliação de
-desempenho do Capítulo~\ref{cap:avaliacao}, e não do uso cotidiano da ferramenta, e
-continuam disponíveis na linha de comando. O terceiro cartão contém a tabela de sobrescrita
+exemplo, explica que a memória usada não cresce com o tamanho do arquivo. Uma opção da CLI
+não aparece no formulário: o registro de métricas de \textit{benchmark}, instrumento da
+avaliação de desempenho do Capítulo~\ref{cap:avaliacao}, e não do uso cotidiano da
+ferramenta, que continua disponível na linha de comando. O terceiro cartão contém a tabela
+de sobrescrita
 de caminhos das fontes CSV. Na metade inferior está o console integrado, que exibe o comando
 montado e, abaixo dele, a saída da execução.
 

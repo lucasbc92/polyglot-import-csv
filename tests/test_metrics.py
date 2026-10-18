@@ -16,7 +16,7 @@ CFG = DATA / "import_config.json"
 CFG_COMBINED = DATA / "import_config_combined.json"
 
 
-def _stub(cfg, entities, *, dry_run, create_schema, strategy="optimized"):
+def _stub(cfg, entities, *, dry_run, create_schema):
     return ["[postgres] stub"]
 
 

@@ -31,7 +31,7 @@ CHECKPOINT_NAME = "benchmark_checkpoint.json"
 #: Metadata that has to agree for a checkpoint to be resumable. Runs measured
 #: under different axes describe a different matrix, and mixing them would
 #: silently corrupt the medians.
-RESUME_KEYS = ("seed", "sizes", "modes", "strategies", "executions", "repetitions",
+RESUME_KEYS = ("seed", "sizes", "modes", "executions", "repetitions",
                "trace_memory")
 
 
@@ -56,7 +56,16 @@ def resume_runs(path: Path, meta: Dict[str, Any]) -> List[Dict[str, Any]]:
             f"({details}). Re-run with matching flags, or delete the checkpoint "
             "to start over."
         )
-    return payload.get("runs") or []
+    runs = payload.get("runs") or []
+    removed = sorted({str(run["strategy"]) for run in runs
+                      if run.get("strategy", "optimized") != "optimized"})
+    if removed:
+        raise ValueError(
+            f"{path} holds runs of the removed strategy {', '.join(removed)}, which "
+            "this version cannot measure; mixing them in would corrupt the medians. "
+            "Delete the checkpoint to start over."
+        )
+    return runs
 
 
 def _parse_int_list(raw: str) -> List[int]:
@@ -95,8 +104,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help="Runs per (size, mode); the median is reported (default: 3).")
     parser.add_argument("--only", default="",
                         help=f"Comma-separated backends (default: all). Choices: {', '.join(_ALL_BACKENDS)}.")
-    parser.add_argument("--strategies", default="optimized",
-                        help="Comma-separated strategies: naive,optimized (default: optimized).")
     parser.add_argument("--executions", default="stream",
                         help="Comma-separated write paths: stream,materialize (default: stream). "
                              "Use 'materialize,stream' to compare peak_memory_mb.")
@@ -130,13 +137,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     sizes = _parse_int_list(args.sizes)
     modes = _parse_str_list(args.modes)
     only = _parse_str_list(args.only) or None
-    strategies = _parse_str_list(args.strategies)
     executions = _parse_str_list(args.executions)
 
     meta = environment_metadata(args.config_dir, {})
     meta.update({"seed": args.seed, "sizes": sizes, "modes": modes,
                  "trace_memory": args.trace_memory,
-                 "repetitions": args.repetitions, "strategies": strategies,
+                 "repetitions": args.repetitions,
                  "executions": executions})
 
     completed: List[Dict[str, Any]] = []
@@ -151,7 +157,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
         labeled = run_matrix(
             sizes=sizes, modes=modes, repetitions=args.repetitions,
-            strategies=strategies, executions=executions,
+            executions=executions,
             dbms_config_path=args.dbms_config, config_dir=args.config_dir,
             data_dir=args.data_dir, seed=args.seed, only=only,
             cleaners=CLEANERS, importer=run_import, load_cfg=load_config,

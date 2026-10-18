@@ -14,7 +14,6 @@ from polyglotimportcsv import benchmark_data
 from polyglotimportcsv.metrics import MetricsCollector
 
 _ALL_BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
-_VALID_STRATEGIES = ("naive", "optimized")
 _VALID_EXECUTIONS = ("stream", "materialize")
 
 _BYTES_PER_MB = 1024 * 1024
@@ -74,8 +73,7 @@ def _ensure_dataset(data_dir: Path, size: int, seed: int, mode: str, generate) -
 
 def _run_key(run: Dict[str, object]) -> tuple:
     """Identity of a labeled run: which matrix cell, and which repetition of it."""
-    return (run["size"], run["mode"], run["strategy"], run["execution"],
-            run["repetition"])
+    return (run["size"], run["mode"], run["execution"], run["repetition"])
 
 
 def _overrides(mode: str, dpath: Path) -> Dict[str, str]:
@@ -89,7 +87,6 @@ def run_matrix(
     sizes: Iterable[int],
     modes: Iterable[str],
     repetitions: int,
-    strategies: Iterable[str] = ("optimized",),
     executions: Iterable[str] = ("stream",),
     dbms_config_path: "Optional[str | Path]",
     config_dir: "str | Path",
@@ -104,9 +101,9 @@ def run_matrix(
     trace_memory: bool = True,
     completed: Optional[List[Dict[str, object]]] = None,
 ) -> List[Dict[str, object]]:
-    """Run repetitions x sizes x modes x strategies x executions, cleaning before each import.
+    """Run repetitions x sizes x modes x executions, cleaning before each import.
 
-    One repetition is a full sweep of the (size, mode, strategy, execution) matrix,
+    One repetition is a full sweep of the (size, mode, execution) matrix,
     not a burst of back-to-back runs of the same cell: warm-up then affects every
     cell's first pass equally instead of concentrating on whichever cell happens to
     run first. Returns labeled runs.
@@ -137,13 +134,6 @@ def run_matrix(
             f"unknown mode(s): {', '.join(unknown)}. Valid: {', '.join(_MODE_CONFIG)}"
         )
     requested = list(only) if only else None
-    strategies = list(strategies)
-    unknown_strategies = [s for s in strategies if s not in _VALID_STRATEGIES]
-    if unknown_strategies:
-        raise ValueError(
-            f"unknown strategy(ies): {', '.join(unknown_strategies)}. "
-            f"Valid: {', '.join(_VALID_STRATEGIES)}"
-        )
     executions = list(executions)
     unknown_executions = [e for e in executions if e not in _VALID_EXECUTIONS]
     if unknown_executions:
@@ -184,44 +174,41 @@ def run_matrix(
         for cell in cells:
             merged = cell["merged"]
             selected = cell["selected"]
-            for strategy in strategies:
-                for execution in executions:
-                    key = (cell["size"], cell["mode"], strategy, execution, rep)
-                    if key in already_measured:
-                        continue
-                    for backend in selected:
-                        block = merged.get(backend)
-                        if block is not None and backend in cleaners:
-                            cleaners[backend](block)
-                    collector = MetricsCollector()
-                    # Measure whole-import peak memory. Streaming's headline
-                    # metric is a bounded peak (~one read chunk) versus the
-                    # materialize path's peak that grows with dataset size.
-                    if trace_memory:
-                        tracemalloc.start()
-                        tracemalloc.reset_peak()
-                    importer(
-                        cell["config_path"],
-                        dbms_config_path=dbms_config_path,
-                        collector=collector,
-                        show_data=False,
-                        only=selected,
-                        create_schema=True,
-                        source_overrides=cell["overrides"],
-                        strategy=strategy,
-                        execution=execution,
-                    )
-                    peak_mb: Optional[float] = None
-                    if trace_memory:
-                        peak_mb = tracemalloc.get_traced_memory()[1] / _BYTES_PER_MB
-                        tracemalloc.stop()
-                    labeled.append({
-                        "size": cell["size"], "mode": cell["mode"],
-                        "strategy": strategy, "execution": execution,
-                        "repetition": rep,
-                        "peak_memory_mb": peak_mb,
-                        "records": collector.to_records(),
-                    })
-                    if on_run is not None:
-                        on_run(labeled)
+            for execution in executions:
+                key = (cell["size"], cell["mode"], execution, rep)
+                if key in already_measured:
+                    continue
+                for backend in selected:
+                    block = merged.get(backend)
+                    if block is not None and backend in cleaners:
+                        cleaners[backend](block)
+                collector = MetricsCollector()
+                # Measure whole-import peak memory. Streaming's headline
+                # metric is a bounded peak (~one read chunk) versus the
+                # materialize path's peak that grows with dataset size.
+                if trace_memory:
+                    tracemalloc.start()
+                    tracemalloc.reset_peak()
+                importer(
+                    cell["config_path"],
+                    dbms_config_path=dbms_config_path,
+                    collector=collector,
+                    show_data=False,
+                    only=selected,
+                    create_schema=True,
+                    source_overrides=cell["overrides"],
+                    execution=execution,
+                )
+                peak_mb: Optional[float] = None
+                if trace_memory:
+                    peak_mb = tracemalloc.get_traced_memory()[1] / _BYTES_PER_MB
+                    tracemalloc.stop()
+                labeled.append({
+                    "size": cell["size"], "mode": cell["mode"], "execution": execution,
+                    "repetition": rep,
+                    "peak_memory_mb": peak_mb,
+                    "records": collector.to_records(),
+                })
+                if on_run is not None:
+                    on_run(labeled)
     return labeled

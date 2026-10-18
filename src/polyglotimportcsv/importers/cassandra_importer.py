@@ -211,15 +211,6 @@ def _row_values(row, ordered_src: List[str], cql_by_src: Dict[str, str]) -> List
     return values
 
 
-def _write_naive(session, prepared, params_list, advance) -> int:
-    count = 0
-    for values in params_list:
-        session.execute(prepared, values)
-        count += 1
-        advance(1)
-    return count
-
-
 def _write_batched(
     session,
     prepared,
@@ -277,7 +268,6 @@ def run_cassandra_import(
     *,
     dry_run: bool,
     create_schema: bool,
-    strategy: str = "optimized",
     session_factory: Callable[[Dict[str, Any]], Tuple[Any, Any]] = _default_cassandra_session,
 ) -> List[str]:
     lines: List[str] = []
@@ -329,12 +319,11 @@ def run_cassandra_import(
             prep = session.prepare(cql)
             if part_df.empty:
                 logger.warning("[cassandra] table %s has 0 row(s) after filters", table)
-            writer = _write_naive if strategy == "naive" else _write_batched
             with metrics.timed_phase("cassandra", table, "write") as tw:
                 params_list = [_row_values(row, ordered_src, cql_by_src)
                                for row in iter_rows(part_df)]
                 with entity_progress(f"cassandra · {table}", len(params_list)) as advance:
-                    count = writer(session, prep, params_list, advance)
+                    count = _write_batched(session, prep, params_list, advance)
                 tw.rows = count
             lines.append(f"[cassandra] inserted {count} row(s) into {keyspace}.{table}")
 

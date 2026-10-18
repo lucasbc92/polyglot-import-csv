@@ -38,15 +38,6 @@ def _kv_pairs(part_df, entity_cfg) -> List[Tuple[str, str]]:
     return pairs
 
 
-def _write_naive(client, pairs: List[Tuple[str, str]], advance) -> int:
-    count = 0
-    for k, v in pairs:
-        client.set(k, v)
-        count += 1
-        advance(1)
-    return count
-
-
 def _write_batched(client, pairs: List[Tuple[str, str]], advance, batch: int = 1000) -> int:
     count = 0
     for i in range(0, len(pairs), batch):
@@ -66,7 +57,6 @@ def run_redis_import(
     *,
     dry_run: bool,
     create_schema: bool,
-    strategy: str = "optimized",
     client_factory: Callable[[Dict[str, Any]], Any] = _default_redis_client,
 ) -> List[str]:
     lines: List[str] = []
@@ -90,7 +80,6 @@ def run_redis_import(
     except Exception as e:
         raise ImportExecutionError(f"Redis connection failed: {e}") from e
 
-    writer = _write_naive if strategy == "naive" else _write_batched
     for ename, be in entities.items():
         non_each = [f for f in (be.cfg.get("filters") or []) if f.get("operator") != "each"]
         with metrics.timed_phase("redis", ename, "filter") as t:
@@ -102,7 +91,7 @@ def run_redis_import(
             with metrics.timed_phase("redis", part_name, "write") as tw:
                 pairs = _kv_pairs(part_df, be.cfg)
                 with entity_progress(f"redis · {part_name}", len(pairs)) as advance:
-                    count = writer(client, pairs, advance)
+                    count = _write_batched(client, pairs, advance)
                 tw.rows = count
             logger.debug("[redis] SET %d key(s) for %s", count, part_name)
             lines.append(f"[redis] SET {count} key(s) for {part_name}")
