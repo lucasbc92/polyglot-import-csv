@@ -173,3 +173,25 @@ def test_resume_accepts_runs_labeled_optimized_by_older_versions(tmp_path):
     path.write_text(json.dumps({"metadata": meta, "runs": [run]}), encoding="utf-8")
 
     assert rb.resume_runs(path, dict(meta)) == [run]
+
+
+def test_an_old_results_csv_is_refused_before_the_matrix_runs(tmp_path, monkeypatch):
+    # The header mismatch used to surface only after the whole matrix (hours at
+    # 100k), when the results were consolidated.
+    out = tmp_path / "out"
+    out.mkdir()
+    old = out / "benchmark_results.csv"
+    content = ("timestamp,size,mode,strategy,execution,backend,entity,phase,rows,"
+               "median_seconds,rows_per_second,peak_memory_mb\n")
+    old.write_text(content, encoding="utf-8")
+
+    def must_not_run(**kwargs):
+        raise AssertionError("run_matrix must not run")
+
+    monkeypatch.setattr(rb, "run_matrix", must_not_run)
+
+    code = rb.main(["--sizes", "1000", "--only", "postgres", "--out", str(out)])
+
+    assert code == 2
+    assert old.read_text(encoding="utf-8") == content
+    assert list(out.glob("benchmark_run_*.json")) == []

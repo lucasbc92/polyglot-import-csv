@@ -69,3 +69,21 @@ def test_append_to_mismatched_header_raises(tmp_path):
             csv_fields=("timestamp", "size", "mode", "extra"),
             payload_key="results",
         )
+
+
+def test_mismatched_header_writes_nothing(tmp_path):
+    # The header check used to run after the JSON was written, leaving a stray
+    # run file next to a CSV that refused the rows.
+    csv_path = tmp_path / "r.csv"
+    content = "timestamp,size,mode\n1,1000,multi\n"
+    csv_path.write_text(content, encoding="utf-8")
+    with pytest.raises(ValueError, match="CSV header mismatch"):
+        write_json_and_csv(
+            tmp_path, {"timestamp": "t"},
+            [{"size": 1, "mode": "multi", "extra": "x"}],
+            json_prefix="j", csv_name="r.csv",
+            csv_fields=("timestamp", "size", "mode", "extra"),
+            payload_key="results",
+        )
+    assert list(tmp_path.glob("j_*.json")) == []
+    assert csv_path.read_text(encoding="utf-8") == content
