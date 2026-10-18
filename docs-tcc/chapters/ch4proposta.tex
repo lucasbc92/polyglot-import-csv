@@ -264,8 +264,11 @@ Nos dois modos, a \textbf{primeira linha de todo CSV é o seu cabeçalho}: é de
 os nomes das colunas, aos quais o mapeamento se refere. O cabeçalho é, portanto,
 \textbf{obrigatório}, e a ferramenta não tem como distingui-lo de uma linha de dados. Em
 um CSV sem cabeçalho, a primeira linha de dados seria tomada como nomes de coluna e não
-seria importada; as colunas declaradas no mapeamento não seriam encontradas, e a execução
-terminaria com erro na validação (Seção~\ref{sec:validacao}). No modo combinado, a
+seria importada. Quando o mapeamento se refere às colunas pelo nome, elas não seriam
+encontradas, e a execução terminaria com erro na validação (Seção~\ref{sec:validacao}).
+Com o mapeamento automático ou com colunas indicadas pela posição, porém, não haveria
+erro: a importação prosseguiria sem a primeira linha e, no mapeamento automático, com os
+valores dela como nomes de coluna. No modo combinado, a
 primeira coluna do cabeçalho é a coluna de origem.
 
 \subsubsection{Blocos de SGBD}
