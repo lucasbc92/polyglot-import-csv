@@ -315,7 +315,7 @@
     \node[etapa] (e1) at (15.5, 0)
       {\footnotesize\textbf{1. Verificação dos SGBDs}\\[2pt]
        testa se cada SGBD responde\\[2pt]
-       {\color{black!60}omitida em \texttt{-{}-dry-run}}};
+       {\color{black!60}omitida no modo \texttt{-{}-dry-run} (sem gravar)}};
     \node[caixa, draw=red!55!black, fill=red!6, text width=84mm, minimum height=9mm]
       (erro) at (42.5, -27.5)
       {\textbf{SGBD fora do ar ou com conexão inválida:} a execução termina antes de ler
@@ -498,6 +498,30 @@
     \node[text=gray] at ({(\wa+147.2-\wb)/2},{-\rh/2}) {\scriptsize$\cdots$};
     \draw[ufscborda, line width=0.5pt] (0,0) rectangle (147.2,-\rh);
   \end{tikzpicture}\par}
+% \comandogui{captura}{y0}{xa0}{xa1}{xb0}{xb1}{escala em mm por px}: o comando montado ocupa
+% duas linhas de 14 px no console. Mostra o começo da 1.ª (a partir de y0) e o fim da 2.ª
+% (14 px abaixo), que traz as opções; os caminhos entre elas são encurtados e marcados.
+\definecolor{guicomando}{HTML}{1E242D}% fundo da linha de comando, lido da captura
+\newcommand{\comandogui}[7]{%
+  \pgfmathsetmacro{\rh}{14*#7}%
+  \pgfmathsetmacro{\wa}{(#4-#3)*#7}%
+  \pgfmathsetmacro{\wb}{(#6-#5)*#7}%
+  \pgfmathsetmacro{\ri}{1240*#7}%
+  \begin{tikzpicture}[x=1mm, y=1mm]
+    \fill[guicomando] (0,0) rectangle (147.2,-\rh);
+    \begin{scope}
+      \clip (0,0) rectangle (\wa,-\rh);
+      \node[anchor=north west, inner sep=0pt] at ({-#3*#7},{#2*#7})
+        {\includegraphics[width=\ri mm]{#1}};
+    \end{scope}
+    \begin{scope}[shift={({147.2-\wb},0)}]
+      \clip (0,0) rectangle (\wb,-\rh);
+      \node[anchor=north west, inner sep=0pt] at ({-#5*#7},{(#2+14)*#7})
+        {\includegraphics[width=\ri mm]{#1}};
+    \end{scope}
+    \node[text=gray] at ({(\wa+147.2-\wb)/2},{-\rh/2}) {\scriptsize$\cdots$};
+    \draw[ufscborda, line width=0.5pt] (0,0) rectangle (147.2,-\rh);
+  \end{tikzpicture}\par}
 \newcommand{\passogui}[2]{% #1 recortes, #2 legenda
   \parbox[t][41mm][t]{\textwidth}{#1}\par
   \smallskip
@@ -507,21 +531,21 @@
   {\scriptsize\color{black!60} recortes das capturas de tela}\par
   \smallskip
   \only<1>{\passogui{%
-    \recorte{figure12-gui-ocioso}{22}{186}{830}{345}{147}\vspace{1.5mm}
-    \recorte{figure12-gui-ocioso}{22}{640}{1000}{680}{147}}{%
-    \textbf{Ocioso:} um controle para cada opção da CLI, com ícone de ajuda, e o comando
-    montado, colorido e somente leitura.}}
+    \recorte{figure12-gui-ocioso}{22}{180}{830}{345}{147}\vspace{1.5mm}
+    \comandogui{figure12-gui-ocioso}{646}{30}{155}{283}{801}{0.222}}{%
+    \textbf{Ocioso:} um controle para cada opção de uso cotidiano, com ícone de ajuda, e o
+    comando montado, colorido e somente leitura.}}
   \only<2>{\passogui{%
     \recorte{figure13-gui-executando}{22}{236}{600}{282}{116}\vspace{1.5mm}
     \faixa{figure13-gui-executando}{735}{770}{16}{130}{700}{1230}{0.2}{guiconsole}\vspace{1.5mm}
-    \recorte{figure13-gui-executando}{22}{835}{700}{925}{136}}{%
+    \recorte{figure13-gui-executando}{22}{835}{700}{896}{136}}{%
     \textbf{Executando:} formulário bloqueado, botão de interrupção e saída colorida da CLI
     chegando ao console em tempo real.}}
   \only<3>{\passogui{%
     \faixa{figure14-gui-sucesso}{735}{770}{16}{130}{700}{1230}{0.2}{guiconsole}\vspace{3mm}
     \recorte{figure14-gui-sucesso}{22}{925}{700}{948}{147}\vspace{3mm}
     \faixa{figure14-gui-sucesso}{997}{1020}{0}{125}{780}{1240}{0.22}{guistatus}}{%
-    \textbf{Concluído:} tempo total e arquivo de log da sessão na barra de estado.}}
+    \textbf{Concluído:} desfecho e arquivo de log da sessão na barra de estado.}}
   \only<4>{\passogui{%
     \recorte{figure15-gui-erro}{22}{40}{760}{112}{147}\vspace{1.5mm}
     \recorte{figure15-gui-erro}{22}{139}{760}{160}{147}\vspace{1.5mm}
