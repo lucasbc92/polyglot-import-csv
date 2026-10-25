@@ -118,9 +118,10 @@
         {\textbf{1. JSON Schema}\\ estrutura e tipos de cada arquivo};
       \draw[seta] (imp.east) -- (c1.west);
       \draw[seta] (con.east) -- (c1.west);
-      \node[caixa, draw=red!55!black, fill=red!6, text width=86mm, minimum height=7mm]
+      \node[caixa, draw=red!55!black, fill=red!6, text width=98mm, minimum height=7mm]
         (erro) at (70.5, -19)
-        {\textbf{Falha:} a execução termina e \textbf{nada é gravado} nos SGBDs.};
+        {\textbf{Falha de validação:} a execução termina e \textbf{nada é gravado} nos
+         SGBDs.};
       \draw[falha] (c1.south) -- (c1.south |- erro.north);
     \end{scope}
     % camada 2
@@ -207,21 +208,22 @@
 % quantity_available não cabem em mono \scriptsize num quinto da largura.
 \newcommand{\estreita}{\fontfamily{phv}\fontseries{mc}\selectfont}
 \newcommand{\pfonte}[1]{{\color{black!60}$\leftarrow$ #1}\par}
-\newcommand{\pent}[1]{\textbf{#1}\par\smallskip}
+\newcommand{\pent}[1]{\textbf{#1}\par}
 \newcommand{\pind}{\hspace*{0.4em}}
+\newcommand{\prot}[1]{{\color{black!60}#1}}
+% Corpo em \fontsize{8}{9}: mesmo corpo do \scriptsize, entrelinha menor (como no slide 7).
 \newcommand{\modelo}[4]{% #1 passo, #2 SGBD, #3 modelo de dados, #4 corpo
   \onslide<#1->{\begin{minipage}[t]{0.194\textwidth}
     \footnotesize
-    \begin{painel}{#2}{#3}\scriptsize\estreita\shorthandoff{"}#4\end{painel}
+    \begin{painel}{#2}{#3}\fontsize{8}{9}\selectfont\estreita\shorthandoff{"}#4\end{painel}
   \end{minipage}}}
 \begin{frame}{O mesmo cenário em cinco modelos de dados}
   \begin{tcolorbox}[colback=ufscfundo, colframe=ufscazul, sharp corners, boxrule=0pt,
       leftrule=1mm, left=2mm, right=2mm, top=1mm, bottom=1mm, boxsep=0pt]
     \footnotesize
-    \destaque{Fio condutor:} o usuário \texttt{user1} (\texttt{user\_id} \texttt{7fd7...})
-    e o produto \texttt{Product2} (\texttt{product\_id} 2).\par
-    {\color{black!60}Em cada painel, $\leftarrow$ indica a fonte (CSV) de onde vêm os
-     dados.\par}
+    \destaque{Fio condutor:} \texttt{user1} (\texttt{user\_id} \texttt{7fd7...}) e
+    \texttt{Product2} (\texttt{product\_id} 2)\hfill
+    {\scriptsize\color{black!60}$\leftarrow$ indica a fonte (CSV)}\par
   \end{tcolorbox}
   \smallskip
   \begingroup\tcbset{equal height group=modelos}
@@ -249,8 +251,11 @@
   \modelo{3}{Cassandra}{colunar}{%
     \pfonte{as quatro fontes}
     \pent{user\_activity\_log}
-    {\color{black!60}partição do user1}\par
+    \prot{partição do user1}\par
+    user\_id = 7fd7...\par
     \begin{tabular}{@{}l@{\hspace{3pt}}l@{}}
+      \multicolumn{2}{@{}l@{}}{\prot{event\_time}}\\
+      & \prot{event\_type}\\
       \multicolumn{2}{@{}l@{}}{\textbf{02/11}}\\
       03:30 & stock\\
       \multicolumn{2}{@{}l@{}}{\textbf{15/11}}\\
@@ -262,17 +267,23 @@
     \pfonte{add\_to\_cart}
     \pent{shopping\_cart}
     \begin{tabular}{@{}l@{}}
-      {\color{black!60}chave}\\
-      user:7fd7...:cart\\
-      {\color{black!60}valor}\\
-      \{...,\\
+      \prot{chave} user:7fd7...:cart\\
+      \prot{valor} \{...,\\
       "cart\_product\_id": "3",\\
       "cart\_quantity": "1"\}
+    \end{tabular}\par
+    \smallskip
+    \pfonte{select\_product}
+    \pent{user\_session}
+    \begin{tabular}{@{}l@{}}
+      \prot{chave} 7fd7...\\
+      \prot{valor} \{"user\_name":\\
+      \pind "user1", ...\}
     \end{tabular}}\hfill
   \modelo{5}{Neo4j}{grafo}{%
     \pfonte{stock e purchase}
     \begin{tabular}{@{}l@{}}
-      (:User \{\\
+      (:User \{...,\\
       \pind user\_name: "user1",\\
       \pind ...\})\\
       -[:PURCHASED \{\\
