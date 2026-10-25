@@ -1,1 +1,285 @@
 \roteiro{3}
+
+% Revelação em TikZ sem deslocar nada: o elemento existe em todas as páginas do frame,
+% transparente fora do intervalo <...> (estilo usual do beamer com TikZ).
+\tikzset{
+  invisivel/.style={opacity=0, text opacity=0},
+  visivel em/.style={alt={#1{}{invisivel}}},
+  alt/.code args={<#1>#2#3}{\alt<#1>{\pgfkeysalso{#2}}{\pgfkeysalso{#3}}}}
+
+% Slide 8: visão geral (relatório §4.1, Fig. 7)
+% A Fig. 7 (images/figure7-overview.png, 1376 x 1380 px) rende texto de ~3,6 pt na altura
+% útil do slide; o desenho abaixo repete as suas caixas e setas em TikZ, com texto legível.
+\begin{frame}{Visão geral}
+  \centering
+  \begin{tikzpicture}[x=1mm, y=1mm, font=\footnotesize,
+      caixa/.style={draw=ufscborda, fill=white, rounded corners=0.6mm, inner sep=2pt,
+                    align=center, text=ufsctexto},
+      rotulo/.style={font=\footnotesize\bfseries, text=ufscazul},
+      seta/.style={->, >=stealth, draw=ufscazul!70, thick}]
+    \node[rotulo] at (20, 31) {Entrada};
+    \node[rotulo, visivel em=<2->] at (68, 31) {Processamento};
+    \node[rotulo, visivel em=<3->] at (120, 31) {Saída};
+    % entrada
+    \node[caixa, fill=ufscfundo, text width=40mm] (imp) at (20, 18)
+      {\textbf{arquivo de importação}\\[-1pt]{\scriptsize\texttt{import\_config.json}}\\[-1pt]
+       {\scriptsize fontes e mapeamento}};
+    \node[caixa, fill=ufscfundo, text width=40mm] (con) at (20, 2)
+      {\textbf{arquivo de conexão}\\[-1pt]{\scriptsize\texttt{dbms\_config.json}}\\[-1pt]
+       {\scriptsize SGBDs e como alcançá-los}};
+    \node[caixa, fill=ufscfundo, text width=40mm] (csv) at (20, -14)
+      {\textbf{arquivos de dados}\\[-1pt]{\scriptsize um ou mais CSV}};
+    % processamento
+    \begin{scope}[visivel em=<2->]
+      \node[caixa, fill=ufscazul, draw=ufscazul, text=white, text width=38mm,
+            minimum height=16mm] (tool) at (68, 2)
+        {\bfseries Polyglot Import CSV\\[1pt]{\scriptsize\mdseries comando CLI:\\
+         valida e importa}};
+      \draw[seta] (imp.east) -- (tool.west);
+      \draw[seta] (con.east) -- (tool.west);
+      \draw[seta] (csv.east) -- (tool.west);
+    \end{scope}
+    % saída
+    \begin{scope}[visivel em=<3->]
+      \foreach \sgbd/\tipo [count=\i] in {PostgreSQL/relacional, MongoDB/documento,
+          Cassandra/colunar, Redis/chave-valor, Neo4j/grafo} {
+        \node[caixa, text width=34mm, minimum height=5.6mm] (s\i) at (120, {26-8*\i})
+          {\textbf{\sgbd}\enspace{\scriptsize\color{black!60}\tipo}};
+        \draw[seta] (tool.east) -- (s\i.west);
+      }
+    \end{scope}
+  \end{tikzpicture}\par
+  \medskip
+  \onslide<3->{\footnotesize O comando valida as entradas e só então importa para os SGBDs
+   presentes na configuração.\par}
+\end{frame}
+
+% Slide 9: arquivo de importação (relatório §4.2.1; trecho de data/ecommerce/import_config.json)
+% O trecho mantém as chaves e o aninhamento do arquivo real; "..." marca o que foi omitido
+% (entidades categories e products antes de inventory, relationships, os outros SGBDs).
+\begin{frame}[fragile]{Arquivo de importação}
+  \destaque{Arquivo de importação}: JSON com as fontes (CSVs) e o que gravar em cada SGBD.\par
+  \smallskip
+  \begingroup\footnotesize Trecho de \texttt{import\_config.json}: a fonte \texttt{stock}
+  alimenta a tabela \texttt{inventory}.\par\endgroup
+  \smallskip
+  \begin{minipage}[t]{0.66\textwidth}
+\begin{lstlisting}[style=jsonslide, aboveskip=0pt, belowskip=0pt]
+"sources": {
+  "stock": "ecommerce_stock.csv",
+  "purchase": "ecommerce_purchase.csv", ...
+},
+"postgres": {
+  "entities": { ...
+    "inventory": {
+      "source": "stock",
+      "columns": {
+        "product_id": { "is_key": true, "db_type": "BIGINT" },
+        "quantity_available": { "db_type": "BIGINT" }, ...
+      } }, ...
+  }, ...
+}, ...
+\end{lstlisting}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.32\textwidth}
+    \footnotesize
+    \begin{itemize}
+      \item \texttt{sources}: dá um nome a cada CSV.
+      \item \texttt{postgres}: um bloco por SGBD de destino.
+      \item \texttt{entities}: tabelas, coleções, nós\ldots
+      \item \texttt{columns}: colunas, com chave (\texttt{is\_key}) e tipo
+            (\texttt{db\_type}).
+    \end{itemize}
+  \end{minipage}
+\end{frame}
+
+% Slide 10: conexão e validação prévia (relatório §4.2.3, §4.2.4, Fig. 10)
+% A Fig. 10 (images/figure10-config-pipeline.png) é um retrato alto; o fluxo foi redesenhado
+% na horizontal, com as três camadas de validação reveladas uma a uma.
+\begin{frame}{Conexão e validação prévia}
+  \destaque{Arquivo de conexão}: JSON que diz onde alcançar cada SGBD.\par
+  \smallskip
+  Antes de gravar, a validação passa por \destaque{três camadas}:\par
+  \medskip
+  \centering
+  \begin{tikzpicture}[x=1mm, y=1mm, font=\scriptsize,
+      caixa/.style={draw=ufscborda, fill=white, rounded corners=0.6mm, inner sep=2pt,
+                    align=center, text=ufsctexto, minimum height=11mm},
+      entrada/.style={caixa, fill=ufscfundo, text width=19mm},
+      camada/.style={caixa, text width=25mm},
+      seta/.style={->, >=stealth, draw=ufscazul!70, thick},
+      falha/.style={->, >=stealth, draw=red!55!black, thick}]
+    % entradas
+    \node[entrada] (imp) at (10.5, 7) {arquivo de importação};
+    \node[entrada] (con) at (10.5, -7) {arquivo de conexão};
+    % camada 1
+    \begin{scope}[visivel em=<2->]
+      \node[camada] (c1) at (39, 0)
+        {\textbf{1. JSON Schema}\\ estrutura e tipos de cada arquivo};
+      \draw[seta] (imp.east) -- (c1.west);
+      \draw[seta] (con.east) -- (c1.west);
+      \node[caixa, draw=red!55!black, fill=red!6, text width=86mm, minimum height=7mm]
+        (erro) at (70.5, -19)
+        {\textbf{Falha:} a execução termina e \textbf{nada é gravado} nos SGBDs.};
+      \draw[falha] (c1.south) -- (c1.south |- erro.north);
+    \end{scope}
+    % camada 2
+    \begin{scope}[visivel em=<3->]
+      \node[camada] (c2) at (70.5, 0)
+        {\textbf{2. Consistência entre arquivos}\\ todo SGBD da importação está na
+         conexão?};
+      \draw[seta] (c1.east) -- (c2.west);
+      \draw[falha] (c2.south) -- (c2.south |- erro.north);
+    \end{scope}
+    % camada 3
+    \begin{scope}[visivel em=<4->]
+      \node[entrada, minimum height=7mm] (csv) at (102, 19) {CSVs (fontes)};
+      \node[camada] (c3) at (102, 0)
+        {\textbf{3. Validação cruzada com os dados}\\ colunas, chaves e arestas existem?};
+      \draw[seta] (c2.east) -- (c3.west);
+      \draw[seta] (csv.south) -- (c3.north);
+      \draw[falha] (c3.south) -- (c3.south |- erro.north);
+    \end{scope}
+    % importação
+    \begin{scope}[visivel em=<5->]
+      \node[caixa, fill=ufscazul, draw=ufscazul, text=white, text width=17mm] (ok)
+        at (129.5, 0) {\textbf{importação} por SGBD};
+      \draw[seta] (c3.east) -- (ok.west);
+    \end{scope}
+  \end{tikzpicture}
+\end{frame}
+
+% Slide 11: cenário e-commerce (relatório §4.2, tab:eventos-ecommerce; §4.2.1, modos;
+% §4.3.2, o exemplo usa o modo multifonte). Os blocos sources vêm de import_config.json e
+% import_config_combined.json (iguais a lst:sources-multi e lst:sources-combined).
+\begin{frame}[fragile]{Cenário e-commerce}
+  \begingroup\footnotesize\bfseries\color{ufscazul} Tipos de evento do cenário de
+  e-commerce\hfill\scriptsize\mdseries\color{black!60} todo evento registra o instante e o
+  usuário envolvido\par\endgroup
+  \smallskip
+  \footnotesize
+  \setlength{\tabcolsep}{4pt}
+  \setlength{\aboverulesep}{0.15ex}\setlength{\belowrulesep}{0.3ex}
+  \begin{tabular}{@{}>{\ttfamily}l l E{0.55\textwidth}@{}}
+    \toprule
+    \normalfont\bfseries Tipo & \bfseries Evento & \bfseries Demais dados registrados \\
+    \midrule
+    stock           & reposição de estoque & produto, categoria, quantidade disponível e preço \\
+    purchase        & compra               & pedido, produto, contraparte da venda, pagamento e avaliação \\
+    select\_product & seleção de produto   & produto selecionado \\
+    add\_to\_cart   & adição ao carrinho   & carrinho, produto e quantidade \\
+    \bottomrule
+  \end{tabular}\par
+  \smallskip
+  \onslide<2->
+  \begingroup\tcbset{equal height group=modos}
+  \begin{minipage}[t]{0.49\textwidth}
+    \begin{painel}{Multifonte\enspace{\mdseries\color{black!60}um CSV por tipo de evento}}{}
+\begin{lstlisting}[style=jsonslide, aboveskip=0pt, belowskip=0pt]
+"sources": {
+  "stock": "ecommerce_stock.csv",
+  "purchase": "ecommerce_purchase.csv", ...
+}
+\end{lstlisting}
+    \end{painel}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.49\textwidth}
+    \begin{painel}{Combinado\enspace{\mdseries\color{black!60}um CSV com coluna de
+      origem}}{}
+\begin{lstlisting}[style=jsonslide, aboveskip=0pt, belowskip=0pt]
+"sources": {
+  "ecommerce": {
+    "file": "ecommerce_join.csv",
+    "origin_column": true } }
+\end{lstlisting}
+    \end{painel}
+  \end{minipage}\par
+  \endgroup
+  \smallskip
+  Nos dois modos, o resto do arquivo de importação é igual. O exemplo usa o multifonte.\par
+\end{frame}
+
+% Slide 12: o mesmo cenário em cinco modelos de dados (relatório §4.3.3)
+% Valores e nomes de campo copiados de tab:pg-inventory, lst:mongo-doc,
+% tab:cassandra-particao, lst:redis-pares e lst:neo4j-grafo; "..." marca o que foi omitido.
+% A linha de stock do Product2 não alimenta o Redis (tab:exemplo-ecommerce): cada painel
+% indica a fonte de onde veio. Corpo dos painéis em Helvetica Narrow: nomes como
+% quantity_available não cabem em mono \scriptsize num quinto da largura.
+\newcommand{\estreita}{\fontfamily{phv}\fontseries{mc}\selectfont}
+\newcommand{\pfonte}[1]{{\color{black!60}$\leftarrow$ #1}\par}
+\newcommand{\pent}[1]{\textbf{#1}\par\smallskip}
+\newcommand{\pind}{\hspace*{0.4em}}
+\newcommand{\modelo}[4]{% #1 passo, #2 SGBD, #3 modelo de dados, #4 corpo
+  \onslide<#1->{\begin{minipage}[t]{0.194\textwidth}
+    \footnotesize
+    \begin{painel}{#2}{#3}\scriptsize\estreita\shorthandoff{"}#4\end{painel}
+  \end{minipage}}}
+\begin{frame}{O mesmo cenário em cinco modelos de dados}
+  \begin{tcolorbox}[colback=ufscfundo, colframe=ufscazul, sharp corners, boxrule=0pt,
+      leftrule=1mm, left=2mm, right=2mm, top=1mm, bottom=1mm, boxsep=0pt]
+    \footnotesize
+    \destaque{Fio condutor:} o usuário \texttt{user1} (\texttt{user\_id} \texttt{7fd7...})
+    e o produto \texttt{Product2} (\texttt{product\_id} 2).\par
+    {\color{black!60}Em cada painel, $\leftarrow$ indica a fonte (CSV) de onde vêm os
+     dados.\par}
+  \end{tcolorbox}
+  \smallskip
+  \begingroup\tcbset{equal height group=modelos}
+  \modelo{1}{PostgreSQL}{relacional}{%
+    \pfonte{stock}
+    \pent{inventory}
+    \begin{tabular*}{\linewidth}{@{}l@{\extracolsep{\fill}}r@{}}
+      product\_id & 2\\
+      quantity\_available & 2\\
+      \multicolumn{2}{@{}l@{}}{last\_restock\_date}\\
+      \multicolumn{2}{@{}r@{}}{02/11/2023 03:30}\\
+      price & 50.5
+    \end{tabular*}}\hfill
+  \modelo{2}{MongoDB}{documento}{%
+    \pfonte{stock}
+    \pent{product\_catalog}
+    \begin{tabular}{@{}l@{}}
+      \{"product\_id": "2",\\
+      \pind ...,\\
+      \pind "category": \{...\},\\
+      \pind "stock": \{\\
+      \pind\pind "quantity\_available":\\
+      \pind\pind\pind "2", ...\}\}
+    \end{tabular}}\hfill
+  \modelo{3}{Cassandra}{colunar}{%
+    \pfonte{as quatro fontes}
+    \pent{user\_activity\_log}
+    {\color{black!60}partição do user1}\par
+    \begin{tabular}{@{}l@{\hspace{3pt}}l@{}}
+      \multicolumn{2}{@{}l@{}}{\textbf{02/11}}\\
+      03:30 & stock\\
+      \multicolumn{2}{@{}l@{}}{\textbf{15/11}}\\
+      15:09 & select\_product\\
+      15:17 & add\_to\_cart\\
+      15:46 & purchase
+    \end{tabular}}\hfill
+  \modelo{4}{Redis}{chave-valor}{%
+    \pfonte{add\_to\_cart}
+    \pent{shopping\_cart}
+    \begin{tabular}{@{}l@{}}
+      {\color{black!60}chave}\\
+      user:7fd7...:cart\\
+      {\color{black!60}valor}\\
+      \{...,\\
+      "cart\_product\_id": "3",\\
+      "cart\_quantity": "1"\}
+    \end{tabular}}\hfill
+  \modelo{5}{Neo4j}{grafo}{%
+    \pfonte{stock e purchase}
+    \begin{tabular}{@{}l@{}}
+      (:User \{\\
+      \pind user\_name: "user1",\\
+      \pind ...\})\\
+      -[:PURCHASED \{\\
+      \pind order\_number:\\
+      \pind\pind "ORD1", ...\}]->\\
+      (:Product \{\\
+      \pind product\_id: "2", ...\})
+    \end{tabular}}\par
+  \endgroup
+\end{frame}
