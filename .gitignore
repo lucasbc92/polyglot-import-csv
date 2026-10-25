@@ -203,3 +203,6 @@ cython_debug/
 
 # Pacotes gerados por scripts/package_release.py
 release/
+
+# Esboços e estado local dos fluxos do superpowers (brainstorming, SDD)
+.superpowers/
