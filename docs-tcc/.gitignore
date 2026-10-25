@@ -33,6 +33,13 @@
 *.ptc*
 *.tdo
 
+# --- Artefatos do Beamer e build da apresentação (a entrega é a cópia versionada) ---
+*.nav
+*.snm
+*.vrb
+apresentacao/apresentacao.pdf
+apresentacao/render/
+
 # --- Artefatos tex4ht / make4ht / htlatex ---
 *.4ct
 *.4tc

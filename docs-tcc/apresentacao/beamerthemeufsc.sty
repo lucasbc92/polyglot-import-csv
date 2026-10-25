@@ -1,0 +1,139 @@
+% Tema Beamer da defesa do TCC2 (UFSC): "estilo C bicolor em diagonal".
+% Cabeçalho azul com corte diagonal e brasão no canto branco; rodapé azul.
+% Geometria em frações da largura do slide (L = \paperwidth).
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{beamerthemeufsc}[2026/10/25 Tema UFSC da defesa do TCC2]
+
+\RequirePackage{lmodern}
+\RequirePackage{helvet}
+\RequirePackage{tikz}
+\RequirePackage{tcolorbox}
+\RequirePackage{listings}
+\RequirePackage{appendixnumberbeamer}
+
+\graphicspath{{../images/}{../}}
+
+% ---------------------------------------------------------------- cores
+\definecolor{ufscazul}{HTML}{0B3D6E}
+\definecolor{ufscborda}{HTML}{C9D6E3}
+\definecolor{ufscfundo}{HTML}{F1F5F9}
+\definecolor{ufsctexto}{HTML}{1D1D1F}
+
+\setbeamercolor{normal text}{fg=ufsctexto}
+\setbeamercolor{structure}{fg=ufscazul}
+\setbeamertemplate{navigation symbols}{}
+\setbeamersize{text margin left=0.04\paperwidth, text margin right=0.04\paperwidth}
+
+% ---------------------------------------------------------------- cabeçalho
+% Altura h = 0,105L. Faixa azul: polígono (0; 0) → (0,90L; 0) → (0,86L; h) → (0; h).
+% Título em branco; brasão colorido centrado no canto branco (faixa de 0,11L à direita).
+% Sem linha abaixo do cabeçalho.
+\setbeamertemplate{frametitle}{}
+\providecommand{\insertframetitle}{}% o beamer mede o cabeçalho antes do 1.º frame
+\setbeamertemplate{headline}{%
+  \hbox{\begin{tikzpicture}[x=\paperwidth, y=\paperwidth]
+    \useasboundingbox (0,0) rectangle (1,-0.105);
+    \fill[ufscazul] (0,0) -- (0.90,0) -- (0.86,-0.105) -- (0,-0.105) -- cycle;
+    \node[anchor=west, inner sep=0pt, text width=0.80\paperwidth, align=left,
+          text=white, font=\Large\bfseries] at (0.04,-0.0525) {\insertframetitle};
+    \node[inner sep=0pt] at (0.945,-0.0525)
+      {\includegraphics[height=0.086\paperwidth]{brasao_UFSC_vertical_sigla}};
+  \end{tikzpicture}}}
+
+% ---------------------------------------------------------------- rodapé
+% Faixa azul de 0,032L; número do frame à direita (B<n> nas cartas na manga,
+% nada nos frames [noframenumbering]).
+\setbeamertemplate{footline}{%
+  \hbox{\begin{tikzpicture}[x=\paperwidth, y=\paperwidth]
+    \useasboundingbox (0,0) rectangle (1,0.032);
+    \fill[ufscazul] (0,0) rectangle (1,0.032);
+    \node[anchor=mid west, inner sep=0pt, text=white, font=\scriptsize] at (0.04,0.016)
+      {Lucas Bueno Cesario · Polyglot Import CSV · Ciência da Computação · UFSC};
+    \node[anchor=mid east, inner sep=0pt, text=white, font=\scriptsize] at (0.96,0.016)
+      {\ifbeamer@noframenumbering\else\ifbeamer@inappendix B\fi\insertframenumber\fi};
+  \end{tikzpicture}}}
+
+% ---------------------------------------------------------------- capa e fechamento
+% Arte de página inteira, desenhada como fundo de um frame [plain]:
+% brasão, instituição, #1 (miolo) e a faixa azul inferior.
+\newcommand{\ufsc@arte}[1]{%
+  \begin{tikzpicture}[x=\paperwidth, y=\paperwidth]
+    \useasboundingbox (0,0) rectangle (\paperwidth,\paperheight);
+    \fill[ufscazul] (0,0) rectangle (1,0.036);
+    \node[anchor=mid west, inner sep=0pt, text=white, font=\footnotesize] at (0.04,0.018)
+      {Defesa de Trabalho de Conclusão de Curso};
+    \node[anchor=mid east, inner sep=0pt, text=white, font=\footnotesize] at (0.96,0.018)
+      {Florianópolis, 2026};
+    \node[inner sep=0pt] at (0.5\paperwidth,{0.018\paperwidth+0.5\paperheight}) {%
+      \parbox{0.9\paperwidth}{\centering
+        \includegraphics[height=0.15\paperwidth]{brasao_UFSC_vertical_sigla}\par
+        \vspace{0.014\paperwidth}
+        {\scriptsize\color{black!70}%
+          Universidade Federal de Santa Catarina · Centro Tecnológico\\
+          Departamento de Informática e Estatística · Ciência da Computação\par}
+        \vspace{0.024\paperwidth}
+        #1}};
+  \end{tikzpicture}}
+
+\newcommand{\capa}{%
+  {\setbeamertemplate{background}{\ufsc@arte{%
+      {\huge\bfseries\color{ufscazul} Polyglot Import CSV\par}
+      \vspace{0.008\paperwidth}
+      {\normalsize Uma solução para importação de documentos CSV para múltiplos bancos de dados\par}
+      \vspace{0.024\paperwidth}
+      {\small\bfseries Lucas Bueno Cesario\par}
+      {\small\color{black!65} Orientador: Prof. Dr. Ronaldo dos Santos Mello\par}}}%
+   \begin{frame}[plain]\end{frame}}}
+
+\newcommand{\fechamento}{%
+  {\setbeamertemplate{background}{\ufsc@arte{%
+      {\huge\bfseries\color{ufscazul} Obrigado! Perguntas?\par}
+      \vspace{0.024\paperwidth}
+      {\small\bfseries Lucas Bueno Cesario\par}}}%
+   \begin{frame}[plain]\typeout{FECHAMENTO-NUMERO=\the\c@framenumber}\end{frame}}}
+
+% ---------------------------------------------------------------- roteiro
+% \roteiro{0}: frame numerado com os cinco blocos iguais.
+% \roteiro{n}, n = 1..5: frame [noframenumbering] com o bloco n em destaque.
+\newcommand{\ufsc@bloco}[2]{%
+  \ifnum\ufsc@atual=0\relax
+    {\color{ufscazul}\bfseries\makebox[1.6em][l]{#1}}#2%
+  \else\ifnum\ufsc@atual=#1\relax
+    {\color{ufscazul}\bfseries\makebox[1.6em][l]{#1}#2}%
+  \else
+    {\color{black!40}\makebox[1.6em][l]{#1}#2}%
+  \fi\fi\par}
+\newcommand{\ufsc@roteiro}{%
+  \large
+  \ufsc@bloco{1}{Introdução}\medskip
+  \ufsc@bloco{2}{Fundamentação e trabalhos relacionados}\medskip
+  \ufsc@bloco{3}{Proposta}\medskip
+  \ufsc@bloco{4}{Avaliação}\medskip
+  \ufsc@bloco{5}{Conclusão}}
+\newcommand{\roteiro}[1]{%
+  \def\ufsc@atual{#1}%
+  \ifnum#1=0\relax
+    \begin{frame}{Roteiro}\ufsc@roteiro\end{frame}%
+  \else
+    \begin{frame}[noframenumbering]{Roteiro}\ufsc@roteiro\end{frame}%
+  \fi}
+
+% ---------------------------------------------------------------- cartas na manga
+\newcommand{\cartasnamanga}{\appendix}
+
+% ---------------------------------------------------------------- painel e destaque
+\newtcolorbox{painel}[2]{colback=white, colframe=ufscborda, colupper=ufsctexto,
+  boxrule=0.5pt, arc=0.6mm, boxsep=0pt, left=1.8mm, right=1.8mm, top=1.6mm, bottom=1.6mm,
+  before upper={{\color{ufscazul}\bfseries #1\par}{\color{black!60}#2\par}\smallskip}}
+
+\newcommand{\destaque}[1]{\textcolor{ufscazul}{\textbf{#1}}}
+
+% ---------------------------------------------------------------- listings
+\lstdefinestyle{ufscmono}{basicstyle=\ttfamily\scriptsize, columns=fullflexible,
+  keepspaces=true, showstringspaces=false, upquote=true,
+  literate={á}{{\'a}}1 {é}{{\'e}}1 {í}{{\'i}}1 {ó}{{\'o}}1 {ú}{{\'u}}1
+           {â}{{\^a}}1 {ê}{{\^e}}1 {ô}{{\^o}}1 {ã}{{\~a}}1 {õ}{{\~o}}1 {ç}{{\c c}}1
+           {Á}{{\'A}}1 {É}{{\'E}}1 {Í}{{\'I}}1 {Ó}{{\'O}}1 {Ú}{{\'U}}1
+           {Â}{{\^A}}1 {Ê}{{\^E}}1 {Ô}{{\^O}}1 {Ã}{{\~A}}1 {Õ}{{\~O}}1 {Ç}{{\c C}}1}
+\lstdefinestyle{jsonslide}{style=ufscmono}
+\lstdefinestyle{bashslide}{style=ufscmono}
