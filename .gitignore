@@ -203,3 +203,4 @@ cython_debug/
 
 # Pacotes gerados por scripts/package_release.py
 release/
+
