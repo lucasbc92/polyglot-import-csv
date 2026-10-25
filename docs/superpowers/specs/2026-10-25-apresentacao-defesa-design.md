@@ -1,7 +1,7 @@
 # Design — Apresentação de slides da defesa do TCC2
 
 Data: 2026-10-25
-Status: aprovado em brainstorming; aguardando revisão do autor.
+Status: aprovado pelo autor (2026-10-25).
 Branch: `apresentacao-defesa` (a partir de `main`).
 
 ## Origem e intenção
