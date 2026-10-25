@@ -294,3 +294,243 @@
     \end{tabular}}\par
   \endgroup
 \end{frame}
+
+% Slide 13: algoritmo de execução (relatório §4.3, §4.3.1, Fig. 11; fonte do desenho:
+% images/figure11-import-algorithm.mmd). A Fig. 11 é um retrato de 2308 x 4272 px; o fluxo
+% foi redesenhado na horizontal. As quatro etapas agrupam os nós do .mmd: verificação dos
+% SGBDs (CHK), leitura (LS), mapeamento (BIND, VAL, FILT, MAT) e escrita (WR). O laço
+% "para cada SGBD / para cada entidade" do .mmd cobre as etapas 3 e 4.
+\begin{frame}{Algoritmo de execução}
+  Com as duas configurações validadas, a importação segue \destaque{quatro etapas}:\par
+  \medskip
+  \centering
+  \hyphenpenalty=10000 \exhyphenpenalty=10000
+  \begin{tikzpicture}[x=1mm, y=1mm, font=\scriptsize,
+      caixa/.style={draw=ufscborda, fill=white, rounded corners=0.6mm, inner sep=2pt,
+                    align=center, text=ufsctexto},
+      etapa/.style={caixa, text width=30mm, minimum height=27mm},
+      seta/.style={->, >=stealth, draw=ufscazul!70, thick},
+      falha/.style={->, >=stealth, draw=red!55!black, thick}]
+    % etapa 1
+    \node[etapa] (e1) at (15.5, 0)
+      {\footnotesize\textbf{1. Verificação dos SGBDs}\\[2pt]
+       testa se cada SGBD responde\\[2pt]
+       {\color{black!60}omitida em \texttt{-{}-dry-run}}};
+    \node[caixa, draw=red!55!black, fill=red!6, text width=84mm, minimum height=9mm]
+      (erro) at (42.5, -27.5)
+      {\textbf{SGBD fora do ar ou com conexão inválida:} a execução termina antes de ler
+       os CSVs e mostra como iniciá-lo.};
+    \draw[falha] (e1.south) -- (e1.south |- erro.north);
+    % etapa 2
+    \begin{scope}[visivel em=<2->]
+      \node[etapa] (e2) at (52.5, 0)
+        {\footnotesize\textbf{2. Leitura}\\[2pt]
+         lê cada CSV uma só vez e infere o tipo de cada coluna};
+      \draw[seta] (e1.east) -- (e2.west);
+    \end{scope}
+    % etapa 3
+    \begin{scope}[visivel em=<3->]
+      \node[etapa] (e3) at (89.5, 0)
+        {\footnotesize\textbf{3. Mapeamento}\\[2pt]
+         liga as entidades às fontes, converte os tipos, filtra e monta o modelo de dados
+         de cada SGBD};
+      \draw[seta] (e2.east) -- (e3.west);
+      \draw[dashed, draw=ufscazul!60] (71, 19.5) rectangle (144, -15.5);
+      \node[anchor=south west, inner sep=1pt, text=black!60] at (72, 15)
+        {repete para cada SGBD e cada entidade};
+    \end{scope}
+    % etapa 4 e saída
+    \begin{scope}[visivel em=<4->]
+      \node[etapa, fill=ufscazul, draw=ufscazul, text=white] (e4) at (126.5, 0)
+        {\footnotesize\textbf{4. Escrita}\\[2pt]
+         conecta e grava com a operação própria de cada SGBD\\[2pt]
+         {\color{ufscborda}omitida em \texttt{-{}-dry-run}}};
+      \draw[seta] (e3.east) -- (e4.west);
+      \node[caixa, fill=ufscfundo, text width=46mm, minimum height=9mm] (saida)
+        at (121, -27.5)
+        {\textbf{Saída:} relatório com as contagens por entidade e por SGBD};
+      \draw[seta] (e4.south) -- (e4.south |- saida.north);
+    \end{scope}
+  \end{tikzpicture}
+\end{frame}
+
+% Slide 14: exemplo de execução (relatório §4.3.4)
+% O comando é o lstlisting de ch4proposta.tex (§4.3.4): mesmas opções, mesma ordem, quebras
+% de linha só entre opções. A explicação de --dry-run segue o parágrafo logo abaixo do
+% comando ("executa todas as validações e a materialização, mas não abre conexão com nenhum
+% SGBD"). As contagens e o título são os de tab:dryrun, em duas metades lado a lado.
+\lstdefinestyle{bashgrande}{style=bashslide, basicstyle=\ttfamily\footnotesize}
+\begin{frame}[fragile]{Exemplo de execução}
+  \begin{tcolorbox}[colback=ufscfundo, colframe=ufscborda, boxrule=0.5pt, arc=0.6mm,
+      boxsep=0pt, left=2mm, right=2mm, top=0.6mm, bottom=0.6mm]
+    \footnotesize
+    \renewcommand{\arraystretch}{1.1}
+    \begin{tabular}{@{}l@{\hspace{6mm}}l@{}}
+      \lstinline[style=bashgrande]|python -m polyglotimportcsv \|
+        & {\color{black!60}$\leftarrow$}\enspace executa a ferramenta \\
+      \lstinline[style=bashgrande]|  --config data/ecommerce/import_config.json \|
+        & {\color{black!60}$\leftarrow$}\enspace arquivo de importação \\
+      \lstinline[style=bashgrande]|  --dbms-config data/ecommerce/dbms_config.json \|
+        & {\color{black!60}$\leftarrow$}\enspace arquivo de conexão \\
+      \lstinline[style=bashgrande]|  --dry-run|
+        & {\color{black!60}$\leftarrow$}\enspace valida e conta, sem gravar \\
+    \end{tabular}
+  \end{tcolorbox}
+  \onslide<2->
+  \par\smallskip
+  \begingroup\footnotesize\bfseries\color{ufscazul} Contagens reportadas pelo modo
+  \texttt{-{}-dry-run} no cenário e-commerce\hfill\scriptsize\mdseries\color{black!60}
+  após projeção/deduplicação\par\endgroup
+  \vspace{1pt}
+  \scriptsize
+  \setlength{\tabcolsep}{3pt}
+  \setlength{\aboverulesep}{0.15ex}\setlength{\belowrulesep}{0.3ex}
+  \begin{minipage}[t]{0.49\textwidth}
+    \begin{tabular}[t]{@{}l l E{22mm}@{}}
+      \toprule
+      \bfseries SGBD & \bfseries Destino & \bfseries Registros \\
+      \midrule
+      PostgreSQL & \texttt{categories}         & 8 \\
+      PostgreSQL & \texttt{products}           & 8 \\
+      PostgreSQL & \texttt{inventory}          & 8 \\
+      PostgreSQL & \texttt{orders}             & 8 \\
+      MongoDB    & \texttt{product\_catalog}   & 8 documentos \\
+      Cassandra  & \texttt{user\_activity\_log} & 32 linhas (união das 4 fontes) \\
+      \bottomrule
+    \end{tabular}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.49\textwidth}
+    \begin{tabular}[t]{@{}l l E{34mm}@{}}
+      \toprule
+      \bfseries SGBD & \bfseries Destino & \bfseries Registros \\
+      \midrule
+      Redis & \texttt{shopping\_cart}     & 8 \\
+      Redis & \texttt{user\_session}      & 8 \\
+      Neo4j & nó \texttt{User}            & 8 \\
+      Neo4j & nó \texttt{Product}         & 8 \\
+      Neo4j & aresta \texttt{PURCHASED}   & 8 (uma por linha da fonte \texttt{purchase}) \\
+      \bottomrule
+    \end{tabular}
+  \end{minipage}\par
+\end{frame}
+
+% Slide 15: estratégia de escrita e modelos de execução (relatório §4.5, §4.5.1, §4.5.2)
+% Só conceitos: os números ficam para a avaliação. Vocabulário do relatório: ingênua
+% (naive) x em lote (batch); materialização x fluxo (streaming).
+\newcommand{\fator}[3]{% #1 grupo de altura, #2 painel da esquerda, #3 painel da direita
+  \tcbset{equal height group=#1}%
+  \begin{minipage}[c]{0.455\textwidth}\footnotesize #2\end{minipage}\hfill
+  \begin{minipage}[c]{0.07\textwidth}\centering\Large\color{ufscazul}$\times$%
+  \end{minipage}\hfill
+  \begin{minipage}[c]{0.455\textwidth}\footnotesize #3\end{minipage}\par}
+\begin{frame}{Escrita e execução}
+  \begingroup
+  \footnotesize\destaque{Estratégia de escrita}\enspace
+  {\scriptsize\color{black!60} como os valores viram tipos nativos e são gravados}\par
+  \smallskip
+  \fator{escrita}{%
+    \begin{painel}{ingênua (\textit{naive})}{primeira versão, linha de base}
+      Converte cada célula e grava cada linha com um comando próprio.
+    \end{painel}}{%
+    \begin{painel}{em lote (\textit{batch})}{estratégia atual da ferramenta}
+      Converte uma coluna inteira de uma vez e grava muitos registros por comando.
+    \end{painel}}
+  \onslide<2->{%
+  \medskip
+  \footnotesize\destaque{Modelo de execução}\enspace
+  {\scriptsize\color{black!60} (\texttt{-{}-execution}) quando os dados ocupam a memória}\par
+  \smallskip
+  \fator{execucao}{%
+    \begin{painel}{materialização}{\texttt{materialize}}
+      Carrega a fonte inteira na memória e só então processa. O pico de memória cresce
+      com o tamanho do arquivo.
+    \end{painel}}{%
+    \begin{painel}{fluxo (\textit{streaming})}{\texttt{stream}, o padrão em importações
+        reais}
+      Lê o arquivo em blocos e grava cada bloco antes de ler o próximo. O pico de memória
+      fica perto de um bloco.
+    \end{painel}}}
+  \onslide<3->{%
+  \medskip
+  \footnotesize Os dados gravados são os mesmos nos dois casos. Muda o custo, que a
+  avaliação mede.\par}
+  \endgroup
+\end{frame}
+
+% Slide 16: interface gráfica (relatório §4.6; figure12-gui-ocioso a figure16-gui-verificacao)
+% As capturas têm 1240 x 1020 px. Inteiras, o texto delas sairia com ~2 pt no slide; por
+% isso cada passo mostra recortes (coordenadas em px da captura original), ampliados até o
+% texto ficar legível. Legendas: as do relatório, encurtadas.
+\definecolor{guiconsole}{HTML}{161A21}% fundo do console, lido da captura
+\definecolor{guistatus}{HTML}{EEF1F5}% fundo da barra de estado, lido da captura
+% \recorte{captura}{x0}{y0}{x1}{y1}{largura em mm}
+\newcommand{\recorte}[6]{%
+  \pgfmathsetmacro{\rs}{#6/(#4-#2)}%
+  \pgfmathsetmacro{\rh}{(#5-#3)*\rs}%
+  \pgfmathsetmacro{\ri}{1240*\rs}%
+  \begin{tikzpicture}[x=1mm, y=1mm]
+    \begin{scope}
+      \clip (0,0) rectangle (#6,-\rh);
+      \node[anchor=north west, inner sep=0pt] at ({-#2*\rs},{#3*\rs})
+        {\includegraphics[width=\ri mm]{#1}};
+    \end{scope}
+    \draw[ufscborda, line width=0.5pt] (0,0) rectangle (#6,-\rh);
+  \end{tikzpicture}\par}
+% \faixa{captura}{y0}{y1}{xa0}{xa1}{xb0}{xb1}{escala em mm por px}{cor do fundo}: barra em
+% que só importam as pontas (o miolo é vazio na captura); o miolo é encurtado e marcado.
+\newcommand{\faixa}[9]{%
+  \pgfmathsetmacro{\rh}{(#3-#2)*#8}%
+  \pgfmathsetmacro{\wa}{(#5-#4)*#8}%
+  \pgfmathsetmacro{\wb}{(#7-#6)*#8}%
+  \pgfmathsetmacro{\ri}{1240*#8}%
+  \begin{tikzpicture}[x=1mm, y=1mm]
+    \fill[#9] (0,0) rectangle (147.2,-\rh);
+    \begin{scope}
+      \clip (0,0) rectangle (\wa,-\rh);
+      \node[anchor=north west, inner sep=0pt] at ({-#4*#8},{#2*#8})
+        {\includegraphics[width=\ri mm]{#1}};
+    \end{scope}
+    \begin{scope}[shift={({147.2-\wb},0)}]
+      \clip (0,0) rectangle (\wb,-\rh);
+      \node[anchor=north west, inner sep=0pt] at ({-#6*#8},{#2*#8})
+        {\includegraphics[width=\ri mm]{#1}};
+    \end{scope}
+    \node[text=gray] at ({(\wa+147.2-\wb)/2},{-\rh/2}) {\scriptsize$\cdots$};
+    \draw[ufscborda, line width=0.5pt] (0,0) rectangle (147.2,-\rh);
+  \end{tikzpicture}\par}
+\newcommand{\passogui}[2]{% #1 recortes, #2 legenda
+  \parbox[t][41mm][t]{\textwidth}{#1}\par
+  \smallskip
+  {\footnotesize #2\par}}
+\begin{frame}{Interface gráfica}
+  \destaque{O comando exibido é o comando executado.}\hfill
+  {\scriptsize\color{black!60} recortes das capturas de tela}\par
+  \smallskip
+  \only<1>{\passogui{%
+    \recorte{figure12-gui-ocioso}{22}{186}{830}{345}{147}\vspace{1.5mm}
+    \recorte{figure12-gui-ocioso}{22}{640}{1000}{680}{147}}{%
+    \textbf{Ocioso:} um controle para cada opção da CLI, com ícone de ajuda, e o comando
+    montado, colorido e somente leitura.}}
+  \only<2>{\passogui{%
+    \recorte{figure13-gui-executando}{22}{236}{600}{282}{116}\vspace{1.5mm}
+    \faixa{figure13-gui-executando}{735}{770}{16}{130}{700}{1230}{0.2}{guiconsole}\vspace{1.5mm}
+    \recorte{figure13-gui-executando}{22}{835}{700}{925}{136}}{%
+    \textbf{Executando:} formulário bloqueado, botão de interrupção e saída colorida da CLI
+    chegando ao console em tempo real.}}
+  \only<3>{\passogui{%
+    \faixa{figure14-gui-sucesso}{735}{770}{16}{130}{700}{1230}{0.2}{guiconsole}\vspace{3mm}
+    \recorte{figure14-gui-sucesso}{22}{925}{700}{948}{147}\vspace{3mm}
+    \faixa{figure14-gui-sucesso}{997}{1020}{0}{125}{780}{1240}{0.22}{guistatus}}{%
+    \textbf{Concluído:} tempo total e arquivo de log da sessão na barra de estado.}}
+  \only<4>{\passogui{%
+    \recorte{figure15-gui-erro}{22}{40}{760}{112}{147}\vspace{1.5mm}
+    \recorte{figure15-gui-erro}{22}{139}{760}{160}{147}\vspace{1.5mm}
+    \faixa{figure15-gui-erro}{735}{770}{16}{130}{700}{1230}{0.2}{guiconsole}}{%
+    \textbf{Erro antes de executar:} a configuração de importação viola o \textit{JSON
+    Schema}; a mensagem é a da CLI e o botão Executar fica desabilitado.}}
+  \only<5>{\passogui{%
+    \faixa{figure16-gui-verificacao}{735}{770}{16}{130}{700}{1230}{0.2}{guiconsole}\vspace{1.5mm}
+    \recorte{figure16-gui-verificacao}{22}{775}{770}{945}{130}}{%
+    \textbf{Verificação dos SGBDs:} MongoDB e Neo4j fora do ar e, abaixo da tabela de
+    estados, os comandos que os iniciam.}}
+\end{frame}
