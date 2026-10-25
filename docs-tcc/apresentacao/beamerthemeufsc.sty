@@ -9,6 +9,8 @@
 \RequirePackage{tikz}
 \RequirePackage{tcolorbox}
 \RequirePackage{listings}
+\RequirePackage{booktabs}
+\RequirePackage{array}
 \RequirePackage{appendixnumberbeamer}
 
 \graphicspath{{../images/}{../}}
@@ -127,6 +129,9 @@
   before upper={{\color{ufscazul}\bfseries #1\par}{\color{black!60}#2\par}\smallskip}}
 
 \newcommand{\destaque}[1]{\textcolor{ufscazul}{\textbf{#1}}}
+
+% Coluna de tabela com texto alinhado à esquerda (sem justificação em colunas estreitas).
+\newcolumntype{E}[1]{>{\raggedright\arraybackslash}p{#1}}
 
 % ---------------------------------------------------------------- listings
 \lstdefinestyle{ufscmono}{basicstyle=\ttfamily\scriptsize, columns=fullflexible,

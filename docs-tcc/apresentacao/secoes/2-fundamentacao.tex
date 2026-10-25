@@ -1,1 +1,82 @@
 \roteiro{2}
+
+% Slide 6: cinco paradigmas (relatório §2.1, §2.2)
+% As figuras 3 a 6 do relatório não entram: em cinco colunas ficariam ilegíveis.
+\newcommand{\paradigma}[4]{%
+  \begin{minipage}[t]{0.186\textwidth}
+    \begin{painel}{#1}{#2}
+      \raggedright #3\par\smallskip
+      \destaque{Exemplo:} #4
+    \end{painel}
+  \end{minipage}}
+\begin{frame}{Cinco paradigmas, cinco SGBDs}
+  \begingroup\tcbset{equal height group=paradigmas}\small
+  \paradigma{Relacional}{PostgreSQL}
+    {Tabelas ligadas por chaves, com transações consistentes.}
+    {pedidos e inventário.}\hfill
+  \paradigma{Chave-valor}{Redis}
+    {Cada chave aponta para um valor.}
+    {carrinho e sessão.}\hfill
+  \paradigma{Documento}{MongoDB}
+    {Documentos JSON com campos variáveis.}
+    {catálogo de produtos.}\hfill
+  \paradigma{Colunar}{Cassandra}
+    {Linhas com famílias de colunas.}
+    {log de atividade.}\hfill
+  \paradigma{Grafo}{Neo4j}
+    {Nós e arestas com propriedades.}
+    {recomendação de produtos.}\par
+  \endgroup
+  \smallskip
+  Os quatro últimos são os bancos \destaque{NoSQL} (não relacionais).\par
+  Um SGBD \destaque{multimodelo} reúne vários desses modelos no mesmo sistema.
+\end{frame}
+
+% Slide 7: trabalhos relacionados (relatório Cap. 3)
+% Legenda: \tbok = o Cap. 3 afirma; \tbno = o Cap. 3 nega; \tbnd = o Cap. 3 não diz.
+\newcommand{\tbok}{\checkmark}
+\newcommand{\tbno}{$\times$}
+\newcommand{\tbnd}{\textemdash}
+\begin{frame}{Trabalhos relacionados}
+  \begingroup\footnotesize\bfseries\color{ufscazul} Comparação com os trabalhos relacionados\hfill
+   \scriptsize\mdseries\color{ufsctexto}
+   \tbok{} o Cap.~3 afirma \quad \tbno{} o Cap.~3 nega \quad \tbnd{} o Cap.~3 não diz\par\endgroup
+  \vspace{2pt}
+  \scriptsize
+  \setlength{\tabcolsep}{2.5pt}
+  \setlength{\aboverulesep}{0.25ex}\setlength{\belowrulesep}{0.4ex}
+  \renewcommand{\arraystretch}{1}
+  \begin{tabular}{@{}E{0.235\textwidth}E{0.167\textwidth}E{0.205\textwidth}E{0.08\textwidth}%
+      E{0.12\textwidth}E{0.115\textwidth}@{}}
+    \toprule
+    \bfseries Trabalho & \bfseries Foco & \bfseries Destinos & \bfseries Entrada CSV
+    & \bfseries Mapeamento declarativo validado & \bfseries Revisão sem gravar \\
+    \midrule
+    Importadores nativos & importação & um SGBD por vez
+      & \tbok\textsuperscript{1} & \tbnd & \tbnd \\
+    \addlinespace[2pt]
+    ArangoDB e \texttt{arangoimport} & importação & um SGBD multimodelo
+      & \tbok & \tbnd & \tbnd \\
+    \addlinespace[2pt]
+    dbcrossbar & migração & PostgreSQL, BigQuery, nuvem & \tbok & \tbnd & \tbnd \\
+    \addlinespace[2pt]
+    Hackolade & modelagem visual & dezenas de alvos & \tbno & \tbnd & \tbnd \\
+    \addlinespace[2pt]
+    Frameworks de acesso\textsuperscript{2} & acesso em tempo de execução & vários SGBDs
+      & \tbno & \tbnd & \tbnd \\
+    \addlinespace[2pt]
+    \textit{Polystores} (BigDAWG) & consulta federada & fontes heterogêneas
+      & \tbnd & \tbnd & \tbnd \\
+    \midrule
+    \onslide<2->{\destaque{Polyglot Import CSV}} & \onslide<2->{\destaque{importação}}
+      & \onslide<2->{\destaque{cinco SGBDs, cinco paradigmas}}
+      & \onslide<2->{\destaque{\tbok}}
+      & \onslide<2->{\destaque{\tbok{} (JSON Schema)}}
+      & \onslide<2->{\destaque{\tbok{} (\texttt{-{}-dry-run})}} \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{3pt}
+  {\scriptsize\color{black!70}
+   \textsuperscript{1} Redis: arquivo em protocolo bruto. \quad
+   \textsuperscript{2} (PEREIRA; GUERRA; ROSA, 2025; SACHDEVA; VASAVA, 2024)\par}
+\end{frame}

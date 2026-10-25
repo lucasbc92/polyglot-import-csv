@@ -1,1 +1,87 @@
 \roteiro{1}
+
+% Slide 3: persistência poliglota (relatório §1.1, §2.1, Fig. 1)
+% A Fig. 1 do relatório (images/figure1-polyglot-ecommerce.png) rende texto de ~4,7 pt em
+% largura total; o desenho abaixo repete o seu conteúdo em TikZ, com texto legível.
+\begin{frame}{Persistência poliglota}
+  \begin{itemize}
+    \item Um só modelo de dados não atende todas as necessidades.
+    \item \destaque{Persistência poliglota}: cada tipo de dado fica no SGBD (sistema
+          gerenciador de banco de dados) mais adequado.
+  \end{itemize}
+  \vfill
+  \centering
+  \begin{tikzpicture}[x=1mm, y=1mm, font=\footnotesize,
+      caixa/.style={draw=ufscborda, fill=white, rounded corners=0.6mm, inner sep=2pt,
+                    minimum height=6.2mm, anchor=west, align=left, text=ufsctexto},
+      seta/.style={->, >=stealth, draw=ufscazul!70, thick}]
+    \node[caixa, fill=ufscfundo, align=center, minimum width=34mm] (csv) at (0,0)
+      {CSV operacional\\[-1pt]{\scriptsize\texttt{ecommerce\_join.csv}}};
+    \node[caixa, fill=ufscazul, draw=ufscazul, text=white, align=center, minimum width=34mm]
+      (tool) at (42,0) {\bfseries Polyglot Import CSV\\[-1pt]{\scriptsize configuração JSON}};
+    \node[caixa, minimum width=58mm] (n1) at (88, 16)  {\textbf{PostgreSQL} · pedidos e inventário};
+    \node[caixa, minimum width=58mm] (n2) at (88, 8)   {\textbf{MongoDB} · catálogo de produtos};
+    \node[caixa, minimum width=58mm] (n3) at (88, 0)   {\textbf{Redis} · carrinho e sessão};
+    \node[caixa, minimum width=58mm] (n4) at (88, -8)  {\textbf{Cassandra} · log de atividade};
+    \node[caixa, minimum width=58mm] (n5) at (88, -16) {\textbf{Neo4j} · recomendações};
+    \draw[seta] (csv.east) -- (tool.west);
+    \foreach \i in {1,...,5} \draw[seta] (tool.east) -- (n\i.west);
+  \end{tikzpicture}\par
+  \medskip
+  {\footnotesize Cada dado do e-commerce no SGBD mais adequado.
+   CSV: texto com valores separados por vírgula.\par}
+\end{frame}
+
+% Slide 4: o problema (relatório §1.1, §3.1)
+\begin{frame}{O problema}
+  \begin{itemize}
+    \item Cada SGBD tem o seu \destaque{importador nativo}, com sintaxe própria.
+    \item Cada importador atende um único SGBD por vez.
+    \item Nenhuma ferramenta encontrada importa o mesmo CSV nos cinco.
+  \end{itemize}
+  \vfill
+  {\footnotesize\bfseries\color{ufscazul} Importadores nativos de CSV\par}
+  \smallskip
+  \footnotesize
+  \setlength{\tabcolsep}{3pt}
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabular}{@{}E{0.1\textwidth}*{5}{E{0.16\textwidth}}@{}}
+    \toprule
+    & \bfseries PostgreSQL & \bfseries Redis & \bfseries MongoDB & \bfseries Cassandra
+    & \bfseries Neo4j \\
+    \midrule
+    \textcolor{black!60}{Comando}
+      & \texttt{COPY}
+      & \texttt{redis-cli -{}-pipe}
+      & \texttt{mongoimport}
+      & \texttt{cqlsh} e \texttt{sstableloader}
+      & \texttt{neo4j-admin import} \\
+    \textcolor{black!60}{Detalhe}
+      & colunas na ordem do CSV
+      & arquivo em protocolo bruto
+      & tipo e cabeçalho por parâmetros
+      & conversão para SSTable (formato próprio)
+      & CSV separado para nós e relacionamentos \\
+    \bottomrule
+  \end{tabular}
+\end{frame}
+
+% Slide 5: objetivos (relatório §1.2)
+\begin{frame}{Objetivos}
+  \begin{painel}{Objetivo geral}{}
+    Desenvolver a ferramenta \textit{Polyglot Import CSV}, que importa CSV para
+    PostgreSQL, Redis, MongoDB, Cassandra ou Neo4j.
+  \end{painel}
+  \smallskip
+  \begin{painel}{Objetivos específicos}{}
+    \small
+    \begin{enumerate}
+      \item \destaque{Configuração} em JSON (texto estruturado): filtros, chave primária e
+            nome da coluna.
+      \item \destaque{Validação prévia}: um erro na configuração impede o início da
+            importação.
+      \item \destaque{Avaliação} do desempenho com diferentes volumes e modelos de dados.
+      \item \destaque{Acesso} por linha de comando (CLI) e por interface gráfica (GUI).
+    \end{enumerate}
+  \end{painel}
+\end{frame}
