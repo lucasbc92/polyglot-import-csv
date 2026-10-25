@@ -12,6 +12,12 @@
 \RequirePackage{booktabs}
 \RequirePackage{array}
 \RequirePackage{appendixnumberbeamer}
+% Gráficos e números da avaliação: mesmas opções do docs-tcc/main.tex (formato brasileiro).
+\RequirePackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\pgfkeys{/pgf/number format/.cd, use comma, 1000 sep={.}, 1000 sep in fractionals=false}
+\RequirePackage{siunitx}
+\sisetup{output-decimal-marker={,}, group-separator={.}, group-minimum-digits=4}
 
 \graphicspath{{../images/}{../}}
 

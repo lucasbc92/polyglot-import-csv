@@ -1,1 +1,264 @@
 \roteiro{4}
+
+% Bloco de avaliação: relatório v2.3, Cap. 5 (fonte: chapters/ch6avaliacao.tex).
+% Todo número foi copiado do ch6avaliacao.tex. Os rótulos dos gráficos são explícitos
+% (point meta=explicit symbolic), com a mesma grafia do relatório. Tempo e memória vêm de
+% campanhas distintas (§5.1.2): cada gráfico ou tabela declara a sua na linha "Fonte:".
+\newcommand{\avfonte}[1]{{\scriptsize\raggedright\color{black!60}Fonte: #1\par}}
+\pgfplotsset{
+  avgrafico/.style={axis lines*=left, axis line style={draw=black!45},
+    tick style={draw=black!45}, tick label style={font=\footnotesize},
+    label style={font=\footnotesize},
+    nodes near coords style={font=\footnotesize, text=ufsctexto},
+    legend style={draw=none, fill=none, font=\footnotesize, legend columns=-1,
+      /tikz/every even column/.append style={column sep=3mm}},
+    legend cell align=left},
+  avclaro/.style={fill=ufscborda, draw=ufscazul!45},
+  avescuro/.style={fill=ufscazul, draw=ufscazul}}
+
+% Slide 17: metodologia (relatório §5.1, §5.1.1, §5.1.2, §5.2 e tab:ambiente-sgbds)
+% As QP têm os nomes do §5.1. Ordem dos passos: dados, protocolo, ambiente, QP.
+\newcommand{\avitem}[2]{\destaque{#1}\enspace #2\par\smallskip}
+\newcommand{\avqp}[2]{\makebox[2.4em][l]{\destaque{#1}}#2\par}
+% \vspace{0pt} no topo das colunas: alinha as minipages [t] pelo topo, comecem elas por
+% texto ou por painel.
+\begin{frame}{Metodologia da avaliação}
+  \begin{minipage}[t]{0.56\textwidth}
+    \vspace{0pt}\footnotesize\raggedright
+    \onslide<1->{%
+      \avitem{Dados sintéticos.}{Um gerador determinístico cria o cenário e-commerce: a
+        mesma escala $N$ gera sempre os mesmos arquivos.}
+      \avitem{Volumes.}{$N = \num{1000}$, \num{10000} e \num{100000} linhas.}}
+    \onslide<2->{%
+      \avitem{Repetições.}{Cada combinação (volume, modo, estratégia, modelo de execução)
+        roda três vezes, com os SGBDs limpos antes. Vale a mediana (o valor do meio).}
+      \avitem{Duas campanhas.}{Tempo: sem instrumentação de memória, que distorce as fases.
+        Pico de memória (maior memória alocada pelo Python): com ela.}
+      \avitem{Precisão.}{Tempo: cerca de 20\%; memória: $<$~0,1\%.}}
+    \avfonte{§5.1, §5.2 e Tabela 13 do relatório.}
+  \end{minipage}\hfill
+  \onslide<3->{%
+  \begin{minipage}[t]{0.41\textwidth}
+    \vspace{0pt}\footnotesize\tcbset{halign=flush left, before skip=0pt, after skip=1.5mm}
+    \begin{painel}{Ambiente}{uma máquina: Windows 11, 8 GB}
+      Em Docker: PostgreSQL 16, Redis 7, MongoDB 7, Cassandra 4.1 (\textit{heap} de
+      1 GB) e Neo4j~5.
+    \end{painel}
+    \onslide<4->{%
+    \begin{painel}{Questões de pesquisa (QP)}{}
+      \avqp{QP1}{Custo por SGBD}
+      \avqp{QP2}{Modos de importação}
+      \avqp{QP3}{Escalabilidade}
+      \avqp{QP4}{Estratégia de escrita}
+      \avqp{QP5}{Modelo de execução}
+      \avqp{QP6}{Memória limitada}
+    \end{painel}}
+  \end{minipage}}
+\end{frame}
+
+% Slide 18: estratégia de escrita (relatório §5.3.1; tab:naive-optimized e fig:naive-optimized)
+% Escala linear (a Figura 17 do relatório usa escala log): a razão de ~9x aparece na altura
+% das barras. Coordenadas e rótulos são os do relatório.
+\begin{frame}{Em lote: cerca de 9$\times$ mais rápida (QP4)}
+  \begin{minipage}[t]{0.58\textwidth}
+    {\footnotesize\bfseries\color{ufscazul}Tempo total de importação\par}
+    \begin{tikzpicture}
+      \begin{axis}[avgrafico, ybar, scale only axis, width=62mm, height=36mm,
+          bar width=24pt, symbolic x coords={multifonte, combinado}, xtick=data,
+          enlarge x limits=0.5, ymin=0, ymax=170, ytick={0,50,100,150},
+          ylabel={Tempo total (s)}, nodes near coords, point meta=explicit symbolic,
+          legend style={at={(0.5,1.03)}, anchor=south}]
+        \addplot[avclaro] coordinates {(multifonte,135.74)[135,74] (combinado,138.44)[138,44]};
+        \addplot[avescuro] coordinates {(multifonte,14.54)[14,54] (combinado,16.30)[16,30]};
+        \legend{ingênua, em lote}
+      \end{axis}
+    \end{tikzpicture}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.39\textwidth}
+    \centering
+    {\fontsize{34}{38}\selectfont\bfseries\color{ufscazul}\textasciitilde9\texttimes\par}
+    \smallskip
+    {\small mais rápida que a ingênua\par}
+    \medskip
+    \footnotesize
+    \begin{tabular}{@{}l r@{}}
+      multifonte & 9,3$\times$ \\
+      combinado  & 8,5$\times$
+    \end{tabular}\par
+    \smallskip
+    as mesmas \num{27494} linhas gravadas\par
+    \medskip
+    \onslide<2->{\raggedright
+      \destaque{Onde está o ganho} (multifonte):\par
+      mapeamento cerca de 42$\times$ mais rápido (conversão vetorizada);\par
+      escrita 7,7$\times$ mais rápida (gravação em lote).\par}
+  \end{minipage}\par
+  \vfill
+  \avfonte{Tabela 14 e Figura 17 do relatório; $N = \num{10000}$, materialização; campanha
+    sem instrumentação de memória.}
+\end{frame}
+
+% Slide 19: onde está o tempo (relatório §5.3.2, §5.4; tab:fases-100k, fig:throughput-sgbd e
+% fig:tempo-execucao). Os três vêm da campanha sem instrumentação de memória.
+% Barra empilhada: alturas proporcionais às participações da Tabela 15 (5,1; 3,9; 91,0%).
+\newcommand{\avH}{27}
+\begin{frame}{A escrita domina o tempo (QP1, QP3)}
+  \begingroup\footnotesize\tcbset{equal height group=avtempo, halign=flush left}
+  \begin{minipage}[t]{0.28\textwidth}
+    \vspace{0pt}
+    \begin{painel}{A escrita é 91,0\% do tempo}{por fase; 100 mil linhas}
+      \begin{tikzpicture}[x=1mm, y=1mm, every node/.style={inner sep=1pt}]
+        % de baixo para cima: escrita, mapeamento, leitura (a seleção é 0,0%)
+        \fill[ufscazul]    (0,0)              rectangle (6,{0.910*\avH});
+        \fill[ufscazul!45] (0,{0.910*\avH})   rectangle (6,{0.949*\avH});
+        \fill[ufscborda]   (0,{0.949*\avH})   rectangle (6,\avH);
+        \node[anchor=west, align=left] at (7.5,{0.45*\avH})
+          {\textbf{Escrita} 91,0\%\\{\color{black!60}136,34 de 149,93 s}};
+        \draw[black!45] (6,{0.9295*\avH}) -- (7.5,{0.80*\avH})
+          node[anchor=west, text=ufsctexto] {Mapeamento 3,9\%};
+        \draw[black!45] (6,{0.9745*\avH}) -- (7.5,{1.06*\avH})
+          node[anchor=west, text=ufsctexto] {Leitura 5,1\%};
+        \node[anchor=north west, inner sep=0pt, text=black!60] at (0,-1.5)
+          {Seleção 0,0\%};
+      \end{tikzpicture}
+    \end{painel}
+  \end{minipage}\hfill
+  \onslide<2->{%
+  \begin{minipage}[t]{0.38\textwidth}
+    \vspace{0pt}
+    \begin{painel}{A vazão varia mais de uma ordem de grandeza}{vazão
+        (\textit{throughput}): linhas gravadas por segundo}
+      \begin{tikzpicture}
+        \begin{axis}[avgrafico, xbar, scale only axis, width=24mm, height=22mm,
+            bar width=7pt, axis x line=none, axis y line*=left,
+            symbolic y coords={Cassandra, Neo4j, PostgreSQL, Redis, MongoDB}, ytick=data,
+            xmin=0, xmax=19000, enlarge y limits=0.15, nodes near coords,
+            nodes near coords style={anchor=west}, point meta=explicit symbolic]
+          \addplot[avescuro] coordinates {(912,Cassandra)[912] (3901,Neo4j)[\num{3901}]
+            (7644,PostgreSQL)[\num{7644}] (10865,Redis)[\num{10865}]
+            (14431,MongoDB)[\num{14431}]};
+        \end{axis}
+      \end{tikzpicture}\par
+      {\scriptsize\color{black!60}Cassandra: \textit{heap} de 1 GB numa máquina virtual de
+       cerca de 3,8 GB.\par}
+    \end{painel}
+  \end{minipage}}\hfill
+  \onslide<3->{%
+  \begin{minipage}[t]{0.31\textwidth}
+    \vspace{0pt}
+    \begin{painel}{Tempo aproximadamente proporcional ao volume}{tempo total (s) por
+        número de linhas}
+      \begin{tikzpicture}
+        \begin{axis}[avgrafico, ybar, scale only axis, width=38mm, height=21mm,
+            bar width=8pt, axis y line=none, axis x line*=bottom,
+            symbolic x coords={1000, 10000, 100000}, xtick=data,
+            xticklabels={\num{1000}, \num{10000}, \num{100000}}, enlarge x limits=0.22,
+            ymin=0, ymax=360, nodes near coords, point meta=explicit symbolic,
+            nodes near coords style={rotate=90, anchor=west},
+            legend style={at={(0.5,1.02)}, anchor=south, font=\scriptsize,
+              /tikz/every even column/.append style={column sep=1.5mm}}]
+          \addplot[avclaro] coordinates {(1000,2.87)[2,87] (10000,16.20)[16,20]
+            (100000,149.93)[149,93]};
+          \addplot[avescuro] coordinates {(1000,4.63)[4,63] (10000,20.94)[20,94]
+            (100000,165.03)[165,03]};
+          \legend{materialização, fluxo}
+        \end{axis}
+      \end{tikzpicture}
+    \end{painel}
+  \end{minipage}}\par
+  \endgroup
+  \vfill
+  \avfonte{Tabela 15, Figura 18 e Figura 20 do relatório; multifonte, em lote; fases e vazão
+    com $N = \num{100000}$ e materialização; campanha sem instrumentação de memória.}
+\end{frame}
+
+% Slide 20: modos de importação (relatório §5.3.3, §5.4; tab:multi-combined)
+% Cada linha compara os dois modos dentro de uma só campanha; as duas campanhas ficam em
+% grupos separados, como na Tabela 17 do relatório.
+\begin{frame}{Multifonte $\times$ combinado: empate no tempo (QP2)}
+  \begin{minipage}[t]{0.57\textwidth}
+    {\footnotesize\bfseries\color{ufscazul}Multifonte \textit{versus} combinado, 100 mil
+     linhas, em lote\par}
+    \smallskip
+    \footnotesize
+    \setlength{\tabcolsep}{5pt}
+    \setlength{\aboverulesep}{0.3ex}\setlength{\belowrulesep}{0.4ex}
+    \begin{tabular}{@{}l r r@{}}
+      \toprule
+      & \bfseries Multifonte & \bfseries Combinado \\
+      \midrule
+      \multicolumn{3}{@{}l}{\destaque{Tempo (s)}} \\
+      \multicolumn{3}{@{}l}{\scriptsize\color{black!60}campanha sem instrumentação de
+        memória} \\
+      Total, materialização   & 149,93 & 161,94 \\
+      Total, fluxo            & 165,03 & 181,42 \\
+      Leitura, materialização &   7,69 &  15,15 \\
+      \midrule
+      \multicolumn{3}{@{}l}{\destaque{Pico de memória (MB)}} \\
+      \multicolumn{3}{@{}l}{\scriptsize\color{black!60}campanha com instrumentação de
+        memória} \\
+      Materialização          & 950,7  & \num{1009.5} \\
+      Fluxo                   &  75,9  &  79,8 \\
+      \bottomrule
+    \end{tabular}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.4\textwidth}
+    \onslide<2->{%
+      \footnotesize\raggedright
+      \avitem{Tempo total: empate.}{O combinado é cerca de 8\% (materialização) e 10\%
+        (fluxo) mais lento, abaixo da incerteza de cerca de 20\%.}
+      \avitem{Leitura:}{o multifonte lê duas vezes mais rápido.}
+      \avitem{Memória:}{o multifonte ocupa de 5 a 6\% menos.}
+      {\color{black!60}O combinado tem 45\% de células vazias e é separado por tipo de
+       evento durante a leitura.\par}}
+  \end{minipage}\par
+  \vfill
+  \avfonte{Tabela 17 do relatório; $N = \num{100000}$, em lote; tempos da campanha sem
+    instrumentação de memória, picos da campanha com instrumentação.}
+\end{frame}
+
+% Slide 21: modelos de execução (relatório §5.3.4, §5.4; tab:memoria, fig:memoria e
+% tab:tempo-execucao). Memória e tempo vêm de campanhas distintas: cada um tem a sua fonte.
+% Escala log como na Figura 19; rótulos explícitos (nodes near coords mostraria o log).
+\begin{frame}{O fluxo achata o pico de memória (QP5, QP6)}
+  \begin{minipage}[t]{0.57\textwidth}
+    {\footnotesize\bfseries\color{ufscazul}Pico de memória, multifonte, em lote\par}
+    \begin{tikzpicture}
+      \begin{axis}[avgrafico, ybar, ymode=log, log origin=infty, scale only axis,
+          width=58mm, height=29mm, bar width=14pt,
+          symbolic x coords={1000, 10000, 100000}, xtick=data,
+          xticklabels={\num{1000}, \num{10000}, \num{100000}}, enlarge x limits=0.25,
+          xlabel={Linhas}, ylabel={MB (escala log)}, ymin=1, ymax=50000,
+          ytick={1,10,100,1000}, log ticks with fixed point,
+          nodes near coords, point meta=explicit symbolic,
+          nodes near coords style={rotate=90, anchor=west},
+          legend style={at={(0.5,1.03)}, anchor=south}]
+        \addplot[avclaro] coordinates {(1000,10.5)[10,5] (10000,95.3)[95,3]
+          (100000,950.7)[950,7]};
+        \addplot[avescuro] coordinates {(1000,10.7)[10,7] (10000,47.8)[47,8]
+          (100000,75.9)[75,9]};
+        \legend{materialização, fluxo}
+      \end{axis}
+    \end{tikzpicture}\par
+    \avfonte{Tabela 18 e Figura 19 do relatório; campanha com instrumentação de memória.}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.4\textwidth}
+    \onslide<2->{%
+      \centering
+      {\fontsize{28}{32}\selectfont\bfseries\color{ufscazul}12,5\texttimes\par}
+      {\small menos memória em 100 mil linhas\par}
+      \medskip
+      \raggedright\footnotesize
+      \avitem{Materialização:}{praticamente 90$\times$ mais memória para 100$\times$ mais
+        dados.}
+      \avitem{Fluxo:}{o pico achata. Depende do tamanho do bloco, não do arquivo (QP6).}}
+    \onslide<3->{%
+      \begin{tcolorbox}[colback=ufscfundo, colframe=ufscborda, boxrule=0.5pt, arc=0.6mm,
+          boxsep=0pt, left=1.8mm, right=1.8mm, top=1.2mm, bottom=1.2mm,
+          halign=flush left]
+        \footnotesize\destaque{Custo:} $+10\%$ de tempo em 100 mil linhas ($+61\%$ em
+        mil).\par
+        \avfonte{Tabela 19 do relatório; campanha sem instrumentação de memória.}
+      \end{tcolorbox}}
+  \end{minipage}
+\end{frame}
