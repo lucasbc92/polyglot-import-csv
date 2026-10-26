@@ -50,9 +50,8 @@
 % questões para a importação. Atomicidade: ver a carta B1 (secoes/6-cartas.tex).
 \newcommand{\cmaberto}{{\color{red!55!black}\bfseries em aberto}}
 \begin{frame}{Resolve $\times$ em aberto}
-  O artigo trata de \destaque{evolução de esquemas} em persistência poliglota; este trabalho,
-  de \destaque{importação}. Três questões que a conclusão do artigo deixa a tratar, levadas
-  para a importação (ARAUJO; SILVA; MELLO, 2025):\par
+  O artigo trata de \destaque{evolução de esquemas}; este trabalho, de \destaque{importação}.\par
+  Três questões do artigo, levadas para a importação (ARAUJO; SILVA; MELLO, 2025):\par
   \medskip
   \footnotesize
   \setlength{\tabcolsep}{3pt}
@@ -63,14 +62,14 @@
       & \bfseries Situação \\
     \midrule
     \textit{Gerar instruções adequadas a cada SGBD}
-      & Um só arquivo de importação gera a escrita de cada SGBD: SQL, CQL, Cypher, comandos
-        do Redis e documentos do MongoDB.
+      & Um só arquivo de importação gera a escrita de cada SGBD: SQL, CQL (Cassandra),
+        Cypher (Neo4j), comandos do Redis e documentos do MongoDB.
       & \destaque{resolve} \\
     \textit{Estimar o efeito das modificações antes que sejam executadas}
       & Validação prévia e \texttt{-{}-dry-run}: contagens por SGBD e por entidade, sem
         gravar.
       & \destaque{resolve} \\
-    \leavevmode\onslide<2->{\textit{Garantir atomicidade}}
+    \leavevmode\onslide<2->{\textit{Garantir atomicidade} (tudo ou nada)}
       & \leavevmode\onslide<2->{Grava um SGBD por vez, sem transação comum: uma falha no meio deixa uma
         carga parcial.}
       & \leavevmode\onslide<2->{\cmaberto} \\

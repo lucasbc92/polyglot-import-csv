@@ -20,31 +20,24 @@
 % desfazer); sinks/postgres_sink.py e importers/postgres_importer.py (autocommit = True);
 % importers/cassandra_importer._write_batched (WRITE_RETRIES = 3); build_insert_sql
 % (ON CONFLICT DO NOTHING com chave), INSERT do Cassandra (upsert), SET do Redis, MERGE do
-% Neo4j, insert_many do MongoDB (sem _id derivado da chave). Coerente com o slide 23.
+% Neo4j, insert_many do MongoDB (sem _id derivado da chave; com um _id mapeado, a
+% reexecução para na chave repetida). Coerente com o slide 23. O reenvio do Cassandra
+% (WRITE_RETRIES) saiu do slide na rodada de correção: detalhe, fica para a fala.
 \begin{frame}{Falha no meio da importação}
-  \bkpar{b1}{%
-    \begin{painel}{O que a ferramenta faz}{}
-      \begin{bklista}
-        \item Antes de ler os CSVs, verifica se os SGBDs de destino respondem. Um fora do ar
-              interrompe tudo.
-        \item Grava um SGBD por vez, em lotes: PostgreSQL, MongoDB, Cassandra, Redis, Neo4j.
-        \item No Cassandra, reenvia até três vezes as linhas que falharam.
-        \item Num erro, para e mostra a mensagem.
-      \end{bklista}
-    \end{painel}}{%
-    \begin{painel}{O que não garante}{}
-      \begin{bklista}
-        \item \destaque{Atomicidade entre SGBDs}: não há transação comum nem desfazer
-              (\textit{rollback}).
-        \item Os SGBDs anteriores ficam gravados. O que falhou fica com os lotes já
-              enviados. Os seguintes não recebem nada.
-        \item Ao reexecutar, com chave declarada, PostgreSQL, Cassandra, Redis e Neo4j não
-              duplicam registros. O MongoDB duplica documentos.
-      \end{bklista}
-    \end{painel}}
-  \medskip
-  \footnotesize Para retomar: corrigir e reexecutar, com \texttt{-{}-only} para escolher os
-  SGBDs. A atomicidade entre SGBDs continua \destaque{em aberto} (slide 23).\par
+  \small
+  \begin{itemize}
+    \setlength{\itemsep}{5pt}
+    \item \destaque{Antes de ler os CSVs}, verifica se todos os SGBDs de destino respondem.
+          Um fora do ar interrompe tudo.
+    \item \destaque{Um SGBD por vez}, em lotes: PostgreSQL, MongoDB, Cassandra, Redis, Neo4j.
+    \item \destaque{Sem atomicidade entre SGBDs} (em aberto, slide 23): não há transação
+          comum nem desfazer (\textit{rollback}).
+    \item \destaque{Falha no meio}: os SGBDs anteriores ficam gravados, o que falhou fica
+          parcial, os seguintes ficam vazios.
+    \item \destaque{Reexecução} com \texttt{-{}-only}: com chave, PostgreSQL, Cassandra, Redis
+          e Neo4j não duplicam. No MongoDB, sem \texttt{\_id} mapeado, duplica documentos;
+          com \texttt{\_id}, para na chave repetida.
+  \end{itemize}
 \end{frame}
 
 % B2: coerção de tipos. Conferido no código: csv_reader.read_csv (tudo como texto, vazio
@@ -100,7 +93,7 @@
       \begin{bklista}
         \item Quem projeta decide que dado vai para cada SGBD, com chaves, partições e
               arestas.
-        \item O arquivo pode ser revisto e é validado antes de gravar.
+        \item O arquivo pode ser revisto, e o \texttt{-{}-dry-run} o valida sem gravar.
         \item A mesma configuração reproduz a mesma carga.
         \item Parte já é automática: sem \texttt{columns}, entram todas as colunas, com
               tipos inferidos.
@@ -115,9 +108,9 @@
       \end{bklista}
     \end{painel}}
   \smallskip
-  \footnotesize\destaque{Complementares:} um LLM poderia propor o arquivo de importação; a
-  validação prévia e o \texttt{-{}-dry-run} o confeririam antes de gravar. Caminho possível,
-  fora do escopo deste trabalho.\par
+  \footnotesize\destaque{Complementares:} um LLM poderia propor o arquivo de importação, e o
+  \texttt{-{}-dry-run} o conferiria sem gravar. Caminho possível, fora do escopo deste
+  trabalho.\par
 \end{frame}
 
 % B4: importadores nativos (relatório §3.1, com a documentação oficial de cada SGBD).
@@ -251,9 +244,9 @@
   PEREIRA, F. d. O.; GUERRA, E.; ROSA, R. R. A framework model for supporting transparent
   polyglot persistence with a unified API and extensible for different database types. In:
   \textit{Proceedings of the 27th International Conference on Enterprise Information Systems
-  (ICEIS)}. [S.l.]: SciTePress, 2025. p. 109--120. DOI: 10.5220/0013369300003929.\par
+  (ICEIS)}. [S.l.]: SciTePress, 2025. p.~109--120. DOI: 10.5220/0013369300003929.\par
   SACHDEVA, S.; VASAVA, J. Plugging and playing with variety of data using multi-model
   database and polyglot persistence. In: \textit{2024 Third International Conference on
   Electrical, Electronics, Information and Communication Technologies (ICEEICT)}. [S.l.]:
-  IEEE, 2024. p. 1--8. DOI: 10.1109/ICEEICT61591.2024.10718481.\par
+  IEEE, 2024. p.~1--8. DOI: 10.1109/ICEEICT61591.2024.10718481.\par
 \end{frame}
