@@ -19,11 +19,11 @@
       {CSV operacional\\[-1pt]{\scriptsize\texttt{ecommerce\_join.csv}}};
     \node[caixa, fill=ufscazul, draw=ufscazul, text=white, align=center, minimum width=34mm]
       (tool) at (42,0) {\bfseries Polyglot Import CSV\\[-1pt]{\scriptsize configuração JSON}};
-    \node[caixa, minimum width=58mm] (n1) at (88, 16)  {\textbf{PostgreSQL} · pedidos e inventário};
-    \node[caixa, minimum width=58mm] (n2) at (88, 8)   {\textbf{MongoDB} · catálogo de produtos};
+    \node[caixa, minimum width=58mm] (n1) at (88, 14)  {\textbf{PostgreSQL} · pedidos e inventário};
+    \node[caixa, minimum width=58mm] (n2) at (88, 7)   {\textbf{MongoDB} · catálogo de produtos};
     \node[caixa, minimum width=58mm] (n3) at (88, 0)   {\textbf{Redis} · carrinho e sessão};
-    \node[caixa, minimum width=58mm] (n4) at (88, -8)  {\textbf{Cassandra} · log de atividade};
-    \node[caixa, minimum width=58mm] (n5) at (88, -16) {\textbf{Neo4j} · recomendações};
+    \node[caixa, minimum width=58mm] (n4) at (88, -7)  {\textbf{Cassandra} · log de atividade};
+    \node[caixa, minimum width=58mm] (n5) at (88, -14) {\textbf{Neo4j} · recomendações};
     \draw[seta] (csv.east) -- (tool.west);
     \foreach \i in {1,...,5} \draw[seta] (tool.east) -- (n\i.west);
   \end{tikzpicture}\par

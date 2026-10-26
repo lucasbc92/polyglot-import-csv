@@ -50,8 +50,8 @@
     \end{scope}
   \end{tikzpicture}\par
   \medskip
-  \onslide<3->{\footnotesize O comando valida as entradas e só então importa para os SGBDs
-   presentes na configuração.\par}
+  \onslide<3->{\footnotesize O comando valida os arquivos de configuração e só então importa para os SGBDs
+   listados neles.\par}
 \end{frame}
 
 % Slide 9: arquivo de importação (relatório §4.2.1; trecho de data/ecommerce/import_config.json)
@@ -98,8 +98,8 @@
 % na horizontal, com as três camadas de validação reveladas uma a uma.
 % Fiel ao código (Tarefa 6, rodada de correção): as camadas 1 e 2 rodam antes de qualquer
 % gravação (runner.py, load_config antes de _require_dbms e da leitura dos CSVs); a camada 3
-% roda SGBD a SGBD, dentro do laço de gravação (runner._run; no fluxo, na vinculação do 1.º
-% bloco, stream_runner.run_stream_import). Só a GUI confere todos os SGBDs antes
+% roda dentro do laço de gravação (runner._run, SGBD a SGBD; no fluxo padrão, por entidade, na
+% vinculação do 1.º bloco, stream_runner.run_stream_import). Só a GUI confere todos os SGBDs antes
 % (gui/preflight.py). Por isso o "nada é gravado" cobre só as camadas 1 e 2.
 \begin{frame}{Conexão e validação prévia}
   \destaque{Arquivo de conexão}: JSON que diz onde alcançar cada SGBD.\par
@@ -146,7 +146,7 @@
       \draw[seta] (csv.south) -- (c3.north);
       \node[caixa, fill=ufscfundo, text width=45mm, minimum height=7mm, anchor=north]
         (nota) at (114, -15)
-        {Conferida SGBD a SGBD, logo antes de gravar cada um. A GUI confere todos antes.};
+        {Conferida por entidade, logo antes de \mbox{gravá-la}. A GUI confere todos antes.};
       \draw[draw=black!45, thick] (c3.south) -- (c3.south |- nota.north);
     \end{scope}
     % importação
@@ -558,7 +558,7 @@
     \recorte{figure15-gui-erro}{22}{40}{760}{112}{147}\vspace{1.5mm}
     \recorte{figure15-gui-erro}{22}{139}{760}{160}{147}\vspace{1.5mm}
     \faixa{figure15-gui-erro}{735}{770}{16}{130}{700}{1230}{0.2}{guiconsole}}{%
-    \textbf{Erro antes de executar:} a configuração de importação viola o \textit{JSON
+    \textbf{Erro antes de executar:} o arquivo de importação viola o \textit{JSON
     Schema}; a mensagem é a da CLI e o botão Executar fica desabilitado.}}
   \only<5>{\passogui{%
     \faixa{figure16-gui-verificacao}{735}{770}{16}{130}{700}{1230}{0.2}{guiconsole}\vspace{1.5mm}
