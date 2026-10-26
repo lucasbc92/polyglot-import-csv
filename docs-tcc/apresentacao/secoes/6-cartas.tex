@@ -1,0 +1,259 @@
+% Cartas na manga (B1-B7): slides de apoio para perguntas previsíveis da banca.
+% O rodapé mostra B1, B2, ... (\cartasnamanga = \appendix, com appendixnumberbeamer).
+% Sem sobreposições: cada carta aparece inteira quando chamada.
+
+% Dois painéis lado a lado, de mesma altura: #1 grupo, #2 e #3 conteúdo dos painéis.
+\newcommand{\bkpar}[3]{%
+  \begingroup\tcbset{equal height group=#1, halign=flush left}%
+  \begin{minipage}[t]{0.485\textwidth}\vspace{0pt}\footnotesize #2\end{minipage}\hfill
+  \begin{minipage}[t]{0.485\textwidth}\vspace{0pt}\footnotesize #3\end{minipage}\par
+  \endgroup}
+% Lista compacta dentro dos painéis: recuo e espaço entre itens menores.
+\newenvironment{bklista}{\setlength{\leftmargini}{1.1em}%
+  \begin{itemize}\setlength{\itemsep}{1.5pt}}{\end{itemize}}
+% Linha de fonte ou observação ao pé da carta.
+\newcommand{\bknota}[1]{{\scriptsize\raggedright\color{black!60}#1\par}}
+
+% B1: falha no meio da importação. Conferido no código (relatório da Tarefa 6):
+% runner._require_dbms (verificação antes de ler os CSVs); validation.py (tupla com a ordem);
+% stream_runner.run_stream_import e runner._run (um SGBD por vez, sem try/finally nem
+% desfazer); sinks/postgres_sink.py e importers/postgres_importer.py (autocommit = True);
+% importers/cassandra_importer._write_batched (WRITE_RETRIES = 3); build_insert_sql
+% (ON CONFLICT DO NOTHING com chave), INSERT do Cassandra (upsert), SET do Redis, MERGE do
+% Neo4j, insert_many do MongoDB (sem _id derivado da chave). Coerente com o slide 23.
+\begin{frame}{Falha no meio da importação}
+  \bkpar{b1}{%
+    \begin{painel}{O que a ferramenta faz}{}
+      \begin{bklista}
+        \item Antes de ler os CSVs, verifica se os SGBDs de destino respondem. Um fora do ar
+              interrompe tudo.
+        \item Grava um SGBD por vez, em lotes: PostgreSQL, MongoDB, Cassandra, Redis, Neo4j.
+        \item No Cassandra, reenvia até três vezes as linhas que falharam.
+        \item Num erro, para e mostra a mensagem.
+      \end{bklista}
+    \end{painel}}{%
+    \begin{painel}{O que não garante}{}
+      \begin{bklista}
+        \item \destaque{Atomicidade entre SGBDs}: não há transação comum nem desfazer
+              (\textit{rollback}).
+        \item Os SGBDs anteriores ficam gravados. O que falhou fica com os lotes já
+              enviados. Os seguintes não recebem nada.
+        \item Ao reexecutar, com chave declarada, PostgreSQL, Cassandra, Redis e Neo4j não
+              duplicam registros. O MongoDB duplica documentos.
+      \end{bklista}
+    \end{painel}}
+  \medskip
+  \footnotesize Para retomar: corrigir e reexecutar, com \texttt{-{}-only} para escolher os
+  SGBDs. A atomicidade entre SGBDs continua \destaque{em aberto} (slide 23).\par
+\end{frame}
+
+% B2: coerção de tipos. Conferido no código: csv_reader.read_csv (tudo como texto, vazio
+% preservado); csv_reader.infer_column_kinds (ordem: booleano, número, data e hora com
+% limiar de 85%, texto); casting.cast_frame/_cast_column_vectorized (vazio -> None; número
+% inválido fica texto e data inválida vira None, com aviso no log; booleano diferente de
+% "true" vira False, sem aviso; colunas de texto não passam pela conversão, e o vazio fica
+% ""); stream_runner + stream_binding.bind_entity_from_sample (tipos inferidos do 1.º
+% bloco, READ_CHUNK = 8192); mapping_resolver.expand_entity_columns e schema_generator
+% (db_type só entra na DDL); materialize.flatten_entity_dataframe e
+% postgres_importer.build_insert_sql (PostgreSQL: chave vazia descartada; chave repetida
+% eliminada no lote e por ON CONFLICT DO NOTHING entre lotes). Futuro: "políticas de
+% coerção configuráveis" (Cap. 6).
+% Minipage [c]: as setas ficam na altura do meio dos painéis.
+\newcommand{\bktipo}[2]{% #1 tipo, #2 regra
+  \begin{minipage}[c]{0.215\textwidth}\begin{painel}{#1}{}\raggedright #2\end{painel}%
+  \end{minipage}}
+\newcommand{\bkseta}{\hfill{\color{ufscazul}$\rightarrow$}\hfill}
+\begin{frame}{Coerção de tipos}
+  \small O CSV é lido como \destaque{texto}. O tipo de cada coluna é \destaque{inferido} dos
+  próprios valores, nesta ordem:\par
+  \medskip
+  \begingroup\footnotesize\tcbset{equal height group=b2}%
+  \bktipo{1. Booleano}{todos os valores são \texttt{true} ou \texttt{false}}\bkseta
+  \bktipo{2. Número}{todos são inteiros ou reais}\bkseta
+  \bktipo{3. Data e hora}{mais de 85\% são datas}\bkseta
+  \bktipo{4. Texto}{nenhum dos casos anteriores}\par
+  \endgroup
+  \medskip
+  \footnotesize
+  \begin{itemize}
+    \setlength{\itemsep}{2pt}
+    \item Célula vazia vira nulo em número, booleano e data; em texto, fica vazia.
+    \item Numa coluna de datas, valor inválido vira nulo, com aviso no log.
+    \item Em fluxo, o tipo sai do primeiro bloco (\num{8192} linhas). Depois dele, número
+          inválido fica texto, com aviso; booleano inválido vira falso, sem aviso.
+    \item O tipo declarado (\texttt{db\_type}) cria a coluna, mas não converte o valor. Uma
+          coluna \texttt{BIGINT} do PostgreSQL pode recusar um texto e parar a importação.
+    \item No PostgreSQL, linha com chave vazia é descartada, e chave repetida não duplica.
+  \end{itemize}
+  \vfill
+  \bknota{Política de coerção configurável: trabalho futuro (Cap.~6 do relatório).}
+\end{frame}
+
+% B3: por que configurar à mão? (relatório §1.1: mapeamento declarativo em JSON, que permite
+% a validação prévia; §2.1: a escolha do SGBD depende de como se quer manipular os dados;
+% §4.2: mapeamento automático, tipos inferidos; §3.3: carga inicial e reprodutível).
+% O uso de LLM não existe na ferramenta: o slide o trata como caminho possível, fora do
+% escopo do trabalho.
+\begin{frame}{Por que configurar à mão?}
+  \bkpar{b3}{%
+    \begin{painel}{Mapeamento declarativo}{o que a ferramenta faz hoje}
+      \begin{bklista}
+        \item Quem projeta decide que dado vai para cada SGBD, com chaves, partições e
+              arestas.
+        \item O arquivo pode ser revisto e é validado antes de gravar.
+        \item A mesma configuração reproduz a mesma carga.
+        \item Parte já é automática: sem \texttt{columns}, entram todas as colunas, com
+              tipos inferidos.
+      \end{bklista}
+    \end{painel}}{%
+    \begin{painel}{Mapeamento inferido}{por um modelo de linguagem (LLM)}
+      \begin{bklista}
+        \item Poupa a escrita inicial do arquivo.
+        \item O CSV não diz como a aplicação consulta os dados. É isso que decide o SGBD de
+              cada dado.
+        \item A proposta ainda precisa de revisão.
+      \end{bklista}
+    \end{painel}}
+  \smallskip
+  \footnotesize\destaque{Complementares:} um LLM poderia propor o arquivo de importação; a
+  validação prévia e o \texttt{-{}-dry-run} o confeririam antes de gravar. Caminho possível,
+  fora do escopo deste trabalho.\par
+\end{frame}
+
+% B4: importadores nativos (relatório §3.1, com a documentação oficial de cada SGBD).
+% Comparação só qualitativa: o Cap. 5 não mede o desempenho desses importadores.
+\begin{frame}{Importadores nativos: o que cada um exige}
+  \footnotesize
+  \setlength{\tabcolsep}{3pt}
+  \renewcommand{\arraystretch}{1.1}
+  \begin{tabular}{@{}E{0.12\textwidth}E{0.25\textwidth}E{0.59\textwidth}@{}}
+    \toprule
+    \bfseries SGBD & \bfseries Importador & \bfseries O que exige \\
+    \midrule
+    PostgreSQL & \texttt{COPY}
+      & colunas na ordem do CSV; arquivo na máquina do servidor; permissão de
+        superusuário \\
+    Redis & \texttt{redis-cli -{}-pipe}
+      & arquivo prévio com os comandos (\texttt{SET chave valor}); resumo só com os totais
+        de erros e respostas \\
+    MongoDB & \texttt{mongoimport}
+      & banco, coleção e formato por parâmetros; uma coleção por comando \\
+    Cassandra & \texttt{cqlsh}, \texttt{sstableloader}
+      & tipos e colunas iguais aos da tabela; conversão para SSTable (formato próprio) \\
+    Neo4j & \texttt{neo4j-admin import}
+      & CSVs separados para nós e para relacionamentos; banco novo, vazio \\
+    \midrule
+    \multicolumn{2}{@{}l}{\destaque{Polyglot Import CSV}}
+      & \destaque{o mesmo CSV nos cinco SGBDs: um arquivo de importação, validação prévia e
+        \texttt{-{}-dry-run}} \\
+    \bottomrule
+  \end{tabular}\par
+  \vfill
+  \bknota{Comparação qualitativa: o Cap.~5 não mede esses importadores. Fonte: §3.1 do
+    relatório.}
+\end{frame}
+
+% B5: Cassandra e o ambiente (relatório §5.2; tab:escrita-sgbd = Tabela 16, N = 100 000,
+% multifonte, materialização, em lote, campanha sem instrumentação de memória; §5.3.2:
+% 109,6 s dos 136,3 s da escrita, cerca de 80%; §5.4.1: restrição de ambiente; Cap. 6:
+% SGBDs dedicados e o caminho de escrita do Cassandra além da concorrência atual).
+\begin{frame}{Cassandra e o ambiente}
+  \begin{minipage}[t]{0.5\textwidth}
+    \vspace{0pt}
+    \begingroup\footnotesize\bfseries\color{ufscazul} Escrita por SGBD\par\endgroup
+    \smallskip
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabular}{@{}l r r r@{}}
+      \toprule
+      \bfseries SGBD & \bfseries Linhas & \bfseries Tempo (s) & \bfseries Linhas/s \\
+      \midrule
+      \destaque{Cassandra} & \destaque{\num{100000}} & \destaque{109{,}61}
+        & \destaque{912} \\
+      Neo4j      &  \num{51602} &  13{,}23 & \num{3901} \\
+      PostgreSQL &  \num{62167} &   8{,}13 & \num{7644} \\
+      Redis      &  \num{49558} &   4{,}56 & \num{10865} \\
+      MongoDB    &  \num{11609} &   0{,}80 & \num{14431} \\
+      \bottomrule
+    \end{tabular}\par
+    \medskip
+    \raggedright
+    O Cassandra grava mais linhas e mais devagar: \destaque{109,6~s dos 136,3~s} da escrita,
+    cerca de 80\%.\par
+    \medskip
+    \bknota{Fonte: Tabela 16 do relatório; $N = \num{100000}$, multifonte, materialização,
+      em lote; campanha sem instrumentação de memória.}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.46\textwidth}
+    \vspace{0pt}\footnotesize\tcbset{halign=flush left, before skip=0pt, after skip=1.5mm}
+    \begin{painel}{Ambiente (§5.2)}{}
+      Uma máquina, 8~GB de memória, os cinco SGBDs em contêineres Docker. Cassandra:
+      \textit{heap} de 1~GB numa máquina virtual Docker de cerca de 3,8~GB.
+    \end{painel}
+    \begin{painel}{Leitura do relatório (§5.4.1)}{}
+      As 912~linhas/s refletem o \textit{heap} pequeno: restrição do ambiente, não do SGBD.
+    \end{painel}
+    \begin{painel}{Escala: trabalho futuro}{}
+      SGBDs dedicados e ajustados; escrita do Cassandra além da concorrência atual.
+    \end{painel}
+  \end{minipage}
+\end{frame}
+
+% B6: ameaças à validade (relatório §5.4.1, sec:ameacas-validade; dados sintéticos: §5.1.1).
+\begin{frame}{Ameaças à validade}
+  \begingroup\footnotesize\tcbset{equal height group=b6, halign=flush left}%
+  \begin{minipage}[t]{0.32\textwidth}\vspace{0pt}
+    \begin{painel}{De construção}{mede o que se quer?}
+      \begin{bklista}
+        \item Tempo com incerteza de cerca de 20\%: diferenças menores não são
+              interpretadas.
+        \item Memória estável: variação abaixo de 0,1\%.
+        \item Tempo e memória vêm de campanhas separadas.
+      \end{bklista}
+    \end{painel}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.32\textwidth}\vspace{0pt}
+    \begin{painel}{Interna}{o efeito vem do fator?}
+      \begin{bklista}
+        \item Gerador determinístico e SGBDs limpos antes de cada repetição.
+        \item Volume moderado: até \num{100000} linhas.
+        \item Sem caches quentes nem execuções concorrentes.
+      \end{bklista}
+    \end{painel}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.32\textwidth}\vspace{0pt}
+    \begin{painel}{Externa}{vale fora deste ambiente?}
+      \begin{bklista}
+        \item Uma máquina, Windows, cinco SGBDs em contêineres com 8~GB: não é produção.
+        \item Cassandra limitado pelo \textit{heap} de 1~GB.
+        \item Dados sintéticos de um só domínio, o e-commerce (§5.1.1).
+      \end{bklista}
+    \end{painel}
+  \end{minipage}\par
+  \endgroup
+  \vfill
+  \bknota{Fonte: §5.4.1 do relatório.}
+\end{frame}
+
+% B7: referências, em ABNT (formato autor-data do relatório), só das obras citadas nos
+% slides: slide 7 (PEREIRA; GUERRA; ROSA, 2025; SACHDEVA; VASAVA, 2024) e slide 23
+% (ARAUJO; SILVA; MELLO, 2025). Dados de docs-tcc/references.bib (pereira2025transparent,
+% sachdeva2024plugging) e, para Araujo et al., do spec (ERBD 2025,
+% DOI 10.5753/erbd.2025.7322) e do próprio PDF (autores e título).
+\begin{frame}{Referências}
+  \footnotesize\raggedright
+  \setlength{\parskip}{6pt}
+  ARAUJO, L. N.; SILVA, H. A. B. d.; MELLO, R. d. S. Uma revisão sistemática simplificada e
+  análise de estudos sobre evolução de esquemas em aplicações de persistência poliglota. In:
+  \textit{Anais da Escola Regional de Banco de Dados (ERBD)}. [S.l.]: Sociedade Brasileira de
+  Computação, 2025. DOI: 10.5753/erbd.2025.7322.\par
+  PEREIRA, F. d. O.; GUERRA, E.; ROSA, R. R. A framework model for supporting transparent
+  polyglot persistence with a unified API and extensible for different database types. In:
+  \textit{Proceedings of the 27th International Conference on Enterprise Information Systems
+  (ICEIS)}. [S.l.]: SciTePress, 2025. p. 109--120. DOI: 10.5220/0013369300003929.\par
+  SACHDEVA, S.; VASAVA, J. Plugging and playing with variety of data using multi-model
+  database and polyglot persistence. In: \textit{2024 Third International Conference on
+  Electrical, Electronics, Information and Communication Technologies (ICEEICT)}. [S.l.]:
+  IEEE, 2024. p. 1--8. DOI: 10.1109/ICEEICT61591.2024.10718481.\par
+\end{frame}

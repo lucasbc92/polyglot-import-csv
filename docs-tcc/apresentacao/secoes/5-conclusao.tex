@@ -1,1 +1,113 @@
 \roteiro{5}
+
+% Slide 22: contribuições (relatório §1.2; evidências no Cap. 4, §4.6 e Cap. 5)
+% Os objetivos repetem a redação do slide 5 (secoes/1-introducao.tex). Cada linha aparece
+% num passo. Sem números de tempo ou memória: eles exigiriam declarar a campanha.
+% Evidências: §4.2 (filters, is_key, schema_column; os dois arquivos e os seus JSON Schema);
+% §4.2.4 e §4.3.1 (camadas 1 e 2 e a verificação dos SGBDs, antes de ler os CSVs; conferido
+% em runner.py: load_config e _require_dbms vêm antes de load_sources); §4.3.4 (--dry-run,
+% "valida e conta, sem gravar", como no slide 14); §5.1 (QP1-QP6, volumes); §4.6 (GUI).
+% \leavevmode antes de \onslide: sem ele, cada célula p ganha uma linha em branco no topo.
+\newcommand{\cmobjetivo}[3]{% #1 passo, #2 objetivo, #3 evidência
+  \leavevmode\onslide<#1->{#2} & \leavevmode\onslide<#1->{#3} \\}
+\begin{frame}{Contribuições}
+  \footnotesize
+  \setlength{\tabcolsep}{3pt}
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabular}{@{}E{0.39\textwidth}E{0.57\textwidth}@{}}
+    \toprule
+    \bfseries Objetivo específico & \bfseries Evidência no trabalho \\
+    \midrule
+    \cmobjetivo{1}{1. \destaque{Configuração} em JSON: filtros, chave primária e nome da
+      coluna.}
+      {Arquivo de importação com \texttt{filters}, \texttt{is\_key} e
+       \texttt{schema\_column}; arquivo de conexão à parte; cada um com o seu JSON Schema.}
+    \cmobjetivo{2}{2. \destaque{Validação prévia}: um erro na configuração impede o início
+      da importação.}
+      {JSON Schema e consistência entre os arquivos antes de ler os CSVs; verificação dos
+       SGBDs; \texttt{-{}-dry-run} valida e conta, sem gravar.}
+    \cmobjetivo{3}{3. \destaque{Avaliação} do desempenho com diferentes volumes e modelos de
+      dados.}
+      {Seis questões de pesquisa (QP1--QP6); de \num{1000} a \num{100000} linhas; os cinco
+       SGBDs; tempo e memória em campanhas separadas.}
+    \cmobjetivo{4}{4. \destaque{Acesso} por linha de comando (CLI) e por interface gráfica
+      (GUI).}
+      {CLI com \texttt{-{}-dry-run}, \texttt{-{}-only} e \texttt{-{}-execution}; GUI que monta
+       e executa o comando, mantendo-o visível.}
+    \bottomrule
+  \end{tabular}\par
+  \vfill
+  \onslide<5->{\centering\small\destaque{Uma ferramenta importa o mesmo CSV para cinco SGBDs
+    de paradigmas diferentes.}\par}
+  \vspace{2pt}
+\end{frame}
+
+% Slide 23: resolve x em aberto (spec, seção "Slide 23"; Araujo, Silva e Mello, ERBD 2025,
+% §6 Conclusão, p. 9 do PDF): "Gerar instruções adequadas a cada SGBD considerado, garantir
+% atomicidade, ser capaz de estimar o efeito das modificações antes que sejam executadas são
+% exemplos de questões a serem tratadas para realizar uma gestão eficiente da evolução de
+% esquemas neste contexto." O artigo trata de evolução de esquemas; o slide leva as três
+% questões para a importação. Atomicidade: ver a carta B1 (secoes/6-cartas.tex).
+\newcommand{\cmaberto}{{\color{red!55!black}\bfseries em aberto}}
+\begin{frame}{Resolve $\times$ em aberto}
+  O artigo trata de \destaque{evolução de esquemas} em persistência poliglota; este trabalho,
+  de \destaque{importação}. Três questões que a conclusão do artigo deixa a tratar, levadas
+  para a importação (ARAUJO; SILVA; MELLO, 2025):\par
+  \medskip
+  \footnotesize
+  \setlength{\tabcolsep}{3pt}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabular}{@{}E{0.28\textwidth}E{0.53\textwidth}E{0.13\textwidth}@{}}
+    \toprule
+    \bfseries Questão do artigo & \bfseries Na importação, com a Polyglot Import CSV
+      & \bfseries Situação \\
+    \midrule
+    \textit{Gerar instruções adequadas a cada SGBD}
+      & Um só arquivo de importação gera a escrita de cada SGBD: SQL, CQL, Cypher, comandos
+        do Redis e documentos do MongoDB.
+      & \destaque{resolve} \\
+    \textit{Estimar o efeito das modificações antes que sejam executadas}
+      & Validação prévia e \texttt{-{}-dry-run}: contagens por SGBD e por entidade, sem
+        gravar.
+      & \destaque{resolve} \\
+    \leavevmode\onslide<2->{\textit{Garantir atomicidade}}
+      & \leavevmode\onslide<2->{Grava um SGBD por vez, sem transação comum: uma falha no meio deixa uma
+        carga parcial.}
+      & \leavevmode\onslide<2->{\cmaberto} \\
+    \bottomrule
+  \end{tabular}
+\end{frame}
+
+% Slide 24: trabalhos futuros (decisão do autor: Elasticsearch como sexto paradigma;
+% relatório Cap. 6, chapters/ch5futuros.tex: edição assistida da configuração na GUI;
+% volumes de milhões de linhas em SGBDs dedicados; mais dois itens do capítulo, "políticas
+% de coerção configuráveis" e "outros formatos de entrada"). O Elasticsearch não existe no
+% código: o slide o apresenta só como destino futuro, no núcleo de importação que o Cap. 6
+% propõe generalizar.
+\begin{frame}{Trabalhos futuros}
+  \begingroup\footnotesize\bfseries\color{ufscazul} Um sexto paradigma\par\endgroup
+  \smallskip
+  \centering
+  \begin{tikzpicture}[x=1mm, y=1mm, font=\scriptsize,
+      cmcaixa/.style={draw=ufscborda, fill=white, rounded corners=0.6mm, inner sep=1.5pt,
+        text width=19mm, align=center, minimum height=10mm, text=ufsctexto},
+      cmnovo/.style={cmcaixa, draw=ufscazul, dashed, thick, fill=ufscfundo,
+        text width=25mm}]
+    \foreach \p/\s [count=\i] in {Relacional/PostgreSQL, Chave-valor/Redis,
+        Documento/MongoDB, Colunar/Cassandra, Grafo/Neo4j}
+      \node[cmcaixa] at ({(\i-1)*23}, 0) {\textbf{\p}\\ \s};
+    \node[cmnovo] at (118, 0) {\textbf{\color{ufscazul}Motor de busca}\\ Elasticsearch};
+  \end{tikzpicture}\par
+  \raggedright
+  \smallskip
+  {\footnotesize\color{black!70} O Elasticsearch entraria como um novo destino no mesmo
+   núcleo de importação.\par}
+  \medskip
+  \begingroup\footnotesize\bfseries\color{ufscazul} Outras frentes\par\endgroup
+  \begin{itemize}
+    \item \destaque{Edição da configuração na GUI}, com validação durante a digitação.
+    \item \destaque{Milhões de linhas}, com SGBDs dedicados e ajustados.
+    \item \destaque{Coerção configurável}: o usuário define como tratar valores malformados.
+    \item \destaque{Outros formatos de entrada}: TSV e planilhas Excel.
+  \end{itemize}
+\end{frame}
