@@ -26,6 +26,7 @@ from polyglotimportcsv.dbms_check import (
     not_ready_message,
 )
 from polyglotimportcsv.dbms_sink import SinkFactory
+from polyglotimportcsv.import_plan import plan_import
 from polyglotimportcsv.importers import default_importer_registry
 from polyglotimportcsv.importers.base import ImporterRegistry
 from polyglotimportcsv.mapping_resolver import resolve_backend_entities
@@ -237,7 +238,7 @@ def _run_stream(
     show_data: Optional[bool],
     sample_size: int,
 ) -> List[str]:
-    """Bounded-memory streaming path: hand the loaded config to ``run_stream_import``."""
+    """Bounded-memory streaming path: plan the import, then ``run_stream_import`` it."""
     step("Load config", str(config_path))
     config = load_config(config_path, dbms_config_path)
     backends_in_cfg = [b for b in BACKENDS if b in config]
@@ -249,15 +250,16 @@ def _run_stream(
     else:
         note("existing schema only (--no-create-schema)")
 
+    plan = plan_import(
+        config, config_path.parent,
+        dbms_names=_dbms_targets(config, only), overrides=source_overrides or {},
+    )
     preview = StreamDataPreview(show_data, sample_size)
     write_start = time.perf_counter()
-    written = run_stream_import(
-        config,
-        config_path.parent,
+    counts = run_stream_import(
+        plan,
         sink_factories=sink_factories,
-        only=only,
         create_schema=create_schema,
-        source_overrides=source_overrides,
         on_batch=preview.observe,
     )
     preview.finish()
@@ -267,10 +269,14 @@ def _run_stream(
     # also gives the benchmark a carrier for the per-import peak_memory_mb.
     collector.record(
         "(stream)", "*", "write",
-        rows=sum(written.values()),
+        rows=sum(rows for written in counts.written.values() for rows in written.values()),
         seconds=time.perf_counter() - write_start,
     )
-    log_lines = [f"[stream] {part}: {rows} row(s)" for part, rows in sorted(written.items())]
+    log_lines = [
+        f"[{dbms}] {partition}: {rows} row(s)"
+        for dbms, written in counts.written.items()
+        for partition, rows in sorted(written.items())
+    ]
     for line in log_lines:
         _print_backend_line(line)
     success(f"Finished import (stream) — {len(log_lines)} partition(s) written")

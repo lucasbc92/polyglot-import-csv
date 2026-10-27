@@ -6,6 +6,7 @@ import pytest
 
 from polyglotimportcsv.business_exception import BusinessException, ConfigError, DbmsUnavailableError
 from polyglotimportcsv.runner import run_check, run_import
+from polyglotimportcsv.stream_runner import StreamCounts
 
 ROOT = Path(__file__).resolve().parents[1]
 CFG = ROOT / "data" / "ecommerce" / "import_config.json"
@@ -38,16 +39,19 @@ def test_run_import_rejects_invalid_config_even_with_stub():
         run_import(bad_cfg, dry_run=True, importers={"postgres": never_called})
 
 
+def _counts(dbms, written):
+    return StreamCounts(written={dbms: written}, entity_rows={dbms: {}})
+
+
 def test_run_import_streams_when_execution_stream(monkeypatch):
     """A real (non-dry) import with execution='stream' dispatches to the
     streaming orchestrator, not the materialize importer registry."""
     captured = {}
 
-    def fake_stream(config, base_dir, *, sink_factories, only,
-                    create_schema, source_overrides, **kw):
-        captured["only"] = list(only) if only else None
+    def fake_stream(plan, *, sink_factories, create_schema, **kw):
+        captured["dbms_names"] = plan.dbms_names
         captured["create_schema"] = create_schema
-        return {"user_session": 8, "shopping_cart": 5}
+        return _counts("postgres", {"user_session": 8, "shopping_cart": 5})
 
     monkeypatch.setattr("polyglotimportcsv.runner.run_stream_import", fake_stream)
 
@@ -58,9 +62,9 @@ def test_run_import_streams_when_execution_stream(monkeypatch):
         CFG, execution="stream", create_schema=False,
         only=["postgres"], importers={"postgres": must_not_run},
     )
-    assert captured["only"] == ["postgres"]
+    assert captured["dbms_names"] == ["postgres"]
     assert captured["create_schema"] is False
-    assert any("user_session" in L and "8" in L for L in lines)
+    assert "[postgres] user_session: 8 row(s)" in lines
 
 
 def test_run_import_stream_records_summary_metric(monkeypatch):
@@ -69,9 +73,8 @@ def test_run_import_stream_records_summary_metric(monkeypatch):
     needs at least one carrier record)."""
     from polyglotimportcsv import metrics
 
-    def fake_stream(config, base_dir, *, sink_factories, only,
-                    create_schema, source_overrides, **kw):
-        return {"user_session": 8, "shopping_cart": 5}
+    def fake_stream(plan, *, sink_factories, create_schema, **kw):
+        return _counts("postgres", {"user_session": 8, "shopping_cart": 5})
 
     monkeypatch.setattr("polyglotimportcsv.runner.run_stream_import", fake_stream)
 
@@ -146,11 +149,10 @@ def test_run_import_stream_passes_a_preview_to_the_orchestrator(monkeypatch, cap
     """The stream path shows the sample too: run_import wires an on_batch."""
     import pandas as pd
 
-    def fake_stream(config, base_dir, *, sink_factories, only,
-                    create_schema, source_overrides, on_batch=None, **kw):
+    def fake_stream(plan, *, sink_factories, create_schema, on_batch=None, **kw):
         assert on_batch is not None
         on_batch("redis", "user_session", pd.DataFrame({"id": range(3)}))
-        return {"user_session": 3}
+        return _counts("redis", {"user_session": 3})
 
     monkeypatch.setattr("polyglotimportcsv.runner.run_stream_import", fake_stream)
     run_import(CFG, execution="stream", only=["redis"], sample_size=2)
@@ -174,6 +176,7 @@ def test_a_real_import_stops_before_reading_sources_when_a_dbms_is_down(monkeypa
         raise AssertionError("nothing may be read or written when a DBMS is down")
 
     monkeypatch.setattr("polyglotimportcsv.runner.load_sources", must_not_run)
+    monkeypatch.setattr("polyglotimportcsv.runner.plan_import", must_not_run)
     monkeypatch.setattr("polyglotimportcsv.runner.run_stream_import", must_not_run)
     with pytest.raises(DbmsUnavailableError, match=r"postgres \(down\)"):
         run_import(CFG, execution="stream", only=["postgres"])

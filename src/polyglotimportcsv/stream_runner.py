@@ -1,61 +1,45 @@
-"""Bounded-memory streaming orchestrator (spec: streaming import, Task 3).
+"""Bounded-memory streaming engine over the import plan (spec: streaming import).
 
-Reads every declared source in fixed-size chunks (``stream_source``), binds
-each entity lazily from its first chunk (``stream_binding``), applies
-row-local filters/casting/each-splitting per chunk (``filter_engine``,
-``casting``), and flushes ``batch``-sized row groups to a ``DbmsSink`` per
-partition. Peak memory stays ~one read chunk plus the still-open partition
-buffers (each smaller than one chunk), regardless of total file size.
+Reads the plan's sources in the plan's read blocks (``stream_source``), applies
+row-local filters/casting/each-splitting per block (``filter_engine``,
+``casting``) to the entities bound in the plan (``import_plan``), and flushes
+batch-sized row groups to a ``DbmsSink`` per partition. Peak memory stays ~one
+read block plus the still-open partition buffers (each smaller than one block),
+regardless of total file size.
 
-The orchestrator is DBMS-agnostic: it never emits SQL/Cypher and never
-deduplicates rows. Both are the sink's responsibility, applied inside
-``write_batch``.
+``DbmsStream`` is one DBMS's share of that work. ``run_stream_import`` gives
+each DBMS its own read of the sources and the sinks that write;
+``run_single_pass`` feeds every DBMS from one read, for sinks that only check.
+
+The engine is DBMS-agnostic: it never emits SQL/Cypher and never deduplicates
+rows. Both are the sink's responsibility, applied inside ``write_batch``.
 """
 
 from __future__ import annotations
 
+import time
+from dataclasses import dataclass, field
 from functools import partial
-from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Set
+from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple
 
 import pandas as pd
 
-from polyglotimportcsv.business_exception import ImportExecutionError
 from polyglotimportcsv.casting import cast_frame
 from polyglotimportcsv.dbms_sink import DbmsSink, SinkFactory
 from polyglotimportcsv.filter_engine import apply_filters, expand_each
-from polyglotimportcsv.stream_binding import (
-    EntityBinding,
-    bind_entity_from_sample,
-    bind_union_entity_from_samples,
-)
-from polyglotimportcsv.stream_source import (
-    READ_CHUNK,
-    iter_entity_chunks,
-    sample_union_sources,
-)
-from polyglotimportcsv.validation import BACKENDS
-
-#: DBMS flush granularity (same constant as redis/neo4j batched writes).
-BATCH = 1000
+from polyglotimportcsv.import_plan import ImportPlan
+from polyglotimportcsv.metrics import MetricsCollector
+from polyglotimportcsv.stream_binding import EntityBinding
+from polyglotimportcsv.stream_source import iter_entity_chunks
 
 
-def _dbms_names(config: Dict[str, Any], only: Optional[Iterable[str]]) -> List[str]:
-    names = [b for b in BACKENDS if b in config]
-    if only is None:
-        return names
-    only_set = {str(x).strip().lower() for x in only if x and str(x).strip()}
-    return [b for b in names if b in only_set]
+@dataclass
+class StreamCounts:
+    """Rows per DBMS: written per partition (``":TYPE"`` for relationships), and per
+    entity after the filters."""
 
-
-def _validate_union_sources(entities: Dict[str, Any]) -> None:
-    """Reject only *empty* union lists; non-empty ``source: [...]`` is supported."""
-    for ename, ecfg in entities.items():
-        ref = (ecfg or {}).get("source")
-        if isinstance(ref, list) and not ref:
-            raise ImportExecutionError(
-                f"entity '{ename}': 'source' list is empty; provide at least one source name."
-            )
+    written: Dict[str, Dict[str, int]] = field(default_factory=dict)
+    entity_rows: Dict[str, Dict[str, int]] = field(default_factory=dict)
 
 
 def _matches(ename: str, ecfg: Dict[str, Any], yielded_name: str) -> bool:
@@ -133,14 +117,15 @@ def _process_chunk(
     chunk: pd.DataFrame,
     ecfg: Dict[str, Any],
     binding: EntityBinding,
-) -> "tuple[pd.DataFrame, List[Dict[str, Any]]]":
+) -> Tuple[pd.DataFrame, pd.DataFrame, List[Dict[str, Any]]]:
     """Run one chunk through the shared per-entity pipeline.
 
     Union entities are widened to the binding's superset (data_cols + _source,
     missing filled ""); then non-`each` filters and the vectorized cast are
-    applied. Returns (cast_frame, filters) so the node loop can `expand_each`
-    on the same filters. Reused by the node loop and the relationship pass so
-    both shape rows identically.
+    applied. Returns (filtered raw rows, cast rows, filters) so the node loop can
+    `expand_each` on the same filters. Both frames keep the chunk's index, the
+    position of each data row in its file. Reused by the node loop and the
+    relationship pass so both shape rows identically.
     """
     working = chunk
     if isinstance(ecfg.get("source"), list):
@@ -149,7 +134,7 @@ def _process_chunk(
     non_each = [f for f in filters if f.get("operator") != "each"]
     filtered = apply_filters(working, non_each, binding.kinds)
     casted = cast_frame(filtered, binding.kinds)
-    return casted, filters
+    return filtered, casted, filters
 
 
 def _relationship_from_source_decls(
@@ -184,121 +169,183 @@ def _relationship_from_source_decls(
     return out
 
 
+class DbmsStream:
+    """One DBMS's entities fed chunk by chunk into its sink.
+
+    Nodes first (``feed`` for every chunk, then ``finish_nodes``), then the
+    relationships (``feed_relationships`` for every chunk of
+    ``relationship_sources()``). ``written`` and ``entity_rows`` count as it goes.
+
+    Two optional sink hooks, looked up like ``write_relationships``, see the rows
+    before they are written: ``inspect_rows(source, partition, binding, raw, cast)``
+    once per (chunk, entity, partition), and
+    ``inspect_relationship_rows(source, rname, rspec, from_binding, to_binding, cast)``
+    before each ``write_relationships``. Their frames are indexed by the position
+    of each data row in its file.
+    """
+
+    def __init__(
+        self,
+        dbms: str,
+        plan: ImportPlan,
+        sink: DbmsSink,
+        on_batch: Optional[Callable[[str, str, pd.DataFrame], None]] = None,
+    ) -> None:
+        self.dbms = dbms
+        self.plan = plan
+        self.sink = sink
+        self._entities: Dict[str, Any] = plan.config[dbms].get("entities") or {}
+        self._bindings = plan.bindings[dbms]
+        self._batch = {ename: plan.entity_batch(dbms, ename) for ename in self._entities}
+        self._notify = partial(on_batch, dbms) if on_batch is not None else None
+        self._inspect_rows = getattr(sink, "inspect_rows", None)
+        self._inspect_rels = getattr(sink, "inspect_relationship_rows", None)
+        self.written: Dict[str, int] = {}
+        self.entity_rows: Dict[str, int] = {ename: 0 for ename in self._entities}
+        self._buffers: Dict[str, List[pd.DataFrame]] = {}
+        self._partition_binding: Dict[str, EntityBinding] = {}
+        self._seen_partitions: Set[str] = set()
+
+        # from-entity -> its relationships (drive each from its source once)
+        self._write_rels = getattr(sink, "write_relationships", None)
+        self._relationships: Dict[str, Any] = plan.config[dbms].get("relationships") or {}
+        self._from_rels: Dict[str, List[Tuple[str, Dict[str, Any]]]] = {}
+        if self._write_rels is not None:
+            for rname, rspec in self._relationships.items():
+                self._from_rels.setdefault(rspec.get("from"), []).append((rname, rspec))
+
+    def feed(self, source: str, chunk: pd.DataFrame) -> None:
+        """Pass one chunk of ``source`` (a source name or origin value) to its entities."""
+        for ename, ecfg in self._entities.items():
+            if not _matches(ename, ecfg, source):
+                continue
+            binding = self._bindings[ename]
+            raw, casted, filters = _process_chunk(chunk, ecfg, binding)
+            for partition_name, part_df in expand_each(casted, filters, ename):
+                self.entity_rows[ename] += len(part_df)
+                if self._inspect_rows is not None:
+                    part_raw = raw.loc[part_df.index]
+                    self._inspect_rows(source, partition_name, binding, part_raw, part_df)
+                self._buffers.setdefault(partition_name, []).append(part_df)
+                self._partition_binding[partition_name] = binding
+                _flush_ready(
+                    partition_name, self._buffers, self._partition_binding,
+                    self._seen_partitions, self.written, self.sink, self._batch[ename],
+                    notify=self._notify,
+                )
+
+    def finish_nodes(self) -> None:
+        """Write what is left in the partition buffers."""
+        for partition_name in list(self._buffers.keys()):
+            _flush_remainder(
+                partition_name, self._buffers, self._partition_binding,
+                self._seen_partitions, self.written, self.sink,
+                notify=self._notify,
+            )
+
+    def relationship_sources(self) -> Dict[str, Any]:
+        """The declared sources the relationship pass reads; ``{}`` when the sink writes
+        no relationships or the DBMS declares none."""
+        if not self._from_rels:
+            return {}
+        return _relationship_from_source_decls(
+            self._relationships, self._entities, self.plan.sources_cfg
+        )
+
+    def feed_relationships(self, source: str, chunk: pd.DataFrame) -> None:
+        """Write the relationships driven by one chunk of their `from` entity's source."""
+        for from_e, rlist in self._from_rels.items():
+            ecfg = self._entities[from_e]
+            if not _matches(from_e, ecfg, source):
+                continue
+            from_binding = self._bindings[from_e]
+            _, casted, _ = _process_chunk(chunk, ecfg, from_binding)
+            for rname, rspec in rlist:
+                to_binding = self._bindings[rspec["to"]]
+                if self._inspect_rels is not None:
+                    self._inspect_rels(source, rname, rspec, from_binding, to_binding, casted)
+                n = self._write_rels(rname, rspec, from_binding, to_binding, casted)
+                key = f":{rspec.get('type') or rname}"
+                self.written[key] = self.written.get(key, 0) + n
+
+
+def _read(plan: ImportPlan, sources_cfg: Dict[str, Any]) -> Iterator[Tuple[str, pd.DataFrame]]:
+    """The chunks of ``sources_cfg``, cut in the plan's read blocks."""
+    return iter_entity_chunks(
+        sources_cfg, plan.base_dir, plan.overrides, rows_per_chunk=plan.rows_per_chunk
+    )
+
+
 def run_stream_import(
-    config: Dict[str, Any],
-    base_dir: "str | Path",
+    plan: ImportPlan,
     *,
     sink_factories: Dict[str, SinkFactory],
-    only: Optional[Iterable[str]] = None,
     create_schema: bool = True,
-    source_overrides: Optional[Dict[str, str]] = None,
-    chunksize: int = READ_CHUNK,
-    batch: int = BATCH,
     on_batch: Optional[Callable[[str, str, pd.DataFrame], None]] = None,
-) -> Dict[str, int]:
-    """Stream every configured DBMS's entities through a ``DbmsSink`` in bounded memory.
+    collector: Optional[MetricsCollector] = None,
+) -> StreamCounts:
+    """Write every DBMS of the plan through its sink, one DBMS at a time.
 
-    Returns ``{partition_name: rows_written}`` aggregated across every
-    processed DBMS (a partition name written by more than one DBMS sums its
-    counts).
-
-    ``on_batch(dbms, partition, frame)`` is called after every node batch is written; the data display (``data_preview``) hangs off it.
+    Each DBMS, in ``plan.dbms_names`` order, gets its sink from ``sink_factories``
+    and its own read of the sources: nodes, then relationships, then ``close()``.
+    ``on_batch(dbms, partition, frame)`` is called after every node batch is written;
+    the data display (``data_preview``) hangs off it. With ``collector``, records one
+    ``(dbms, "*", "write")`` metric per DBMS, with every row it wrote.
     """
-    base_dir = Path(base_dir)
-    dbms_names = _dbms_names(config, only)
-
-    # Fail fast, before opening any sink: an empty union list has no source to
-    # read from. Non-empty union (list) sources are supported (see the
-    # union-source streaming design).
-    for dbms in dbms_names:
-        _validate_union_sources((config[dbms].get("entities") or {}))
-
-    written: Dict[str, int] = {}
-
-    for dbms in dbms_names:
-        bcfg = config[dbms]
-        entities: Dict[str, Any] = bcfg.get("entities") or {}
-        notify = partial(on_batch, dbms) if on_batch is not None else None
-
-        sink = sink_factories[dbms](bcfg)
+    counts = StreamCounts()
+    for dbms in plan.dbms_names:
+        start = time.perf_counter()
+        sink = sink_factories[dbms](plan.config[dbms])
         if create_schema:
             sink.create_schema()
-
-        bindings: Dict[str, EntityBinding] = {}
-        buffers: Dict[str, List[pd.DataFrame]] = {}
-        partition_binding: Dict[str, EntityBinding] = {}
-        seen_partitions: Set[str] = set()
-
-        for yielded_name, chunk in iter_entity_chunks(
-            config.get("sources") or {}, base_dir, source_overrides, chunksize
-        ):
-            targets = [
-                (ename, ecfg)
-                for ename, ecfg in entities.items()
-                if _matches(ename, ecfg, yielded_name)
-            ]
-            for ename, ecfg in targets:
-                is_union = isinstance(ecfg.get("source"), list)
-                if ename not in bindings:
-                    if is_union:
-                        # Bind once from a first-chunk sample of every union
-                        # source (O(sources)); the current chunk alone lacks the
-                        # other sources' columns needed for the superset.
-                        samples = sample_union_sources(
-                            config.get("sources") or {}, base_dir,
-                            ecfg["source"], source_overrides, chunksize,
-                        )
-                        bindings[ename] = bind_union_entity_from_samples(ename, ecfg, samples)
-                    else:
-                        bindings[ename] = bind_entity_from_sample(ename, ecfg, chunk, yielded_name)
-                binding = bindings[ename]
-                casted, filters = _process_chunk(chunk, ecfg, binding)
-                for partition_name, part_df in expand_each(casted, filters, ename):
-                    buffers.setdefault(partition_name, []).append(part_df)
-                    partition_binding[partition_name] = binding
-                    _flush_ready(
-                        partition_name, buffers, partition_binding,
-                        seen_partitions, written, sink, batch,
-                        notify=notify,
-                    )
-
-        for partition_name in list(buffers.keys()):
-            _flush_remainder(
-                partition_name, buffers, partition_binding,
-                seen_partitions, written, sink,
-                notify=notify,
-            )
-
-        write_rels = getattr(sink, "write_relationships", None)
-        relationships = bcfg.get("relationships") or {}
-        if write_rels is not None and relationships:
-            rel_sources = _relationship_from_source_decls(
-                relationships, entities, config.get("sources") or {}
-            )
-            # from-entity -> its relationships (drive each from source once)
-            from_rels: Dict[str, List[tuple]] = {}
-            for rname, rspec in relationships.items():
-                from_rels.setdefault(rspec.get("from"), []).append((rname, rspec))
-            for yielded_name, chunk in iter_entity_chunks(
-                rel_sources, base_dir, source_overrides, chunksize
-            ):
-                for from_e, rlist in from_rels.items():
-                    ecfg = entities.get(from_e)
-                    if ecfg is None or not _matches(from_e, ecfg, yielded_name):
-                        continue
-                    from_binding = bindings.get(from_e)
-                    if from_binding is None:
-                        continue  # from source had zero rows -> zero nodes -> zero edges
-                    casted, _ = _process_chunk(chunk, ecfg, from_binding)
-                    for rname, rspec in rlist:
-                        to_binding = bindings.get(rspec.get("to"))
-                        if to_binding is None:
-                            continue  # to entity unbound -> no target nodes -> no edges
-                        rel_type = rspec.get("type") or rname
-                        n = write_rels(rname, rspec, from_binding, to_binding, casted)
-                        key = f":{rel_type}"
-                        written[key] = written.get(key, 0) + n
-
+        stream = DbmsStream(dbms, plan, sink, on_batch)
+        for source, chunk in _read(plan, plan.sources_cfg):
+            stream.feed(source, chunk)
+        stream.finish_nodes()
+        rel_sources = stream.relationship_sources()
+        if rel_sources:
+            for source, chunk in _read(plan, rel_sources):
+                stream.feed_relationships(source, chunk)
         sink.close()
+        counts.written[dbms] = stream.written
+        counts.entity_rows[dbms] = stream.entity_rows
+        if collector is not None:
+            collector.record(
+                dbms, "*", "write",
+                rows=sum(stream.written.values()),
+                seconds=time.perf_counter() - start,
+            )
+    return counts
 
-    return written
+
+def run_single_pass(
+    plan: ImportPlan,
+    sinks: Dict[str, DbmsSink],
+    *,
+    on_batch: Optional[Callable[[str, str, pd.DataFrame], None]] = None,
+) -> StreamCounts:
+    """Feed every DBMS of the plan from one read of the sources.
+
+    One read of ``plan.sources_cfg`` feeds the nodes of every DBMS; then one read of
+    the sources any of them needs for relationships feeds those; then every sink is
+    closed. ``create_schema`` is not called: this is for sinks that check rows rather
+    than write them.
+    """
+    streams = [DbmsStream(dbms, plan, sinks[dbms], on_batch) for dbms in plan.dbms_names]
+    for source, chunk in _read(plan, plan.sources_cfg):
+        for stream in streams:
+            stream.feed(source, chunk)
+    for stream in streams:
+        stream.finish_nodes()
+    needed = {name for stream in streams for name in stream.relationship_sources()}
+    if needed:
+        rel_sources = {k: v for k, v in plan.sources_cfg.items() if k in needed}
+        for source, chunk in _read(plan, rel_sources):
+            for stream in streams:
+                stream.feed_relationships(source, chunk)
+    for stream in streams:
+        stream.sink.close()
+    return StreamCounts(
+        written={s.dbms: s.written for s in streams},
+        entity_rows={s.dbms: s.entity_rows for s in streams},
+    )
