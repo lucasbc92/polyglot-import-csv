@@ -1,7 +1,7 @@
 """The first line of every CSV is its header: there is no header detection.
 
 The report (§4.2.1.1) states this requirement; these tests pin the behavior it
-describes, for both execution models.
+describes.
 """
 
 from pathlib import Path

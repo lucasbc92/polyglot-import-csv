@@ -31,9 +31,9 @@ PRODUCT_CATALOG_CFG = _CONFIG["mongodb"]["entities"]["product_catalog"]
 USER_SESSION_CFG = _CONFIG["redis"]["entities"]["user_session"]
 NEO4J_CFG = _CONFIG["neo4j"]
 NEO4J_USER_CFG = NEO4J_CFG["entities"]["User"]
-# The real config's only cassandra entity unions 4 sources (list); streaming
-# doesn't support union sources (see stream_runner), so this sink test uses a
-# single-source copy of the same entity/column shape.
+# The real config's only cassandra entity unions 4 sources (list); this sink
+# test uses a single-source copy of the same entity/column shape, so it binds
+# from one sample (_bind_sample).
 CASSANDRA_CFG = dict(_CONFIG["cassandra"]["entities"]["user_activity_log"])
 CASSANDRA_CFG["source"] = "stock"
 

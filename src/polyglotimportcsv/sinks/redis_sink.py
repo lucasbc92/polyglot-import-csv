@@ -42,7 +42,7 @@ class RedisSink:
         pairs = _kv_pairs(batch, binding.cfg)
         if not pairs:
             return 0
-        # A single pipeline covers the whole (already <= BATCH-sized) batch:
+        # A single pipeline covers the whole (already write-batch-sized) batch:
         # pass batch=len(pairs) so `_write_batched` issues exactly one
         # pipeline execute() instead of re-chunking at its own default of 1000.
         return _write_batched(self._client, pairs, lambda n: None, batch=len(pairs))

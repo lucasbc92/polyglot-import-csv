@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
 
 from polyglotimportcsv.business_exception import MappingError
 from polyglotimportcsv.source_profile import SourceProfile, profile_sources
@@ -50,19 +50,13 @@ class ImportPlan:
         )
 
 
-def _needed_sources(config: Dict[str, Any], dbms_names: Sequence[str]) -> Dict[str, Any]:
-    """The declared sources the entities of ``dbms_names`` read.
+def declared_sources(declared: Dict[str, Any], names: Iterable[str]) -> Dict[str, Any]:
+    """The sources of ``declared`` that hold the entity source ``names``, in declared order.
 
     A name that is a plain declared source selects that source. Any other name is an
     origin value of a combined file, which could be any of them, so it selects them all.
     """
-    declared = config.get("sources") or {}
-    names = {
-        n
-        for dbms in dbms_names
-        for ename, ecfg in (config[dbms].get("entities") or {}).items()
-        for n in entity_source_names(ename, ecfg)
-    }
+    names = set(names)
     plain = {n for n in names if isinstance(declared.get(n), str)}
     wants_combined = bool(names - plain)
     return {
@@ -70,6 +64,19 @@ def _needed_sources(config: Dict[str, Any], dbms_names: Sequence[str]) -> Dict[s
         for name, decl in declared.items()
         if name in plain or (wants_combined and not isinstance(decl, str))
     }
+
+
+def dbms_sources(config: Dict[str, Any], dbms_names: Sequence[str]) -> Dict[str, Any]:
+    """The declared sources the DBMS ``dbms_names`` read: the sources of their entities
+    and those of the ``from`` entity of each of their relationships."""
+    names: Set[str] = set()
+    for dbms in dbms_names:
+        entities = config[dbms].get("entities") or {}
+        for ename, ecfg in entities.items():
+            names.update(entity_source_names(ename, ecfg))
+        for rspec in (config[dbms].get("relationships") or {}).values():
+            names.update(entity_source_names(rspec["from"], entities.get(rspec["from"]) or {}))
+    return declared_sources(config.get("sources") or {}, names)
 
 
 def _unknown_source_message(
@@ -111,7 +118,7 @@ def plan_import(
     """
     base_dir = Path(base_dir)
     overrides = dict(overrides or {})
-    sources_cfg = _needed_sources(config, dbms_names)
+    sources_cfg = dbms_sources(config, dbms_names)
     rows_per_chunk = {
         name: chunk_rows(source_path(name, decl, base_dir, overrides), chunk_mb)
         for name, decl in sources_cfg.items()

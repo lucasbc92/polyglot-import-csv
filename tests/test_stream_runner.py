@@ -429,3 +429,83 @@ def test_run_stream_import_records_one_write_metric_per_dbms(tmp_path):
         ("neo4j", "*", "write", sum(counts.written["neo4j"].values())),
     ]
     assert all(r["seconds"] >= 0 for r in recs)
+
+
+def test_an_entity_is_fed_only_by_the_sources_it_is_bound_to(tmp_path):
+    # 'users' reads source 'orders'; the source named 'users' feeds 'people' only.
+    _write_csv(tmp_path / "o.csv", ["order_id", "user_id"], [(f"o{i}", f"u{i}") for i in range(4)])
+    _write_csv(tmp_path / "u.csv", ["user_id", "name"], [(f"u{i}", f"n{i}") for i in range(3)])
+    cfg = {"sources": {"orders": "o.csv", "users": "u.csv"},
+           "postgres": {"entities": {"users": {"source": "orders"}, "people": {"source": "users"}}}}
+    fake = _FakeSink()
+
+    counts = sr.run_single_pass(plan_import(cfg, tmp_path, dbms_names=["postgres"]),
+                                {"postgres": fake})
+
+    assert counts.written == {"postgres": {"users": 4, "people": 3}}
+    users = pd.concat(fake.frames["users"], ignore_index=True)
+    assert set(users[SOURCE_COLUMN]) == {"orders"} and users["order_id"].notna().all()
+
+
+def test_each_dbms_reads_only_its_own_sources(tmp_path, reads):
+    _write_csv(tmp_path / "a.csv", ["id"], [(i,) for i in range(5)])
+    _write_csv(tmp_path / "b.csv", ["id"], [(i,) for i in range(5)])
+    cfg = {"sources": {"a": "a.csv", "b": "b.csv"},
+           "postgres": {"entities": {"a": {}}},
+           "redis": {"entities": {"b": {"columns": {"id": {"is_key": True}}}}}}
+    plan = plan_import(cfg, tmp_path, dbms_names=["postgres", "redis"])
+    reads.clear()  # the plan's own (inference) reads are not the write
+
+    counts = sr.run_stream_import(plan, sink_factories={"postgres": lambda c: _FakeSink(),
+                                                        "redis": lambda c: _FakeSink()})
+
+    assert [name for name, _ in reads] == ["a.csv", "b.csv"]  # postgres reads a, redis reads b
+    assert counts.written == {"postgres": {"a": 5}, "redis": {"b": 5}}
+
+
+def test_single_pass_writes_the_nodes_of_every_dbms_before_any_relationship(tmp_path):
+    log = []
+
+    class Logged(_FakeSink):
+        def __init__(self, dbms):
+            super().__init__()
+            self.dbms = dbms
+
+        def write_batch(self, partition_name, binding, batch):
+            log.append((self.dbms, "node"))
+            return super().write_batch(partition_name, binding, batch)
+
+        def write_relationships(self, rname, rspec, from_binding, to_binding, batch):
+            log.append((self.dbms, "rel"))
+            return super().write_relationships(rname, rspec, from_binding, to_binding, batch)
+
+    plan = plan_import(_pg_and_neo4j_config(tmp_path), tmp_path,
+                       dbms_names=["postgres", "neo4j"], chunk_mb=0.01, batch_size=7)
+    sr.run_single_pass(plan, {"postgres": Logged("postgres"), "neo4j": Logged("neo4j")})
+
+    first_rel = log.index(("neo4j", "rel"))
+    assert {kind for _, kind in log[:first_rel]} == {"node"}
+    assert {kind for _, kind in log[first_rel:]} == {"rel"}
+    assert {dbms for dbms, _ in log[:first_rel]} == {"postgres", "neo4j"}
+
+
+def test_inspect_rows_sees_file_row_positions_of_a_union_across_chunks(tmp_path):
+    # Each value names its source and its data row position: a3 is row 4 of a.csv.
+    _write_csv(tmp_path / "a.csv", ["n", "keep"], [(f"a{i}", "y" if i % 2 else "n") for i in range(7)])
+    _write_csv(tmp_path / "b.csv", ["n", "other"], [(f"b{i}", i) for i in range(5)])
+    cfg = {"sources": {"a": "a.csv", "b": "b.csv"}, "postgres": {"entities": {"u": {
+        "source": ["a", "b"], "filters": [{"column": "keep", "operator": "!=", "value": "n"}],
+    }}}}
+    plan = dataclasses.replace(plan_import(cfg, tmp_path, dbms_names=["postgres"]),
+                               rows_per_chunk={"a": 3, "b": 2})
+    seen = []
+
+    class Spy(_FakeSink):
+        def inspect_rows(self, source, partition, binding, raw, cast):
+            assert list(raw.index) == list(cast.index)
+            seen.extend((source, i, raw.loc[i, "n"]) for i in cast.index)
+
+    sr.run_single_pass(plan, {"postgres": Spy()})
+
+    assert seen == [("a", 1, "a1"), ("a", 3, "a3"), ("a", 5, "a5")] + [
+        ("b", i, f"b{i}") for i in range(5)]

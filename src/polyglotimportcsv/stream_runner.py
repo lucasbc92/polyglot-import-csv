@@ -7,9 +7,10 @@ batch-sized row groups to a ``DbmsSink`` per partition. Peak memory stays ~one
 read block plus the still-open partition buffers (each smaller than one block),
 regardless of total file size.
 
-``DbmsStream`` is one DBMS's share of that work. ``run_stream_import`` gives
-each DBMS its own read of the sources and the sinks that write;
-``run_single_pass`` feeds every DBMS from one read, for sinks that only check.
+``DbmsStream`` is one DBMS's share of that work. ``run_single_pass`` feeds every
+DBMS of a plan from one read of its sources, for sinks that only check;
+``run_stream_import`` runs it once per DBMS, over that DBMS's own sources, with
+the sinks that write.
 
 The engine is DBMS-agnostic: it never emits SQL/Cypher and never deduplicates
 rows. Both are the sink's responsibility, applied inside ``write_batch``.
@@ -17,6 +18,7 @@ rows. Both are the sink's responsibility, applied inside ``write_batch``.
 
 from __future__ import annotations
 
+import dataclasses
 import time
 from dataclasses import dataclass, field
 from functools import partial
@@ -27,9 +29,9 @@ import pandas as pd
 from polyglotimportcsv.casting import cast_frame
 from polyglotimportcsv.dbms_sink import DbmsSink, SinkFactory
 from polyglotimportcsv.filter_engine import apply_filters, expand_each
-from polyglotimportcsv.import_plan import ImportPlan
+from polyglotimportcsv.import_plan import ImportPlan, dbms_sources, declared_sources
 from polyglotimportcsv.metrics import MetricsCollector
-from polyglotimportcsv.stream_binding import EntityBinding
+from polyglotimportcsv.stream_binding import EntityBinding, entity_source_names
 from polyglotimportcsv.stream_source import iter_entity_chunks
 
 
@@ -43,19 +45,9 @@ class StreamCounts:
 
 
 def _matches(ename: str, ecfg: Dict[str, Any], yielded_name: str) -> bool:
-    """An entity is fed by a yielded (source_name/origin) chunk when either:
-
-    - its declared ``source`` equals the yielded name (multi source, or the
-      source name an explicit ``source:`` points to), or
-    - the yielded name is one of the sources in a union ``source: [...]`` list, or
-    - its own name equals the yielded name (combined mode routes by origin
-      value, and/or an entity with no declared ``source`` defaults to a
-      source named after itself, per ``mapping_resolver.bind_entity_source``).
-    """
-    ref = ecfg.get("source")
-    if isinstance(ref, list):
-        return yielded_name in ref
-    return ref == yielded_name or ename == yielded_name
+    """Is a chunk yielded under ``yielded_name`` (a source name or origin value) one of
+    the entity's own sources, the ones the plan bound it to (``entity_source_names``)?"""
+    return yielded_name in entity_source_names(ename, ecfg)
 
 
 def _flush_ready(
@@ -137,38 +129,6 @@ def _process_chunk(
     return filtered, casted, filters
 
 
-def _relationship_from_source_decls(
-    relationships: Dict[str, Any],
-    entities: Dict[str, Any],
-    sources_cfg: Dict[str, Any],
-) -> Dict[str, Any]:
-    """Sources feeding any relationship's `from` entity (scalable re-read: one
-    read per needed source, not per relationship).
-
-    A `from` entity's source is its `source` (str), its own name if `source` is
-    absent, or every element of a `list` (union) source. If any needed element
-    is a combined-CSV origin (not a str key in `sources_cfg`), include every
-    combined (dict) declaration so its origins are produced.
-    """
-    needed_keys: set = set()
-    needs_combined = False
-    str_keys = {k for k, v in sources_cfg.items() if isinstance(v, str)}
-    for rspec in (relationships or {}).values():
-        from_e = rspec.get("from")
-        ecfg = entities.get(from_e) or {}
-        ref = ecfg.get("source")
-        refs = ref if isinstance(ref, list) else [ref if ref is not None else from_e]
-        for r in refs:
-            if r in str_keys:
-                needed_keys.add(r)
-            else:
-                needs_combined = True
-    out = {k: v for k, v in sources_cfg.items() if k in needed_keys}
-    if needs_combined:
-        out.update({k: v for k, v in sources_cfg.items() if isinstance(v, dict)})
-    return out
-
-
 class DbmsStream:
     """One DBMS's entities fed chunk by chunk into its sink.
 
@@ -182,6 +142,9 @@ class DbmsStream:
     ``inspect_relationship_rows(source, rname, rspec, from_binding, to_binding, cast)``
     before each ``write_relationships``. Their frames are indexed by the position
     of each data row in its file.
+
+    The plan's config must have passed ``validation.validate_headers``: the engine
+    does not check again, for instance, that a relationship names declared entities.
     """
 
     def __init__(
@@ -208,10 +171,9 @@ class DbmsStream:
 
         # from-entity -> its relationships (drive each from its source once)
         self._write_rels = getattr(sink, "write_relationships", None)
-        self._relationships: Dict[str, Any] = plan.config[dbms].get("relationships") or {}
         self._from_rels: Dict[str, List[Tuple[str, Dict[str, Any]]]] = {}
         if self._write_rels is not None:
-            for rname, rspec in self._relationships.items():
+            for rname, rspec in (plan.config[dbms].get("relationships") or {}).items():
                 self._from_rels.setdefault(rspec.get("from"), []).append((rname, rspec))
 
     def feed(self, source: str, chunk: pd.DataFrame) -> None:
@@ -248,9 +210,8 @@ class DbmsStream:
         no relationships or the DBMS declares none."""
         if not self._from_rels:
             return {}
-        return _relationship_from_source_decls(
-            self._relationships, self._entities, self.plan.sources_cfg
-        )
+        names = [n for e in self._from_rels for n in entity_source_names(e, self._entities[e])]
+        return declared_sources(self.plan.sources_cfg, names)
 
     def feed_relationships(self, source: str, chunk: pd.DataFrame) -> None:
         """Write the relationships driven by one chunk of their `from` entity's source."""
@@ -276,48 +237,6 @@ def _read(plan: ImportPlan, sources_cfg: Dict[str, Any]) -> Iterator[Tuple[str, 
     )
 
 
-def run_stream_import(
-    plan: ImportPlan,
-    *,
-    sink_factories: Dict[str, SinkFactory],
-    create_schema: bool = True,
-    on_batch: Optional[Callable[[str, str, pd.DataFrame], None]] = None,
-    collector: Optional[MetricsCollector] = None,
-) -> StreamCounts:
-    """Write every DBMS of the plan through its sink, one DBMS at a time.
-
-    Each DBMS, in ``plan.dbms_names`` order, gets its sink from ``sink_factories``
-    and its own read of the sources: nodes, then relationships, then ``close()``.
-    ``on_batch(dbms, partition, frame)`` is called after every node batch is written;
-    the data display (``data_preview``) hangs off it. With ``collector``, records one
-    ``(dbms, "*", "write")`` metric per DBMS, with every row it wrote.
-    """
-    counts = StreamCounts()
-    for dbms in plan.dbms_names:
-        start = time.perf_counter()
-        sink = sink_factories[dbms](plan.config[dbms])
-        if create_schema:
-            sink.create_schema()
-        stream = DbmsStream(dbms, plan, sink, on_batch)
-        for source, chunk in _read(plan, plan.sources_cfg):
-            stream.feed(source, chunk)
-        stream.finish_nodes()
-        rel_sources = stream.relationship_sources()
-        if rel_sources:
-            for source, chunk in _read(plan, rel_sources):
-                stream.feed_relationships(source, chunk)
-        sink.close()
-        counts.written[dbms] = stream.written
-        counts.entity_rows[dbms] = stream.entity_rows
-        if collector is not None:
-            collector.record(
-                dbms, "*", "write",
-                rows=sum(stream.written.values()),
-                seconds=time.perf_counter() - start,
-            )
-    return counts
-
-
 def run_single_pass(
     plan: ImportPlan,
     sinks: Dict[str, DbmsSink],
@@ -328,8 +247,11 @@ def run_single_pass(
 
     One read of ``plan.sources_cfg`` feeds the nodes of every DBMS; then one read of
     the sources any of them needs for relationships feeds those; then every sink is
-    closed. ``create_schema`` is not called: this is for sinks that check rows rather
-    than write them.
+    closed. ``create_schema`` is not called. ``on_batch(dbms, partition, frame)`` is
+    called after every node batch is written.
+
+    The plan's config must have passed ``validation.validate_headers``. Sinks are
+    closed only on success; on an exception the caller owns cleanup.
     """
     streams = [DbmsStream(dbms, plan, sinks[dbms], on_batch) for dbms in plan.dbms_names]
     for source, chunk in _read(plan, plan.sources_cfg):
@@ -349,3 +271,45 @@ def run_single_pass(
         written={s.dbms: s.written for s in streams},
         entity_rows={s.dbms: s.entity_rows for s in streams},
     )
+
+
+def run_stream_import(
+    plan: ImportPlan,
+    *,
+    sink_factories: Dict[str, SinkFactory],
+    create_schema: bool = True,
+    on_batch: Optional[Callable[[str, str, pd.DataFrame], None]] = None,
+    collector: Optional[MetricsCollector] = None,
+) -> StreamCounts:
+    """Write every DBMS of the plan through its sink, one DBMS at a time.
+
+    Each DBMS, in ``plan.dbms_names`` order, gets its sink from ``sink_factories``,
+    then ``create_schema()`` (when asked), then a ``run_single_pass`` of its own over
+    the sources its entities and relationships read (``dbms_sources``), which writes
+    and closes the sink. ``on_batch(dbms, partition, frame)`` is called after every
+    node batch is written; the data display (``data_preview``) hangs off it. With
+    ``collector``, records one ``(dbms, "*", "write")`` metric per DBMS, with every
+    row it wrote.
+
+    The plan's config must have passed ``validation.validate_headers``. Sinks are
+    closed only on success; on an exception the caller owns cleanup.
+    """
+    counts = StreamCounts()
+    for dbms in plan.dbms_names:
+        start = time.perf_counter()
+        sink = sink_factories[dbms](plan.config[dbms])
+        if create_schema:
+            sink.create_schema()
+        own = dataclasses.replace(
+            plan, dbms_names=[dbms], sources_cfg=dbms_sources(plan.config, [dbms])
+        )
+        one = run_single_pass(own, {dbms: sink}, on_batch=on_batch)
+        counts.written.update(one.written)
+        counts.entity_rows.update(one.entity_rows)
+        if collector is not None:
+            collector.record(
+                dbms, "*", "write",
+                rows=sum(one.written[dbms].values()),
+                seconds=time.perf_counter() - start,
+            )
+    return counts
