@@ -8,7 +8,7 @@ materializing the whole file, so peak memory stays ~constant in file size.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, Optional, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 import pandas as pd
 
@@ -18,16 +18,56 @@ from polyglotimportcsv.sources import SOURCE_COLUMN, _resolve_path
 #: Read + inference-sample granularity (rows per chunk).
 READ_CHUNK = 8192
 
+#: Read options of csv_reader.read_csv, shared by every read in this module.
+_READ_OPTIONS = {"dtype": str, "keep_default_na": False, "encoding": "utf-8-sig"}
+
 
 def _read_chunks(path: Path, chunksize: int):
     """Same read options as csv_reader.read_csv, with chunksize for streaming."""
-    return pd.read_csv(
-        path,
-        dtype=str,
-        keep_default_na=False,
-        encoding="utf-8-sig",
-        chunksize=chunksize,
-    )
+    return pd.read_csv(path, chunksize=chunksize, **_READ_OPTIONS)
+
+
+def check_source_overrides(
+    sources_cfg: Dict[str, Any], overrides: Optional[Dict[str, str]]
+) -> None:
+    """Raise ``SourceError`` for a ``--source`` name the config does not declare."""
+    unknown = set(overrides or {}) - set(sources_cfg or {})
+    if unknown:
+        raise SourceError(
+            f"--source override name(s) not declared in config: {', '.join(sorted(unknown))}. "
+            f"Declared source names: {', '.join(sorted(sources_cfg or {})) or '(none)'}. "
+            "Only names declared in the config's 'sources' block can be overridden "
+            "(origin-derived slice names of a combined CSV are not overridable)."
+        )
+
+
+def read_source_headers(
+    sources_cfg: Dict[str, Any],
+    base_dir: "str | Path",
+    overrides: Optional[Dict[str, str]] = None,
+) -> Dict[str, List[str]]:
+    """Read only the header row of every declared source.
+
+    Returns ``{source_name: data_columns}``. For a combined source the origin
+    column (column 0) is left out, as in ``iter_entity_chunks``. Raises
+    ``SourceError`` for a missing file and for a combined file with fewer than
+    two columns.
+    """
+    base_dir = Path(base_dir)
+    overrides = overrides or {}
+    headers: Dict[str, List[str]] = {}
+    for name, decl in (sources_cfg or {}).items():
+        combined = not isinstance(decl, str)
+        path = _resolve_path(name, decl["file"] if combined else decl, base_dir, overrides)
+        header = [str(c) for c in pd.read_csv(path, nrows=0, **_READ_OPTIONS).columns]
+        if combined:
+            if len(header) < 2:
+                raise SourceError(
+                    f"Source '{name}': combined CSV needs an origin column plus data columns: {path}"
+                )
+            header = header[1:]
+        headers[name] = header
+    return headers
 
 
 def iter_entity_chunks(

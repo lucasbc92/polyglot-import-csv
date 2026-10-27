@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 from polyglotimportcsv import stream_source as ss
-from polyglotimportcsv.business_exception import ImportExecutionError
+from polyglotimportcsv.business_exception import ImportExecutionError, SourceError
 from polyglotimportcsv.sources import SOURCE_COLUMN
 
 
@@ -122,3 +122,51 @@ def test_combined_routes_by_origin(tmp_path):
     assert "action" not in a_chunk.columns
     assert list(a_chunk.columns)[:2] == ["id", "v"]
     assert (a_chunk[SOURCE_COLUMN] == "stock").all()
+
+
+def test_unknown_override_name_raises(tmp_path):
+    cfg = {"stock": "s.csv", "ecom": {"file": "j.csv"}}
+    with pytest.raises(SourceError) as exc:
+        ss.check_source_overrides(cfg, {"zzz": "x.csv", "aaa": "y.csv"})
+    message = str(exc.value)
+    assert "--source override name(s) not declared in config: aaa, zzz" in message
+    assert "Declared source names: ecom, stock" in message
+
+
+def test_declared_or_absent_overrides_pass():
+    cfg = {"stock": "s.csv"}
+    assert ss.check_source_overrides(cfg, {"stock": "x.csv"}) is None
+    assert ss.check_source_overrides(cfg, {}) is None
+    assert ss.check_source_overrides(cfg, None) is None
+
+
+def test_read_source_headers_strips_the_origin_column(tmp_path):
+    _write_csv(tmp_path / "j.csv", ["action", "id", "v"], [("stock", 1, "a")])
+    _write_csv(tmp_path / "s.csv", ["id", "name"], [(1, "x")])
+    cfg = {"ecom": {"file": "j.csv"}, "stock": "s.csv"}
+    assert ss.read_source_headers(cfg, tmp_path, {}) == {
+        "ecom": ["id", "v"],
+        "stock": ["id", "name"],
+    }
+
+
+def test_read_source_headers_reads_a_header_only_file_and_ignores_the_bom(tmp_path):
+    (tmp_path / "s.csv").write_bytes(b"\xef\xbb\xbfid,name\r\n")
+    assert ss.read_source_headers({"s": "s.csv"}, tmp_path, {}) == {"s": ["id", "name"]}
+
+
+def test_read_source_headers_honors_an_override(tmp_path):
+    _write_csv(tmp_path / "other.csv", ["k"], [(1,)])
+    got = ss.read_source_headers({"s": "missing.csv"}, tmp_path, {"s": str(tmp_path / "other.csv")})
+    assert got == {"s": ["k"]}
+
+
+def test_read_source_headers_reports_a_missing_file(tmp_path):
+    with pytest.raises(SourceError, match="Source 's': CSV file not found"):
+        ss.read_source_headers({"s": "nope.csv"}, tmp_path, {})
+
+
+def test_read_source_headers_rejects_a_combined_file_without_data_columns(tmp_path):
+    _write_csv(tmp_path / "j.csv", ["action"], [("stock",)])
+    with pytest.raises(SourceError, match="combined CSV needs an origin column plus data columns"):
+        ss.read_source_headers({"e": {"file": "j.csv"}}, tmp_path, {})

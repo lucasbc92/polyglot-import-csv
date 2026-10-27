@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from polyglotimportcsv import validation
+from polyglotimportcsv.business_exception import MappingError
 from polyglotimportcsv.gui import preflight
 from polyglotimportcsv.gui.state import RunOptions
 
@@ -256,13 +258,13 @@ def test_the_bind_and_validate_step_is_memoized_until_a_file_changes(ecommerce, 
     spin-box step cost ~100 ms.
     """
     calls = []
-    real = preflight.resolve_backend_entities
+    real = validation.validate_headers
 
     def counting(*args, **kwargs):
         calls.append(1)
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(preflight, "resolve_backend_entities", counting)
+    monkeypatch.setattr(validation, "validate_headers", counting)
 
     first = _check(ecommerce)
     count_after_first = len(calls)
@@ -270,7 +272,7 @@ def test_the_bind_and_validate_step_is_memoized_until_a_file_changes(ecommerce, 
 
     second = _check(ecommerce)
     assert len(calls) == count_after_first, (
-        "an unchanged config and CSVs must not call resolve_backend_entities again"
+        "an unchanged config and CSVs must not call validate_headers again"
     )
     assert second.errors == first.errors
 
@@ -279,6 +281,16 @@ def test_the_bind_and_validate_step_is_memoized_until_a_file_changes(ecommerce, 
     os.utime(csv, ns=(stat.st_atime_ns, stat.st_mtime_ns + 10_000_000))
     _check(ecommerce)
     assert len(calls) > count_after_first, "a touched CSV must trigger a rebind"
+
+
+def test_preflight_runs_the_shared_header_validation(ecommerce, monkeypatch):
+    """The GUI owns no header rule: whatever validate_headers raises is the error shown."""
+
+    def failing(*args, **kwargs):
+        raise MappingError("x")
+
+    monkeypatch.setattr(validation, "validate_headers", failing)
+    assert _check(ecommerce).errors == {"config_path": "x"}
 
 
 def test_a_cached_exception_does_not_accumulate_traceback_frames(ecommerce):
