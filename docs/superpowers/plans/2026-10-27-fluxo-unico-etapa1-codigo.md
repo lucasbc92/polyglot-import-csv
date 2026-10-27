@@ -260,6 +260,7 @@ Expected: `import_config.json ok` e `import_config_combined.json ok`. Se falhar,
   - Em `source_profile`:
     - `@dataclass class SourceProfile`, com os campos `name: str` (nome multifonte ou valor de origem), `declared: str` (fonte declarada que contém o arquivo), `path: Path`, `header: List[str]`, `rows: int` e `stats: Dict[str, ColumnStats]`, e a propriedade `kinds -> Dict[str, str]`;
     - `profile_sources(sources_cfg, base_dir, overrides, rows_per_chunk: Mapping[str, int]) -> Dict[str, SourceProfile]`. Faz uma leitura de cada fonte declarada. Uma fonte multifonte sem linhas ganha perfil com `rows=0` e o cabeçalho lido. Em arquivo combinado, cria um perfil por valor de origem visto. Lança `SourceError` quando o mesmo nome aparece duas vezes, seja um valor de origem igual a um nome declarado, seja a mesma origem em dois arquivos combinados, com a mensagem de colisão de hoje;
+    - **colunas indecisas:** depois da leitura, as colunas cujas `ColumnStats` têm `decided()` falso são resolvidas com contagem exata. Cada arquivo que tem alguma coluna indecisa é relido só com essas colunas (`usecols`; num arquivo combinado, mais a coluna de origem, para rotear as linhas), com as mesmas linhas por bloco. As estatísticas dessas colunas são refeitas do zero com `update(values, exact=True)`. Assim, a inferência sobre o arquivo inteiro dá sempre o mesmo resultado de `infer_column_kinds` sobre a coluna inteira. A releitura só acontece quando os blocos discordam;
     - `union_kinds(profiles: Sequence[SourceProfile], columns: Sequence[str]) -> Dict[str, str]`. Para cada coluna, junta (`merged`) as `ColumnStats` dos perfis que a têm e devolve o `kind()`. Coluna ausente de todos os perfis dá `"empty"`.
   - Em `stream_binding`:
     - `bind_entity(ename: str, ecfg: Dict[str, Any], profiles: Dict[str, SourceProfile]) -> EntityBinding`. Monta um registro de `SourceData` só de cabeçalhos a partir dos perfis e chama `bind_entity_source`, para que a regra de resolução do `source` continue num lugar só;
@@ -308,6 +309,14 @@ def test_combined_origin_first_seen_after_many_chunks(tmp_path): # Review Focus 
     profs = profile_sources({"e": {"file": "j.csv"}}, tmp_path, {}, {"e": 100})
     assert set(profs) == {"stock", "purchase"} and profs["purchase"].rows == 10
     assert profs["purchase"].declared == "e"
+
+def test_undecided_column_is_resolved_by_an_exact_reread(tmp_path, monkeypatch):
+    # dirty block (repeated junk) then unique ISO dates; small probe round so
+    # the cheap pass leaves the column undecided (see tests/test_column_stats.py)
+    prof = profile_sources({"s": "s.csv"}, tmp_path, {}, {"s": 500})["s"]
+    assert prof.stats["d"].decided() and prof.kinds["d"] == infer_column_kinds(whole)["d"] == "datetime"
+
+def test_no_reread_when_every_column_is_decided(tmp_path, monkeypatch): ...  # _read_chunks called once per file
 
 def test_origin_equal_to_a_declared_name_collides(tmp_path): ...  # SourceError, "collision"
 def test_union_kinds_merge_whole_file_stats(): ...                # int in A + float in B -> "float"; absent -> "empty"
