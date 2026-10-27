@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Container, Dict, List, Optional
 
 import pandas as pd
 
@@ -26,17 +26,22 @@ class SourceData:
     file_header: List[str]    # data columns only: the 1-based index space
 
 
+def check_name_is_free(taken: Container[str], name: str) -> None:
+    """Raise ``SourceError`` when ``name`` is already used by another source."""
+    if name in taken:
+        raise SourceError(
+            f"Source name collision: '{name}' is defined more than once "
+            "(declared source names and origin values must all be distinct)."
+        )
+
+
 def _register(
     registry: Dict[str, SourceData],
     name: str,
     df: pd.DataFrame,
     file_header: List[str],
 ) -> None:
-    if name in registry:
-        raise SourceError(
-            f"Source name collision: '{name}' is defined more than once "
-            "(declared source names and origin values must all be distinct)."
-        )
+    check_name_is_free(registry, name)
     kinds = infer_column_kinds(df[file_header])
     kinds[SOURCE_COLUMN] = "string"
     logger.debug("source %s: inferred kinds: %s", name, {c: kinds[c] for c in file_header})

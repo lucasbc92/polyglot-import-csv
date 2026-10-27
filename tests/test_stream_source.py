@@ -170,3 +170,79 @@ def test_read_source_headers_rejects_a_combined_file_without_data_columns(tmp_pa
     _write_csv(tmp_path / "j.csv", ["action"], [("stock",)])
     with pytest.raises(SourceError, match="combined CSV needs an origin column plus data columns"):
         ss.read_source_headers({"e": {"file": "j.csv"}}, tmp_path, {})
+
+
+def _csv(tmp_path, name, cols, rows):
+    path = tmp_path / name
+    _write_csv(path, [f"c{j}" for j in range(cols)],
+               [[f"value-{i}-{j}" for j in range(cols)] for i in range(rows)])
+    return path
+
+
+def test_chunk_rows_follows_the_memory_budget(tmp_path):
+    narrow = _csv(tmp_path, "n.csv", cols=3, rows=5000)
+    wide = _csv(tmp_path, "w.csv", cols=30, rows=5000)
+    assert ss.chunk_rows(narrow, 1) > ss.chunk_rows(wide, 1) >= 1
+    assert ss.chunk_rows(narrow, 2) >= 2 * ss.chunk_rows(narrow, 1) - 1
+
+
+def test_chunk_rows_reads_a_bom_crlf_file(tmp_path):
+    p = tmp_path / "b.csv"
+    p.write_bytes("﻿a,b\r\n1,x\r\n2,y\r\n".encode("utf-8"))
+    assert ss.chunk_rows(p, 8) >= 1
+    assert ss.read_source_headers({"b": "b.csv"}, tmp_path, {}) == {"b": ["a", "b"]}
+
+
+def test_chunk_rows_of_a_file_without_rows_is_one(tmp_path):
+    (tmp_path / "h.csv").write_text("a,b\n", encoding="utf-8")
+    assert ss.chunk_rows(tmp_path / "h.csv", 8) == 1
+
+
+def test_chunk_rows_never_drops_below_one_row(tmp_path):
+    assert ss.chunk_rows(_csv(tmp_path, "w.csv", cols=30, rows=50), 0.00001) == 1
+
+
+def test_source_path_resolves_plain_combined_and_overridden_sources(tmp_path):
+    (tmp_path / "a.csv").write_text("x\n1\n", encoding="utf-8")
+    (tmp_path / "j.csv").write_text("o,x\ns,1\n", encoding="utf-8")
+    (tmp_path / "other.csv").write_text("x\n1\n", encoding="utf-8")
+    assert ss.source_path("a", "a.csv", tmp_path, {}) == tmp_path / "a.csv"
+    assert ss.source_path("e", {"file": "j.csv"}, tmp_path, {}) == tmp_path / "j.csv"
+    override = {"a": str(tmp_path / "other.csv")}
+    assert ss.source_path("a", "a.csv", tmp_path, override) == tmp_path / "other.csv"
+    with pytest.raises(SourceError, match="CSV file not found"):
+        ss.source_path("a", "nope.csv", tmp_path, {})
+
+
+def test_rows_per_chunk_sets_the_chunk_size_of_each_declared_source(tmp_path):
+    _write_csv(tmp_path / "a.csv", ["id"], [(i,) for i in range(2500)])
+    _write_csv(tmp_path / "b.csv", ["id"], [(i,) for i in range(2500)])
+    sizes = {}
+    for name, df in ss.iter_entity_chunks(
+        {"a": "a.csv", "b": "b.csv"}, tmp_path, rows_per_chunk={"a": 1000, "b": 2000}
+    ):
+        sizes.setdefault(name, []).append(len(df))
+    assert sizes == {"a": [1000, 1000, 500], "b": [2000, 500]}
+
+
+def test_rows_per_chunk_also_sizes_the_chunks_of_a_combined_source(tmp_path):
+    _write_csv(tmp_path / "j.csv", ["action", "id"], [("stock", i) for i in range(250)])
+    sizes = [len(df) for _, df in ss.iter_entity_chunks(
+        {"e": {"file": "j.csv"}}, tmp_path, rows_per_chunk={"e": 100})]
+    assert sizes == [100, 100, 50]
+
+
+def test_only_columns_reads_just_those_columns_of_a_plain_source(tmp_path):
+    _write_csv(tmp_path / "a.csv", ["id", "v", "w"], [(i, i, i) for i in range(5)])
+    (_, chunk), = ss.iter_entity_chunks({"a": "a.csv"}, tmp_path, only_columns={"a": ["w"]})
+    assert list(chunk.columns) == ["w", SOURCE_COLUMN]
+
+
+def test_only_columns_keeps_routing_a_combined_source_by_origin(tmp_path):
+    rows = [("stock", i, f"s{i}", i) for i in range(4)] + [("cart", i, f"c{i}", i) for i in range(2)]
+    _write_csv(tmp_path / "j.csv", ["action", "id", "v", "w"], rows)
+    got = {name: df for name, df in ss.iter_entity_chunks(
+        {"e": {"file": "j.csv"}}, tmp_path, only_columns={"e": ["v"]})}
+    assert set(got) == {"stock", "cart"}
+    assert list(got["stock"].columns) == ["v", SOURCE_COLUMN]
+    assert len(got["stock"]) == 4 and len(got["cart"]) == 2
