@@ -2,7 +2,8 @@
 
 import pytest
 
-from polyglotimportcsv import metrics, reporting
+from polyglotimportcsv import csv_reader, metrics, reporting
+from polyglotimportcsv import stream_source as ss
 
 
 @pytest.fixture(autouse=True)
@@ -21,3 +22,23 @@ def _dbms_always_up(monkeypatch):
     from polyglotimportcsv import dbms_check
 
     monkeypatch.setattr(dbms_check, "probe", lambda endpoint, timeout=2.0: True)
+
+
+@pytest.fixture
+def small_probe_rounds(monkeypatch):
+    """Probe 50 distinct values per round, so the early stop bites on test-sized chunks."""
+    monkeypatch.setattr(csv_reader, "_DATETIME_PROBE_CHUNK", 50)
+
+
+@pytest.fixture
+def reads(monkeypatch):
+    """Every ``stream_source._read_chunks`` call as ``(file name, usecols)``."""
+    calls = []
+    real = ss._read_chunks
+
+    def counting(path, chunksize, usecols=None):
+        calls.append((path.name, usecols))
+        return real(path, chunksize, usecols)
+
+    monkeypatch.setattr(ss, "_read_chunks", counting)
+    return calls

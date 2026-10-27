@@ -72,6 +72,27 @@ def _needed_sources(config: Dict[str, Any], dbms_names: Sequence[str]) -> Dict[s
     }
 
 
+def _unknown_source_message(
+    ename: str,
+    dbms: str,
+    name: str,
+    declared: Dict[str, Any],
+    sources_cfg: Dict[str, Any],
+    profiles: Dict[str, SourceProfile],
+) -> str:
+    """Why ``name`` is no source of the entity: what it could have been instead.
+
+    An entity reads a plain declared source, or an origin value of a combined file.
+    The name of a combined file itself is neither.
+    """
+    origins = sorted(n for n, p in profiles.items() if isinstance(sources_cfg[p.declared], dict))
+    return (
+        f"Entity '{ename}' ({dbms}): no source or origin value named '{name}'. "
+        f"Declared sources: {', '.join(sorted(declared)) or '(none)'}; "
+        f"origin values found: {', '.join(origins) or '(none)'}."
+    )
+
+
 def plan_import(
     config: Dict[str, Any],
     base_dir: "str | Path",
@@ -95,15 +116,20 @@ def plan_import(
         name: chunk_rows(source_path(name, decl, base_dir, overrides), chunk_mb)
         for name, decl in sources_cfg.items()
     }
-    profiles = profile_sources(sources_cfg, base_dir, overrides, rows_per_chunk)
+    unions = [
+        entity_source_names(ename, ecfg)
+        for dbms in dbms_names
+        for ename, ecfg in (config[dbms].get("entities") or {}).items()
+        if isinstance(ecfg.get("source"), list)
+    ]
+    profiles = profile_sources(sources_cfg, base_dir, overrides, rows_per_chunk, unions)
     for dbms in dbms_names:
         for ename, ecfg in (config[dbms].get("entities") or {}).items():
             for name in entity_source_names(ename, ecfg):
                 if name not in profiles:
-                    raise MappingError(
-                        f"Entity '{ename}' ({dbms}): no source or origin value named '{name}' "
-                        f"(found: {', '.join(sorted(profiles)) or 'none'})."
-                    )
+                    raise MappingError(_unknown_source_message(
+                        ename, dbms, name, config.get("sources") or {}, sources_cfg, profiles
+                    ))
     bindings = {
         dbms: {
             ename: bind_entity(ename, ecfg, profiles)

@@ -11,9 +11,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from functools import partial, reduce
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Mapping, Sequence
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Mapping, Sequence
 
 from polyglotimportcsv.csv_reader import ColumnStats
+from polyglotimportcsv.mapping_resolver import union_data_cols
 from polyglotimportcsv.sources import SOURCE_COLUMN, check_name_is_free
 from polyglotimportcsv.stream_source import iter_entity_chunks, source_path
 
@@ -40,6 +41,7 @@ def profile_sources(
     base_dir: "str | Path",
     overrides: Dict[str, str],
     rows_per_chunk: Mapping[str, int],
+    unions: Iterable[Sequence[str]] = (),
 ) -> Dict[str, SourceProfile]:
     """Read every declared source once and profile it, by name or by origin value.
 
@@ -48,13 +50,18 @@ def profile_sources(
     seen, and none if the file has no rows. ``SourceError`` for a name used twice: an
     origin value equal to a declared source name, or the same origin in two files.
 
-    A column the chunks left undecided (``ColumnStats.decided()``: they disagreed on
-    whether it holds dates) is settled by one more read of that file, limited to those
-    columns. Its stats are rebuilt there with exact counts, so the kind of every column
-    is that of ``infer_column_kinds`` over the whole column, whatever the chunk size.
+    Two kinds of column are then settled by one more read of the file holding them,
+    limited to those columns, with their stats rebuilt from exact counts. A column the
+    chunks left undecided (``ColumnStats.decided()``: they disagreed on whether it holds
+    dates), so that its kind is that of ``infer_column_kinds`` over the whole column,
+    whatever the chunk size. And a column of a union, which ``unions`` lists as names of
+    profiles (an entity's ``source`` list): sources that are each decided can still be
+    undecided together, and the union must have the kind of its concatenated column. A
+    file is read again at most once, whatever number of columns and unions need it.
     """
     taken = set(sources_cfg)  # declared names and origin values must all be distinct
-    profiles: Dict[str, SourceProfile] = {}
+    by_file: Dict[str, Dict[str, SourceProfile]] = {}
+    readers: Dict[str, Callable[..., Iterator]] = {}
     for declared, decl in sources_cfg.items():
         path = source_path(declared, decl, base_dir, overrides)
         combined = not isinstance(decl, str)
@@ -78,34 +85,66 @@ def profile_sources(
             profile.rows += len(chunk)
             for column in profile.header:
                 profile.stats[column].update(chunk[column])
-        _settle_undecided(declared, file_profiles, read)
-        profiles.update(file_profiles)
+        by_file[declared] = file_profiles
+        readers[declared] = read
+    profiles = {name: p for file_profiles in by_file.values() for name, p in file_profiles.items()}
+    for declared, columns in _columns_to_settle(profiles, unions).items():
+        _rebuild_exact(declared, columns, by_file[declared], readers[declared])
     return profiles
 
 
-def _settle_undecided(
-    declared: str, file_profiles: Dict[str, SourceProfile], read: Callable[..., Iterator]
-) -> None:
-    """Rebuild, with exact counts, the stats of the columns of one file left undecided.
+def _merged_stats(profiles: Sequence[SourceProfile], column: str) -> ColumnStats:
+    """The stats of ``column`` over all the ``profiles`` that have it, merged as one."""
+    return reduce(
+        ColumnStats.merged,
+        (p.stats[column] for p in profiles if column in p.stats),
+        ColumnStats(),
+    )
 
-    ``read`` yields the chunks of the file (``iter_entity_chunks`` over it). A column is
-    open if it is so for any origin of the file; it is then rebuilt for all of them from
-    a read of that column alone (plus the origin column, which routes the rows).
-    Everything else in the profiles stays as it was.
+
+def _columns_to_settle(
+    profiles: Dict[str, SourceProfile], unions: Iterable[Sequence[str]]
+) -> Dict[str, List[str]]:
+    """Declared source -> its data columns whose stats must be rebuilt with exact counts.
+
+    A column is open in a file when any of its profiles has it undecided, or when it is
+    in a union that has two or more sources with it and the merged stats are undecided
+    (every file holding it is then read). Rebuilding to exact counts only narrows
+    the bounds, so a column that was decided never becomes open by another one being
+    settled. A name in ``unions`` with no profile is left for the caller to report.
     """
-    if not file_profiles:
-        return
-    header = next(iter(file_profiles.values())).header  # every origin shares it
-    open_columns = [
-        c for c in header if not all(p.stats[c].decided() for p in file_profiles.values())
-    ]
-    if not open_columns:
-        return
+    open_columns: Dict[str, Dict[str, None]] = {}  # ordered sets
+    for profile in profiles.values():
+        for column in profile.header:
+            if not profile.stats[column].decided():
+                open_columns.setdefault(profile.declared, {})[column] = None
+    for names in unions:
+        parts = [profiles[n] for n in dict.fromkeys(names) if n in profiles]
+        for column in union_data_cols([p.header for p in parts]):
+            having = [p for p in parts if column in p.stats]
+            if len(having) > 1 and not _merged_stats(having, column).decided():
+                for profile in having:
+                    open_columns.setdefault(profile.declared, {})[column] = None
+    return {declared: list(columns) for declared, columns in open_columns.items()}
+
+
+def _rebuild_exact(
+    declared: str,
+    columns: List[str],
+    file_profiles: Dict[str, SourceProfile],
+    read: Callable[..., Iterator],
+) -> None:
+    """Rebuild the stats of ``columns`` of one file's profiles from exact counts.
+
+    ``read`` yields the chunks of the file (``iter_entity_chunks`` over it). The columns
+    are read alone (plus the origin column of a combined file, which routes the rows) and
+    rebuilt for every origin of the file. Everything else in the profiles stays as it was.
+    """
     for profile in file_profiles.values():
-        for column in open_columns:
+        for column in columns:
             profile.stats[column] = ColumnStats()
-    for name, chunk in read(only_columns={declared: open_columns}):
-        for column in open_columns:
+    for name, chunk in read(only_columns={declared: columns}):
+        for column in columns:
             file_profiles[name].stats[column].update(chunk[column], exact=True)
 
 
@@ -116,11 +155,4 @@ def union_kinds(profiles: Sequence[SourceProfile], columns: Sequence[str]) -> Di
     that is an integer in one source and a float in another is a float. A column none of
     them has is ``"empty"``.
     """
-    return {
-        column: reduce(
-            ColumnStats.merged,
-            (p.stats[column] for p in profiles if column in p.stats),
-            ColumnStats(),
-        ).kind()
-        for column in columns
-    }
+    return {column: _merged_stats(profiles, column).kind() for column in columns}

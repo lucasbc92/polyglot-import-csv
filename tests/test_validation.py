@@ -72,6 +72,28 @@ def test_validate_headers_gives_unknown_names_the_combined_header():
     validate_headers(cfg, {"e": ["a", "b"]}, ("e",), ["redis"])  # no error
 
 
+@pytest.mark.parametrize("ename,entity", [
+    ("t", {"source": "e"}),
+    ("t", {"source": ["stock", "e"]}),
+    ("e", {}),  # no source: bound by the entity's own name, here the combined file's
+])
+def test_validate_headers_rejects_the_declared_name_of_a_combined_file_as_a_source(ename, entity):
+    entity = {**entity, "columns": {"a": {"is_key": True}}}
+    cfg = {"sources": {"e": {"file": "j.csv"}}, "redis": {"entities": {ename: entity}}}
+    with pytest.raises(MappingError) as exc:
+        validate_headers(cfg, {"e": ["a", "b"]}, ("e",), ["redis"])
+    assert f"Entity '{ename}' (redis): 'e' is the name of a combined CSV" in str(exc.value)
+    assert "origin values of that file" in str(exc.value)
+
+
+def test_validate_headers_accepts_a_declared_plain_source_beside_a_combined_one():
+    cfg = {"sources": {"cart": "c.csv", "e": {"file": "j.csv"}}, "redis": {"entities": {
+        "c": {"source": "cart", "columns": {"a": {"is_key": True}}},
+        "s": {"source": ["stock", "cart"], "columns": {"a": {"is_key": True}}},
+    }}}
+    validate_headers(cfg, {"cart": ["a"], "e": ["a", "b"]}, ("e",), ["redis"])
+
+
 def test_validate_headers_without_combined_sources_rejects_unknown_names():
     cfg = {"sources": {"e": "e.csv"}, "redis": {"entities": {"purchase": {"columns": {"a": {"is_key": True}}}}}}
     with pytest.raises(MappingError, match="purchase"):

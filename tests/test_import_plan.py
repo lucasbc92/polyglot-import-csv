@@ -5,9 +5,11 @@ budget, profiles every source over the whole file, and binds each entity from th
 profiles, so no later stage re-derives a type from a sample.
 """
 
+import pandas as pd
 import pytest
 
 from polyglotimportcsv.business_exception import MappingError, SourceError
+from polyglotimportcsv.csv_reader import infer_column_kinds
 from polyglotimportcsv.import_plan import (
     DEFAULT_BATCH_SIZE,
     MAX_BATCH_SIZE,
@@ -103,6 +105,22 @@ def test_unknown_origin_lists_the_origins_found(tmp_path):
     assert "'t'" in str(exc.value) and "redis" in str(exc.value)
 
 
+def test_the_declared_name_of_a_combined_file_is_not_an_entity_source(tmp_path):
+    _write_csv(tmp_path / "j.csv", ["action", "id"], [("stock", 1), ("purchase", 2)])
+    cfg = {"sources": {"e": {"file": "j.csv"}}, "redis": _entities(t={"source": "e"})}
+    with pytest.raises(MappingError, match=r"'t' \(redis\).*'e'.*Declared sources: e;.*found: purchase, stock\."):
+        plan_import(cfg, tmp_path, dbms_names=["redis"])
+
+
+def test_an_unknown_name_with_no_combined_file_lists_the_declared_sources(tmp_path):
+    _write_csv(tmp_path / "cart.csv", ["id"], [(1,)])
+    _write_csv(tmp_path / "stock.csv", ["id"], [(1,)])
+    cfg = {"sources": {"cart": "cart.csv", "stock": "stock.csv"},
+           "redis": _entities(t={"source": "cartt"})}
+    with pytest.raises(MappingError, match=r"'cartt'\. Declared sources: cart, stock; origin values found: \(none\)"):
+        plan_import(cfg, tmp_path, dbms_names=["redis"])
+
+
 def test_a_union_with_an_unknown_name_is_reported_like_any_other(tmp_path):
     _write_csv(tmp_path / "a.csv", ["id"], [(1,)])
     cfg = {"sources": {"a": "a.csv"}, "postgres": _entities(u={"source": ["a", "ghost"]})}
@@ -193,3 +211,50 @@ def test_a_source_without_rows_still_binds(tmp_path):
     assert plan.profiles["s"].rows == 0
     assert set(plan.bindings["postgres"]["t"].cfg["columns"]) == {"a", "b"}
     assert plan.entity_batch("postgres", "t") == min(DEFAULT_BATCH_SIZE, plan.rows_per_chunk["s"])
+
+
+#: 2000 distinct ISO datetimes shared out between two sources: the first is all dates, the
+#: second 80% dates. Alone they are a datetime and a string, together 90% parse -> datetime.
+#: With small probe rounds each source is decided on its own bounds while the merged bounds
+#: straddle the threshold, so only exact counts say what the concatenated column is.
+DATES = pd.date_range("2023-01-01", periods=2000, freq="min").strftime("%Y-%m-%dT%H:%M:%SZ").tolist()
+CLEAN = DATES[:1000]
+DIRTY = [f"junk-{i}" if i % 5 == 0 else DATES[1000 + i] for i in range(1000)]
+
+
+def test_union_binding_settles_a_column_the_sources_leave_undecided_together(
+    tmp_path, small_probe_rounds
+):
+    _write_csv(tmp_path / "a.csv", ["d"], [(v,) for v in CLEAN])
+    _write_csv(tmp_path / "b.csv", ["d"], [(v,) for v in DIRTY])
+    cfg = {"sources": {"a": "a.csv", "b": "b.csv"}, "postgres": _entities(u={"source": ["a", "b"]})}
+    plan = plan_import(cfg, tmp_path, dbms_names=["postgres"])
+    whole = pd.DataFrame({"d": pd.Series(CLEAN + DIRTY, dtype=str)})
+    binding = plan.bindings["postgres"]["u"]
+    assert binding.kinds["d"] == infer_column_kinds(whole)["d"] == "datetime"
+    assert binding.cfg["columns"]["d"]["db_type"] == "TIMESTAMPTZ"
+    assert plan.profiles["a"].kinds["d"] == "datetime" and plan.profiles["b"].kinds["d"] == "string"
+
+
+def test_only_the_unions_of_the_selected_dbms_drive_a_reread(tmp_path, small_probe_rounds, reads):
+    _write_csv(tmp_path / "a.csv", ["d"], [(v,) for v in CLEAN])
+    _write_csv(tmp_path / "b.csv", ["d"], [(v,) for v in DIRTY])
+    cfg = {
+        "sources": {"a": "a.csv", "b": "b.csv"},
+        "postgres": _entities(u={"source": ["a", "b"]}),
+        "mongodb": _entities(a={"source": "a"}, b={"source": "b"}),
+    }
+    plan_import(cfg, tmp_path, dbms_names=["mongodb"])
+    assert reads == [("a.csv", None), ("b.csv", None)]
+    reads.clear()
+    plan_import(cfg, tmp_path, dbms_names=["postgres"])
+    assert reads == [("a.csv", None), ("b.csv", None), ("a.csv", ["d"]), ("b.csv", ["d"])]
+
+
+def test_no_file_is_reread_when_the_union_columns_are_decided(tmp_path, small_probe_rounds, reads):
+    _write_csv(tmp_path / "a.csv", ["d"], [(v,) for v in CLEAN])
+    _write_csv(tmp_path / "b.csv", ["d"], [(v,) for v in CLEAN])
+    cfg = {"sources": {"a": "a.csv", "b": "b.csv"}, "postgres": _entities(u={"source": ["a", "b"]})}
+    plan = plan_import(cfg, tmp_path, dbms_names=["postgres"])
+    assert reads == [("a.csv", None), ("b.csv", None)]
+    assert plan.bindings["postgres"]["u"].kinds["d"] == "datetime"

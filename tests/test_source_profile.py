@@ -9,8 +9,6 @@ on is settled by an exact re-read (and only then).
 import pandas as pd
 import pytest
 
-from polyglotimportcsv import csv_reader
-from polyglotimportcsv import stream_source as ss
 from polyglotimportcsv.business_exception import SourceError
 from polyglotimportcsv.csv_reader import ColumnStats, infer_column_kinds, read_csv
 from polyglotimportcsv.source_profile import SourceProfile, profile_sources, union_kinds
@@ -21,30 +19,19 @@ DIRTY_BLOCK_THEN_DATES = ["n/a"] * 300 + (
 )
 
 
+#: 2000 distinct ISO datetimes, to be shared out between sources.
+DATES = pd.date_range("2023-01-01", periods=2000, freq="min").strftime("%Y-%m-%dT%H:%M:%SZ").tolist()
+CLEAN = DATES[:1000]                                                          # all dates
+DIRTY = [f"junk-{i}" if i % 5 == 0 else DATES[1000 + i] for i in range(1000)]  # 80% dates
+# Alone, CLEAN is a datetime and DIRTY is a string; together 90% parse, so a datetime. With
+# small probe rounds each is decided on its own bounds while the merged bounds straddle the
+# threshold, so only exact counts say what the concatenated column is.
+
+
 def _write_csv(path, header, rows):
     path.write_text(",".join(header) + "\n" +
                     "".join(",".join(str(c) for c in r) + "\n" for r in rows),
                     encoding="utf-8")
-
-
-@pytest.fixture
-def small_probe_rounds(monkeypatch):
-    """Probe 50 distinct values per round, so the early stop bites on test-sized chunks."""
-    monkeypatch.setattr(csv_reader, "_DATETIME_PROBE_CHUNK", 50)
-
-
-@pytest.fixture
-def reads(monkeypatch):
-    """Every ``_read_chunks`` call as ``(file name, usecols)``."""
-    calls = []
-    real = ss._read_chunks
-
-    def counting(path, chunksize, usecols=None):
-        calls.append((path.name, usecols))
-        return real(path, chunksize, usecols)
-
-    monkeypatch.setattr(ss, "_read_chunks", counting)
-    return calls
 
 
 def _stats(*values):
@@ -199,3 +186,69 @@ def test_union_kinds_ignore_a_profile_whose_column_is_blank():
     b = _profile("b", n=["1", "2"])
     assert union_kinds([a, b], ["n"]) == {"n": "integer"}
     assert union_kinds([a], ["n"]) == {"n": "empty"}
+
+
+def _whole_kind(*parts):
+    return infer_column_kinds(pd.DataFrame({"d": pd.Series(sum(parts, []), dtype=str)}))["d"]
+
+
+def test_a_union_column_undecided_across_sources_is_settled_by_an_exact_reread(
+    tmp_path, small_probe_rounds, reads
+):
+    _write_csv(tmp_path / "a.csv", ["d"], [(v,) for v in CLEAN])
+    _write_csv(tmp_path / "b.csv", ["d"], [(v,) for v in DIRTY])
+    cfg, args = {"a": "a.csv", "b": "b.csv"}, (tmp_path, {}, {"a": 5000, "b": 5000})
+    alone = profile_sources(cfg, *args)
+    assert (alone["a"].kinds["d"], alone["b"].kinds["d"]) == ("datetime", "string")
+    assert alone["a"].stats["d"].decided() and alone["b"].stats["d"].decided()
+    # decided one by one, yet the merged bounds straddle the threshold: provisional "string"
+    assert not alone["a"].stats["d"].merged(alone["b"].stats["d"]).decided()
+    assert union_kinds(list(alone.values()), ["d"]) == {"d": "string"}
+
+    reads.clear()
+    both = profile_sources(cfg, *args, unions=[["a", "b"]])
+    assert union_kinds(list(both.values()), ["d"]) == {"d": _whole_kind(CLEAN, DIRTY)} == {"d": "datetime"}
+    assert both["a"].stats["d"].merged(both["b"].stats["d"]).decided()
+    assert reads == [("a.csv", None), ("b.csv", None), ("a.csv", ["d"]), ("b.csv", ["d"])]
+    # their own kinds are still those of their own columns
+    assert (both["a"].kinds["d"], both["b"].kinds["d"]) == ("datetime", "string")
+
+
+def test_a_union_inside_one_combined_file_rereads_it_once_with_its_origin_column(
+    tmp_path, small_probe_rounds, reads
+):
+    rows = [("s", v) for v in CLEAN] + [("p", v) for v in DIRTY]
+    _write_csv(tmp_path / "j.csv", ["action", "d"], rows)
+    profs = profile_sources({"e": {"file": "j.csv"}}, tmp_path, {}, {"e": 5000}, unions=[["s", "p"]])
+    assert union_kinds(list(profs.values()), ["d"]) == {"d": "datetime"}
+    assert reads[0] == ("j.csv", None)
+    assert len(reads) == 2 and reads[1][0] == "j.csv" and set(reads[1][1]) == {"action", "d"}
+
+
+def test_each_file_is_reread_once_whatever_number_of_unions_and_columns_need_it(
+    tmp_path, small_probe_rounds, reads
+):
+    _write_csv(tmp_path / "a.csv", ["d", "e"], [(v, v) for v in CLEAN])
+    _write_csv(tmp_path / "b.csv", ["d", "e"], [(v, v) for v in DIRTY])
+    _write_csv(tmp_path / "c.csv", ["d"], [(v,) for v in DIRTY])
+    profs = profile_sources(
+        {"a": "a.csv", "b": "b.csv", "c": "c.csv"}, tmp_path, {}, {"a": 5000, "b": 5000, "c": 5000},
+        unions=[["a", "b"], ["b", "a"], ["a", "c"]],
+    )
+    assert [r for r in reads if r[1] is None] == [("a.csv", None), ("b.csv", None), ("c.csv", None)]
+    rereads = [(name, sorted(columns)) for name, columns in reads if columns is not None]
+    assert rereads == [("a.csv", ["d", "e"]), ("b.csv", ["d", "e"]), ("c.csv", ["d"])]
+    assert union_kinds([profs["a"], profs["c"]], ["d"]) == {"d": "datetime"}
+
+
+def test_a_union_whose_merged_columns_are_all_decided_rereads_nothing(
+    tmp_path, small_probe_rounds, reads
+):
+    _write_csv(tmp_path / "a.csv", ["d", "n", "only_a"], [(v, i, "x") for i, v in enumerate(CLEAN)])
+    _write_csv(tmp_path / "b.csv", ["d", "n"], [(v, f"{i}.5") for i, v in enumerate(CLEAN)])
+    profs = profile_sources({"a": "a.csv", "b": "b.csv"}, tmp_path, {}, {"a": 5000, "b": 5000},
+                            unions=[["a", "b"], ["a"], ["b", "ghost"]])
+    assert reads == [("a.csv", None), ("b.csv", None)]
+    assert union_kinds(list(profs.values()), ["d", "n", "only_a"]) == {
+        "d": "datetime", "n": "float", "only_a": "string",
+    }

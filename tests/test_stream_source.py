@@ -188,7 +188,7 @@ def test_chunk_rows_follows_the_memory_budget(tmp_path):
 
 def test_chunk_rows_reads_a_bom_crlf_file(tmp_path):
     p = tmp_path / "b.csv"
-    p.write_bytes("﻿a,b\r\n1,x\r\n2,y\r\n".encode("utf-8"))
+    p.write_bytes("\ufeffa,b\r\n1,x\r\n2,y\r\n".encode("utf-8"))
     assert ss.chunk_rows(p, 8) >= 1
     assert ss.read_source_headers({"b": "b.csv"}, tmp_path, {}) == {"b": ["a", "b"]}
 

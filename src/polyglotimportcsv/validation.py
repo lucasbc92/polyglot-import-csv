@@ -191,8 +191,12 @@ def validate_headers(
     The origin values that name a combined source's slices live in the rows, so a
     name an entity refers to that is not a declared source stands for one such
     slice. It may draw on any combined file, so it gets the union of their headers.
+    The declared name of a combined file is no source of an entity (an origin value
+    can never equal it), so an entity that names one is rejected.
     """
-    registry = {name: _header_only(name, header) for name, header in headers.items()}
+    registry = {
+        name: _header_only(name, header) for name, header in headers.items() if name not in combined
+    }
     combined_headers = [header for name, header in headers.items() if name in combined]
     if combined_headers:
         union_header = union_data_cols(combined_headers)
@@ -200,6 +204,12 @@ def validate_headers(
             for ename, ecfg in (config[dbms].get("entities") or {}).items():
                 ref = (ecfg or {}).get("source", ename)
                 for name in ref if isinstance(ref, list) else [ref]:
+                    if name in combined:
+                        raise MappingError(
+                            f"Entity '{ename}' ({dbms}): '{name}' is the name of a combined CSV, "
+                            "not a source. The entity must use one of the origin values of "
+                            "that file as its source."
+                        )
                     if name not in registry:
                         registry[name] = _header_only(name, union_header)
     for dbms in dbms_names:
