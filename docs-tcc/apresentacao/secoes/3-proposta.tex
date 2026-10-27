@@ -96,11 +96,13 @@
 % Slide 10: conexão e validação prévia (relatório §4.2.3, §4.2.4, Fig. 10)
 % A Fig. 10 (images/figure10-config-pipeline.png) é um retrato alto; o fluxo foi redesenhado
 % na horizontal, com as três camadas de validação reveladas uma a uma.
-% Fiel ao código (Tarefa 6, rodada de correção): as camadas 1 e 2 rodam antes de qualquer
-% gravação (runner.py, load_config antes de _require_dbms e da leitura dos CSVs); a camada 3
-% roda dentro do laço de gravação (runner._run, SGBD a SGBD; no fluxo padrão, por entidade, na
-% vinculação do 1.º bloco, stream_runner.run_stream_import). Só a GUI confere todos os SGBDs antes
-% (gui/preflight.py). Por isso o "nada é gravado" cobre só as camadas 1 e 2.
+% Fiel ao código (rodada final): as camadas 1 e 2 rodam antes de qualquer gravação (runner.py,
+% load_config antes de _require_dbms e da leitura dos CSVs). A camada 3 é completa só no
+% --dry-run (sempre em materialização, sem gravar) e na GUI (gui/preflight.py; o botão Executar
+% fica desabilitado enquanto houver erro, gui/main_window.py:183-195). No fluxo padrão da CLI,
+% stream_runner.run_stream_import não chama a validação da camada 3 (colunas manuais passam sem
+% conferência); na importação real em materialização ela roda SGBD a SGBD. Por isso o "nada é
+% gravado" cobre só as camadas 1 e 2.
 \begin{frame}{Conexão e validação prévia}
   \destaque{Arquivo de conexão}: JSON que diz onde alcançar cada SGBD.\par
   \smallskip
@@ -124,7 +126,7 @@
       \draw[seta] (imp.east) -- (c1.west);
       \draw[seta] (con.east) -- (c1.west);
       \node[caixa, draw=red!55!black, fill=red!6, text width=55mm, minimum height=7mm,
-            anchor=north] (erro) at (54.75, -15)
+            anchor=north] (erro) at (54.75, -13)
         {\textbf{Falha nas camadas 1 ou 2:} a execução termina e \textbf{nada é gravado}
          nos SGBDs.};
       \draw[falha] (c1.south) -- (c1.south |- erro.north);
@@ -145,8 +147,8 @@
       \draw[seta] (c2.east) -- (c3.west);
       \draw[seta] (csv.south) -- (c3.north);
       \node[caixa, fill=ufscfundo, text width=45mm, minimum height=7mm, anchor=north]
-        (nota) at (114, -15)
-        {Conferida por entidade, logo antes de \mbox{gravá-la}. A GUI confere todos antes.};
+        (nota) at (114, -13)
+        {Completa no \texttt{-{}-dry-run} e na~GUI, antes de qualquer gravação.};
       \draw[draw=black!45, thick] (c3.south) -- (c3.south |- nota.north);
     \end{scope}
     % importação
@@ -155,7 +157,9 @@
         at (129.5, 0) {\textbf{importação} por SGBD};
       \draw[seta] (c3.east) -- (ok.west);
     \end{scope}
-  \end{tikzpicture}
+  \end{tikzpicture}\par
+  \medskip
+  {\footnotesize Fluxo da validação prévia, dos arquivos de configuração à importação.\par}
 \end{frame}
 
 % Slide 11: cenário e-commerce (relatório §4.2, tab:eventos-ecommerce; §4.2.1, modos;
@@ -325,15 +329,15 @@
        testa se cada SGBD responde\\[2pt]
        {\color{black!60}omitida no modo \texttt{-{}-dry-run} (sem gravar)}};
     \node[caixa, draw=red!55!black, fill=red!6, text width=84mm, minimum height=9mm]
-      (erro) at (42.5, -27.5)
+      (erro) at (42.5, -24.5)
       {\textbf{SGBD fora do ar ou com conexão inválida:} a execução termina antes de ler
-       os CSVs e mostra como iniciá-lo.};
+       os CSVs e mostra como corrigi-lo ou iniciá-lo.};
     \draw[falha] (e1.south) -- (e1.south |- erro.north);
     % etapa 2
     \begin{scope}[visivel em=<2->]
       \node[etapa] (e2) at (52.5, 0)
         {\footnotesize\textbf{2. Leitura}\\[2pt]
-         lê cada CSV uma só vez e infere o tipo de cada coluna};
+         lê os CSVs e infere o tipo de cada coluna};
       \draw[seta] (e1.east) -- (e2.west);
     \end{scope}
     % etapa 3
@@ -355,11 +359,14 @@
          {\color{ufscborda}omitida em \texttt{-{}-dry-run}}};
       \draw[seta] (e3.east) -- (e4.west);
       \node[caixa, fill=ufscfundo, text width=46mm, minimum height=9mm] (saida)
-        at (121, -27.5)
+        at (121, -24.5)
         {\textbf{Saída:} relatório com as contagens por entidade e por SGBD};
       \draw[seta] (e4.south) -- (e4.south |- saida.north);
     \end{scope}
-  \end{tikzpicture}
+  \end{tikzpicture}\par
+  \medskip
+  \onslide<3->{\footnotesize Etapas da execução; o pontilhado marca o que se repete por SGBD e por
+   entidade.\par}
 \end{frame}
 
 % Slide 14: exemplo de execução (relatório §4.3.4)

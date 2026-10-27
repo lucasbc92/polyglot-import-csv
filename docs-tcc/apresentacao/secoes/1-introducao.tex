@@ -29,7 +29,7 @@
   \end{tikzpicture}\par
   \medskip
   {\footnotesize Cada dado do e-commerce no SGBD mais adequado.
-   CSV: texto com valores separados por vírgula.\par}
+   CSV: texto com valores separados por vírgula. JSON: texto estruturado.\par}
 \end{frame}
 
 % Slide 4: o problema (relatório §1.1, §3.1)
@@ -60,7 +60,7 @@
       & colunas na ordem do CSV
       & arquivo em protocolo bruto
       & tipo e cabeçalho por parâmetros
-      & conversão para SSTable (formato próprio)
+      & tipos e colunas iguais aos da tabela
       & CSV separado para nós e relacionamentos \\
     \bottomrule
   \end{tabular}
@@ -70,7 +70,7 @@
 \begin{frame}{Objetivos}
   \begin{painel}{Objetivo geral}{}
     Desenvolver a ferramenta \textit{Polyglot Import CSV}, que importa CSV para
-    PostgreSQL, Redis, MongoDB, Cassandra ou Neo4j.
+    múltiplos SGBDs: PostgreSQL, Redis, MongoDB, Cassandra ou Neo4j.
   \end{painel}
   \smallskip
   \begin{painel}{Objetivos específicos}{}

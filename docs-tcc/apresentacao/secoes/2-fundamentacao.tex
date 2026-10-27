@@ -41,7 +41,7 @@
    \scriptsize\mdseries\color{ufsctexto}
    \tbok{} o Cap.~3 afirma \quad \tbnd{} o Cap.~3 não afirma\par\endgroup
   \vspace{1pt}
-  \fontsize{8}{9}\selectfont % mesmo corpo do \scriptsize, entrelinha menor
+  \fontsize{8}{8.6}\selectfont % mesmo corpo do \scriptsize, entrelinha menor
   \setlength{\tabcolsep}{2.5pt}
   \setlength{\aboverulesep}{0.15ex}\setlength{\belowrulesep}{0.3ex}
   \renewcommand{\arraystretch}{1}
@@ -53,18 +53,18 @@
     \midrule
     Importadores nativos & importação & um SGBD por vez
       & \tbok\textsuperscript{1} & \tbnd & \tbnd \\
-    \addlinespace[1.5pt]
+    \addlinespace[1pt]
     ArangoDB e \texttt{arangoimport} & importação & um SGBD multimodelo
       & \tbok & \tbnd & \tbnd \\
-    \addlinespace[1.5pt]
+    \addlinespace[1pt]
     dbcrossbar & migração & PostgreSQL, BigQuery, nuvem & \tbok & \tbnd & \tbnd \\
-    \addlinespace[1.5pt]
+    \addlinespace[1pt]
     Hackolade & modelagem visual & dezenas de alvos & \tbnd & \tbnd & \tbnd \\
-    \addlinespace[1.5pt]
-    Frameworks de acesso\textsuperscript{3} & acesso em tempo de execução & vários SGBDs
+    \addlinespace[1pt]
+    Frameworks de acesso\textsuperscript{2} & acesso em tempo de execução & vários SGBDs
       & \tbnd & \tbnd & \tbnd \\
-    \addlinespace[1.5pt]
-    \textit{Polystores}\textsuperscript{2} (BigDAWG) & consulta federada & fontes heterogêneas
+    \addlinespace[1pt]
+    \textit{Polystores}\textsuperscript{3} (BigDAWG) & consulta federada & fontes heterogêneas
       & \tbnd & \tbnd & \tbnd \\
     \midrule
     \onslide<2->{\destaque{Polyglot Import CSV}} & \onslide<2->{\destaque{importação}}
@@ -74,10 +74,10 @@
       & \onslide<2->{\destaque{\tbok{} (\texttt{-{}-dry-run})}} \\
     \bottomrule
   \end{tabular}
-  \par\vspace{2pt}
-  {\fontsize{8}{9}\selectfont\color{black!70}
-   \textsuperscript{1} Redis: arquivo em protocolo bruto. \quad
-   \textsuperscript{2} Uma só consulta sobre vários SGBDs (consulta federada).\par
-   \textsuperscript{3} Interface para ler e gravar em vários SGBDs (PEREIRA; GUERRA; ROSA, 2025;
-   SACHDEVA; VASAVA, 2024).\par}
+  \par\vspace{1pt}
+  {\fontsize{8}{8.6}\selectfont\color{black!70}
+   \textsuperscript{1} Redis: arquivo em protocolo bruto.\par
+   \textsuperscript{2} Interface para ler e gravar em vários SGBDs (PEREIRA; GUERRA; ROSA, 2025;
+   SACHDEVA; VASAVA, 2024).\par
+   \textsuperscript{3} Uma só consulta sobre vários SGBDs (consulta federada).\par}
 \end{frame}

@@ -6,7 +6,8 @@
 % Evidências: §4.2 (filters, is_key, schema_column; os dois arquivos e os seus JSON Schema);
 % §4.2.4 e §4.3.1 (camadas 1 e 2 e a verificação dos SGBDs, antes de ler os CSVs; conferido
 % em runner.py: load_config e _require_dbms vêm antes de load_sources); §4.3.4 (--dry-run,
-% "valida e conta, sem gravar", como no slide 14); §5.1 (QP1-QP6, volumes); §4.6 (GUI).
+% "valida e conta, sem gravar", como no slide 14; a camada 3, cruzada com os dados, é completa só
+% no --dry-run e na GUI, e a célula diz isso); §5.1 (QP1-QP6, volumes); §4.6 (GUI).
 % \leavevmode antes de \onslide: sem ele, cada célula p ganha uma linha em branco no topo.
 \newcommand{\cmobjetivo}[3]{% #1 passo, #2 objetivo, #3 evidência
   \leavevmode\onslide<#1->{#2} & \leavevmode\onslide<#1->{#3} \\}
@@ -25,7 +26,7 @@
     \cmobjetivo{2}{2. \destaque{Validação prévia}: um erro na configuração impede o início
       da importação.}
       {JSON Schema e consistência entre os arquivos antes de ler os CSVs; verificação dos
-       SGBDs; \texttt{-{}-dry-run} valida e conta, sem gravar.}
+       SGBDs; validação cruzada completa no \texttt{-{}-dry-run} e na GUI.}
     \cmobjetivo{3}{3. \destaque{Avaliação} do desempenho com diferentes volumes e modelos de
       dados.}
       {Seis questões de pesquisa (QP1--QP6); de \num{1000} a \num{100000} linhas; os cinco
