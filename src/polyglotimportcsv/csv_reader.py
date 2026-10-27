@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Tuple
 
 import pandas as pd
 
@@ -49,43 +50,139 @@ def _parse_datetimes(s: pd.Series) -> pd.Series:
         return out
 
 
-def _exceeds_datetime_share(non_empty: pd.Series, threshold: float) -> bool:
-    """Does more than ``threshold`` of ``non_empty`` parse as a datetime?
+def _is_digits_only(s: pd.Series) -> pd.Series:
+    """Mask of the values that are nothing but ASCII digits once stripped."""
+    return s.str.strip().str.fullmatch(r"[0-9]+")
 
-    Answers exactly what ``_parse_datetimes(col).notna().mean() > threshold``
-    answers, without parsing what cannot change the verdict. Probing every row was
-    the single largest cost of a large import — and almost all of it was spent
-    proving that plainly non-date columns (names, e-mails, URLs, order numbers)
-    are not dates, one ``dateutil`` call per row.
+
+def _datetime_evidence(non_empty: pd.Series, threshold: float) -> Tuple[int, int]:
+    """Count the values of ``non_empty`` known to parse as datetimes and known not to.
+
+    Returns ``(parsed, failed)``: at least ``parsed`` values parse and at most
+    ``total - failed`` do, the two meeting when the probe ran to the end. It stops as
+    soon as the verdict ``parsed > threshold * total`` is settled, without parsing
+    what cannot change it. Probing every row was the single largest cost of a large
+    import — and almost all of it was spent proving that plainly non-date columns
+    (names, e-mails, URLs, order numbers) are not dates, one ``dateutil`` call per row.
 
     Two exact reductions:
 
     * **De-duplicate.** Parsing is a pure function of the value, so a value that
       occurs 33 times is parsed once and weighted by its count.
     * **Stop once the outcome is settled.** Distinct values are visited
-      most-frequent-first; after each round the parsed weight is compared against
+      most-frequent-first; before each round the parsed weight is compared against
       the threshold and the still-achievable weight against it too. A column that
       is not dates is decided as soon as failures pass ``1 - threshold`` of the
       rows, which for real data is a few hundred values rather than every row.
+
+    One rule goes beyond the plain parse: a value that is only ASCII digits counts
+    as a failure and is never parsed. pandas reads a bare integer as a year
+    ("1000" -> 1000-01-01), so an ID column running past 999 would clear the
+    threshold and be cast to timestamps. Genuinely numeric dates (YYYYMMDD) are
+    ambiguous and must be declared with an explicit db_type in the import config.
     """
     counts = non_empty.value_counts()
     total = int(counts.to_numpy().sum())
     if total == 0:
-        return False
+        return 0, 0
     need = threshold * total
     values, weights = counts.index, counts.to_numpy()
-    parsed_weight = failed_weight = 0
+    digits = _is_digits_only(pd.Series(values)).to_numpy(dtype=bool)
+    parsed_weight, failed_weight = 0, int(weights[digits].sum())
+    values, weights = values[~digits], weights[~digits]
     for start in range(0, len(values), _DATETIME_PROBE_CHUNK):
+        if parsed_weight > need:
+            break  # the rest can only add to it
+        if total - failed_weight <= need:
+            break  # even parsing every remaining value cannot reach it
         chunk = values[start : start + _DATETIME_PROBE_CHUNK]
         w = weights[start : start + _DATETIME_PROBE_CHUNK]
         ok = _parse_datetimes(pd.Series(chunk, dtype=object)).notna().to_numpy()
         parsed_weight += int(w[ok].sum())
         failed_weight += int(w[~ok].sum())
-        if parsed_weight > need:
-            return True  # the rest can only add to it
-        if total - failed_weight <= need:
-            return False  # even parsing every remaining value cannot reach it
-    return parsed_weight > need
+    return parsed_weight, failed_weight
+
+
+def _exceeds_datetime_share(non_empty: pd.Series, threshold: float) -> bool:
+    """Does more than ``threshold`` of ``non_empty`` parse as a datetime?"""
+    parsed, _ = _datetime_evidence(non_empty, threshold)
+    return parsed > threshold * int(non_empty.count())
+
+
+@dataclass
+class ColumnStats:
+    """Type evidence for one column, accumulated chunk by chunk.
+
+    Lets a whole file be classified in bounded memory: ``update`` takes the raw
+    text of the column in one chunk, ``merged`` combines two accumulators, and
+    ``kind`` reads the verdict. The flags are ANDs and the counters are sums, so the
+    result does not depend on how the file was cut.
+
+    ``dates_min`` and ``dates_max`` bracket how many values parse as datetimes: at
+    least ``dates_min`` do and at most ``dates_max`` can. They are equal unless a
+    chunk stopped probing early or contributed only an upper bound (see ``update``).
+    """
+
+    non_empty: int = 0
+    all_boolean: bool = True
+    all_numeric: bool = True
+    all_integral: bool = True
+    dates_min: int = 0
+    dates_max: int = 0
+
+    def update(self, values: pd.Series) -> None:
+        """Fold in the raw text of this column in one chunk; empty cells are ignored."""
+        s2 = values.replace("", pd.NA).dropna()
+        n = len(s2)
+        if n == 0:
+            return
+        self.non_empty += n
+        self.all_boolean &= is_boolean_series(s2)
+        # Numeric before datetime: a fully numeric chunk is a number, so it is never
+        # probed for dates (and a bare digit string is never a date, see
+        # ``_datetime_evidence``). It can only add an upper bound: whatever is not
+        # digit-only might still parse, should a later chunk make the column text.
+        num = pd.to_numeric(s2, errors="coerce")
+        numeric_chunk = bool(num.notna().all())
+        self.all_numeric &= numeric_chunk
+        if numeric_chunk:
+            self.all_integral &= bool((num % 1 == 0).all())
+            self.dates_max += int((~_is_digits_only(s2)).sum())
+        else:
+            parsed, failed = _datetime_evidence(s2, _DATETIME_THRESHOLD)
+            self.dates_min += parsed
+            self.dates_max += n - failed
+
+    def merged(self, other: "ColumnStats") -> "ColumnStats":
+        return ColumnStats(
+            non_empty=self.non_empty + other.non_empty,
+            all_boolean=self.all_boolean and other.all_boolean,
+            all_numeric=self.all_numeric and other.all_numeric,
+            all_integral=self.all_integral and other.all_integral,
+            dates_min=self.dates_min + other.dates_min,
+            dates_max=self.dates_max + other.dates_max,
+        )
+
+    def kind(self) -> str:
+        """'empty', 'boolean', 'integer', 'float', 'datetime' or 'string'.
+
+        One verdict is not settled by the evidence: ``dates_min`` at or below the
+        threshold share and ``dates_max`` above it. That only happens when chunks
+        disagree close to the threshold, and it reads as 'string': the kind that
+        casts nothing, where a wrong 'datetime' would rewrite the values.
+        """
+        if self.non_empty == 0:
+            return "empty"
+        if self.all_boolean:
+            return "boolean"
+        if self.all_numeric:
+            return "integer" if self.all_integral else "float"
+        need = _DATETIME_THRESHOLD * self.non_empty
+        if self.dates_min > need:
+            return "datetime"
+        if self.dates_max <= need:
+            return "string"
+        return "string"  # undecided, see above
 
 
 def infer_column_kinds(df: pd.DataFrame) -> Dict[str, str]:
@@ -105,24 +202,7 @@ def infer_column_kinds(df: pd.DataFrame) -> Dict[str, str]:
         if pd.api.types.is_datetime64_any_dtype(s):
             kinds[col] = "datetime"
             continue
-        s2 = s.replace("", pd.NA).dropna()
-        if s2.empty:
-            kinds[col] = "empty"
-            continue
-        if is_boolean_series(s2):
-            kinds[col] = "boolean"
-            continue
-        # Numeric before datetime: pandas reads a bare 4-digit integer as a year
-        # ("1000" -> 1000-01-01), so an ID column running past 999 clears the
-        # datetime threshold below and gets cast to timestamps. A fully numeric
-        # column is a number; genuinely numeric dates (YYYYMMDD) are ambiguous
-        # and must be declared with an explicit db_type in the import config.
-        num = pd.to_numeric(s2, errors="coerce")
-        if num.notna().all():
-            kinds[col] = "integer" if (num % 1 == 0).all() else "float"
-            continue
-        if _exceeds_datetime_share(s2, _DATETIME_THRESHOLD):
-            kinds[col] = "datetime"
-            continue
-        kinds[col] = "string"
+        stats = ColumnStats()
+        stats.update(s)
+        kinds[col] = stats.kind()
     return kinds

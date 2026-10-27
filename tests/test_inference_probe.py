@@ -20,11 +20,15 @@ _NOT_A_DATE = "Product1234"
 
 
 def _naive_exceeds(s: pd.Series, threshold: float) -> bool:
-    """The definition being optimized: parse everything, compare the share."""
+    """The definition being optimized: parse everything, compare the share.
+
+    A value that is only digits counts as a failure -- pandas would read it as a year.
+    """
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         parsed = pd.to_datetime(s, errors="coerce", utc=True)
-    return bool(parsed.notna().mean() > threshold)
+    is_date = parsed.notna() & ~s.str.strip().str.fullmatch(r"[0-9]+")
+    return bool(is_date.mean() > threshold)
 
 
 def _mixed(n_dates: int, n_other: int) -> pd.Series:
@@ -49,6 +53,14 @@ def test_probe_matches_the_naive_share(n_dates, n_other):
     assert _exceeds_datetime_share(s, _DATETIME_THRESHOLD) == _naive_exceeds(
         s, _DATETIME_THRESHOLD
     )
+
+
+def test_digit_only_values_count_as_failures():
+    # 80 real dates and 20 four-digit values that pandas reads as years: the plain
+    # parse says 100% dates, but digits are not dates, so the share is 80% < 85%.
+    s = pd.Series([_DATE] * 80 + [str(1000 + i) for i in range(20)], dtype=object)
+    assert _exceeds_datetime_share(s, _DATETIME_THRESHOLD) is False
+    assert _naive_exceeds(s, _DATETIME_THRESHOLD) is False
 
 
 def test_duplicates_are_weighted_by_their_counts():
