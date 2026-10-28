@@ -17,6 +17,10 @@ class MappingError(BusinessException):
     """Unknown column/index/range, or entity without a resolvable source."""
 
 
+class DataValidationError(BusinessException):
+    """Data rows break the import configuration (validation layer 3)."""
+
+
 class ImportExecutionError(BusinessException):
     """Failure while connecting to or writing into a target DBMS."""
 
