@@ -479,9 +479,11 @@ def test_single_pass_writes_the_nodes_of_every_dbms_before_any_relationship(tmp_
             log.append((self.dbms, "rel"))
             return super().write_relationships(rname, rspec, from_binding, to_binding, batch)
 
+    # neo4j, the DBMS with relationships, comes first: a pass that finished one DBMS
+    # before starting the next would write its relationships before postgres's nodes.
     plan = plan_import(_pg_and_neo4j_config(tmp_path), tmp_path,
-                       dbms_names=["postgres", "neo4j"], chunk_mb=0.01, batch_size=7)
-    sr.run_single_pass(plan, {"postgres": Logged("postgres"), "neo4j": Logged("neo4j")})
+                       dbms_names=["neo4j", "postgres"], chunk_mb=0.01, batch_size=7)
+    sr.run_single_pass(plan, {"neo4j": Logged("neo4j"), "postgres": Logged("postgres")})
 
     first_rel = log.index(("neo4j", "rel"))
     assert {kind for _, kind in log[:first_rel]} == {"node"}

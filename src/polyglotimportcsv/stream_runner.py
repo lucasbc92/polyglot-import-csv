@@ -18,9 +18,8 @@ rows. Both are the sink's responsibility, applied inside ``write_batch``.
 
 from __future__ import annotations
 
-import dataclasses
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple
 
@@ -300,7 +299,7 @@ def run_stream_import(
         sink = sink_factories[dbms](plan.config[dbms])
         if create_schema:
             sink.create_schema()
-        own = dataclasses.replace(
+        own = replace(
             plan, dbms_names=[dbms], sources_cfg=dbms_sources(plan.config, [dbms])
         )
         one = run_single_pass(own, {dbms: sink}, on_batch=on_batch)
