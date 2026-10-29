@@ -114,6 +114,21 @@ def test_an_each_split_entity_is_one_place_and_its_each_column_is_checked(tmp_pa
     assert [e.line for e in by_rule["not_convertible:region"].examples] == [7]
 
 
+def test_a_bad_date_in_a_datetime_each_column_is_an_error(tmp_path):
+    # The row goes to no partition (its each value casts to None), so only the rows the
+    # split drops show it; the empty each cell is dropped too, but is no error.
+    when = [f"2023-01-{1 + i % 3:02d}" for i in range(20)]
+    when[4], when[9] = "2023-02-30", ""
+    _write_csv(tmp_path / "ev.csv", ["id", "when"], list(zip(range(20), when)))
+    config = _events_config({"id": {"is_key": True}},
+                            filters=[{"column": "when", "operator": "each"}])
+    report, counts = _validate(tmp_path, config)
+    group = _only_group(report)
+    assert (group.rule, group.where) == ("not_convertible", "postgres · events")
+    assert [(e.line, e.column, e.value) for e in group.examples] == [(6, "when", "2023-02-30")]
+    assert counts.entity_rows["postgres"]["events"] == 18
+
+
 def test_empty_key_is_an_error_for_postgres_redis_neo4j_not_mongodb(tmp_path):
     _write_csv(tmp_path / "items.csv", ["id", "name"], [("a", "x"), ("", "y"), ("c", "z")])
     entity = {"source": "items", "columns": {"id": {"is_key": True}, "name": {}}}
@@ -210,8 +225,8 @@ def test_dangling_postgres_foreign_key_is_an_error(tmp_path):
     assert (group.rule, group.where) == ("dangling_reference", "postgres · order_customer")
     assert group.count == 2  # distinct values: 99 twice counts once
     assert [(e.file, e.line, e.column, e.value) for e in group.examples] == [
-        ("orders.csv", 3, "customer_id", 99), ("orders.csv", 6, "customer_id", 98),
-    ]
+        ("orders.csv", 3, "customer_id", "99"), ("orders.csv", 6, "customer_id", "98"),
+    ]  # no db_type: both columns are TEXT, which stores the integers as their digits
 
 
 def test_fk_to_a_row_the_target_filter_drops_is_dangling(tmp_path):
@@ -220,7 +235,29 @@ def test_fk_to_a_row_the_target_filter_drops_is_dangling(tmp_path):
     report, _ = _validate(tmp_path, config)
     group = _only_group(report)
     assert group.rule == "dangling_reference"
-    assert [(e.line, e.value) for e in group.examples] == [(3, 2)]
+    assert [(e.line, e.value) for e in group.examples] == [(3, "2")]
+
+
+def test_references_compare_the_values_postgresql_stores(tmp_path):
+    # customers.id is text (one key is "x9") and orders.customer_id integer, but neither
+    # declares a db_type: both columns are TEXT, where PostgreSQL stores '1', '2', '7'.
+    _write_shop(tmp_path, [1, 2, 7, 2], ids=(1, 2, "x9"))
+    report, _ = _validate(tmp_path, _shop_config())
+    group = _only_group(report)
+    assert group.count == 1
+    assert [(e.line, e.column, e.value) for e in group.examples] == [(4, "customer_id", "7")]
+
+
+def test_references_compare_numbers_in_numeric_columns(tmp_path):
+    _write_shop(tmp_path, ["1", "002", "5"])
+    config = _shop_config()
+    config["postgres"]["entities"]["customers"]["columns"]["id"]["db_type"] = "TEXT"
+    config["postgres"]["entities"]["orders"]["columns"]["customer_id"]["db_type"] = "BIGINT"
+    report, _ = _validate(tmp_path, config)  # '1' (TEXT) vs 1 (BIGINT): not the same
+    assert [e.value for e in _only_group(report).examples] == [1, 2, 5]
+    config["postgres"]["entities"]["customers"]["columns"]["id"]["db_type"] = "INTEGER"
+    report, _ = _validate(tmp_path, config)  # 002 is stored as the number 2
+    assert [e.value for e in _only_group(report).examples] == [5]
 
 
 @pytest.mark.parametrize("ids", [(1, 2, 3), ("c1", "c2", "c3")])  # cast None, or text ""
@@ -277,6 +314,27 @@ def test_an_empty_text_endpoint_is_not_an_error(tmp_path):
     assert report.ok()
 
 
+@pytest.mark.parametrize("numbers", [("o1", "o4"), (1, 4)])  # text "", or cast None
+def test_an_empty_relationship_merge_key_is_an_error(tmp_path, numbers):
+    _write_graph(tmp_path, [
+        ("u1", 1, numbers[0], 1), ("u2", 2, "", 1), ("u3", "", "", 1), ("u4", 3, numbers[1], 1),
+    ])
+    report, _ = _validate(tmp_path, _graph_config())
+    group = _only_group(report)
+    assert (group.rule, group.where) == ("empty_key", "neo4j · PURCHASED")
+    assert "order_number" in group.detail
+    # the row with an empty endpoint makes no edge, so its merge key does not matter
+    assert [(e.file, e.line, e.column) for e in group.examples] == [
+        ("purchase.csv", 3, "order_number")
+    ]
+
+
+def test_a_bad_property_on_a_row_that_makes_no_edge_is_not_an_error(tmp_path):
+    _write_graph(tmp_path, [("u1", 1, "o1", "1"), ("u2", "", "o2", "2.0"), ("u3", 2, "o3", "3")])
+    report, _ = _validate(tmp_path, _graph_config())
+    assert report.ok()
+
+
 def test_an_unconvertible_relationship_property_is_an_error(tmp_path):
     quantity = [str(i) for i in range(10)]
     quantity[6] = "2.0"
@@ -305,7 +363,7 @@ def test_line_numbers_on_a_bom_crlf_file(tmp_path):
     when = _dates(10)
     when[2] = "not a date"  # data row 3
     text = "id,when\r\n" + "".join(f"{i},{w}\r\n" for i, w in enumerate(when))
-    (tmp_path / "ev.csv").write_bytes(("﻿" + text).encode("utf-8"))
+    (tmp_path / "ev.csv").write_bytes(("\ufeff" + text).encode("utf-8"))
     report, _ = _validate(tmp_path, _events_config({"id": {"is_key": True}, "when": {}}))
     (ex,) = _only_group(report).examples
     assert (ex.line, ex.column, ex.value) == (4, "when", "not a date")
@@ -413,6 +471,8 @@ def test_validation_counts_equal_the_write_counts(tmp_path):
         },
     }
     plan = plan_import(config, tmp_path, dbms_names=["postgres", "cassandra", "redis", "neo4j"])
+    # Blocks of 5 and 6 rows: every count is summed over several chunks.
+    plan = dataclasses.replace(plan, rows_per_chunk={"stock": 5, "purchase": 6})
     report, counts = validate_data(plan)
     fakes = {d: _RecordingSink for d in ("postgres", "cassandra", "redis")}
     fakes["neo4j"] = lambda cfg: Neo4jSink(cfg, driver_factory=lambda c: _NeoDriver())

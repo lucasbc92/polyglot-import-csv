@@ -17,18 +17,24 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Set, Tuple
 
+import numpy as np
 import pandas as pd
 from rich import box
 from rich.table import Table
 from rich.text import Text
 
-from polyglotimportcsv.db_type_checks import cassandra_value_problem, postgres_value_problem
+from polyglotimportcsv.db_type_checks import (
+    cassandra_value_problem,
+    postgres_stored_value,
+    postgres_value_problem,
+)
 from polyglotimportcsv.dbms_sink import DbmsSink
 from polyglotimportcsv.entity_utils import (
-    flat_leaf_columns,
+    is_empty_reference,
     iter_leaf_columns,
+    primary_key_source_columns,
     resolve_csv_column,
     target_field_name,
 )
@@ -37,6 +43,12 @@ from polyglotimportcsv.importers.cassandra_importer import _cassandra_column_pla
 from polyglotimportcsv.importers.neo4j_importer import _rel_rows_for_batch
 from polyglotimportcsv.materialize import cell_scalar
 from polyglotimportcsv.reporting import print_rich
+from polyglotimportcsv.schema_generator import postgres_column_type
+from polyglotimportcsv.sinks.neo4j_sink import (
+    RelationshipColumns,
+    node_key_column,
+    relationship_columns,
+)
 from polyglotimportcsv.stream_binding import EntityBinding
 from polyglotimportcsv.stream_runner import StreamCounts, run_single_pass
 
@@ -117,9 +129,17 @@ def _scalar(value: Any) -> Any:
 
 def _reference(value: Any) -> Any:
     """A cast cell as a reference compares it, ``None`` when empty: an empty foreign
-    key or endpoint means there is no relationship."""
-    value = _scalar(value)
-    return None if isinstance(value, str) and value == "" else value
+    key or endpoint means there is no relationship (``is_empty_reference``)."""
+    return None if is_empty_reference(value) else cell_scalar(value)
+
+
+def _empty(values: pd.Series) -> np.ndarray:
+    """Mask of the cast cells that hold no value: ``None`` (or a null-like) or ``""``."""
+    return (values.isna() | (values == "")).to_numpy(dtype=bool)
+
+
+def _each_columns(binding: EntityBinding) -> List[str]:
+    return [f["column"] for f in binding.cfg.get("filters") or [] if f.get("operator") == "each"]
 
 
 def _unconverted(raw: pd.Series, cast: pd.Series, kind: str) -> pd.Series:
@@ -161,11 +181,7 @@ def _key_columns(dbms: str, binding: EntityBinding, columns: List[str]) -> List[
             (c, "cluster") for c in binding.cfg.get("cassandra_cluster") or []
         ]
     if dbms in _KEY_DBMS:
-        return [
-            (resolve_csv_column(fk, spec, columns), "key")
-            for _, fk, spec in iter_leaf_columns(binding.cfg)
-            if spec.get("is_key")
-        ]
+        return [(c, "key") for c in primary_key_source_columns(binding.cfg, columns)]
     return []
 
 
@@ -224,13 +240,11 @@ def check_rows(
         (spec, resolve_csv_column(fk, spec, columns))
         for _, fk, spec in iter_leaf_columns(binding.cfg)
     ]
-    each = [f["column"] for f in binding.cfg.get("filters") or [] if f.get("operator") == "each"]
     _check_convertible(report, where, file_label, binding.kinds, raw, cast,
-                       [col for _, col in leaves] + each)
+                       [col for _, col in leaves] + _each_columns(binding))
 
     for col, label in dict.fromkeys(_key_columns(dbms, binding, columns)):
-        values = cast[col]
-        for idx in cast.index[(values.isna() | (values == "")).to_numpy()]:
+        for idx in cast.index[_empty(cast[col])]:
             report.add("empty_key", where, f"{label} column '{col}' is empty",
                        Example(file_label, _line(idx), col, raw.at[idx, col]))
 
@@ -249,28 +263,36 @@ def check_rows(
                           lambda v, t=cql: cassandra_value_problem(t, v))
 
 
-def _target_column(binding: EntityBinding, target: str, columns: List[str]) -> str:
-    """The CSV column of the leaf whose target field is ``target``."""
+def _target_column(binding: EntityBinding, target: str, columns: List[str]) -> Tuple[str, str]:
+    """The CSV column of the leaf whose target field is ``target``, and the type of its
+    column in the table."""
     return next(
-        resolve_csv_column(fk, spec, columns)
+        (resolve_csv_column(fk, spec, columns), postgres_column_type(spec))
         for _, fk, spec in iter_leaf_columns(binding.cfg)
         if target_field_name(fk, spec) == target
     )
 
 
-def _key_leaf(binding: EntityBinding) -> Tuple[str, Dict[str, Any]]:
-    """``(field_key, spec)`` of the entity's single ``is_key`` leaf (Neo4j)."""
-    return [(fk, sp) for fk, _, sp in flat_leaf_columns(binding.cfg) if sp.get("is_key")][0]
+def _stored_references(values: pd.Series, pg_type: str) -> Iterator[Tuple[Any, Any]]:
+    """``(index, stored value)`` of every non-empty reference in ``values``, in the form
+    a column of ``pg_type`` stores it, so both sides of a foreign key compare as
+    PostgreSQL compares them."""
+    for idx, cell in values.items():
+        value = _reference(cell)
+        if value is not None:
+            yield idx, postgres_stored_value(pg_type, value)
 
 
 class CheckingSink:
     """A ``DbmsSink`` that connects to nothing: it checks the rows its DBMS would get.
 
-    Rows arrive through ``inspect_rows`` and go to ``check_rows``. For PostgreSQL it
-    also keeps, per relationship, the distinct ``references_key`` values of the ``to``
-    entity and the first file and line of each distinct ``foreign_key`` value of the
-    ``from`` entity; ``close()`` reports every foreign key value the ``to`` entity does
-    not hold, as the foreign key ``PostgresSink.close()`` adds would refuse it.
+    Rows arrive through ``inspect_rows`` and go to ``check_rows``; the rows an ``each``
+    split puts in no partition arrive through ``inspect_unpartitioned_rows``. For
+    PostgreSQL it also keeps, per relationship, the distinct ``references_key`` values of
+    the ``to`` entity and the first file and line of each distinct ``foreign_key`` value
+    of the ``from`` entity, both as their columns store them; ``close()`` reports every
+    foreign key value the ``to`` entity does not hold, as the foreign key
+    ``PostgresSink.close()`` adds would refuse it.
     """
 
     def __init__(self, dbms: str, plan: ImportPlan, report: ValidationReport) -> None:
@@ -308,17 +330,26 @@ class CheckingSink:
         for rname, rspec in self._fk_rels.items():
             fk = rspec["foreign_key"]
             if partition == rspec["to"]:
-                col = _target_column(binding, rspec.get("references_key") or fk, columns)
+                col, pg_type = _target_column(binding, rspec.get("references_key") or fk, columns)
                 self._referenced[rname].update(
-                    v for v in map(_reference, cast[col]) if v is not None
+                    v for _, v in _stored_references(cast[col], pg_type)
                 )
             if partition == rspec["from"]:
-                col = self._fk_column[rname] = _target_column(binding, fk, columns)
+                col, pg_type = _target_column(binding, fk, columns)
+                self._fk_column[rname] = col
                 first = self._fk_first[rname]
-                for idx, value in cast[col].items():
-                    value = _reference(value)
-                    if value is not None and value not in first:
+                for idx, value in _stored_references(cast[col], pg_type):
+                    if value not in first:
                         first[value] = (file_label, _line(idx))
+
+    def inspect_unpartitioned_rows(
+        self, source: str, binding: EntityBinding, raw: pd.DataFrame, cast: pd.DataFrame,
+    ) -> None:
+        """Rows the ``each`` split puts in no partition, because their ``each`` value is
+        empty after the cast: not written, so only a failed cast of that value counts."""
+        where = f"{self.dbms} · {self._entity_of[id(binding)]}"
+        _check_convertible(self.report, where, self._file_label(source), binding.kinds,
+                           raw, cast, _each_columns(binding))
 
     def close(self) -> None:
         for rname, rspec in self._fk_rels.items():
@@ -335,12 +366,19 @@ class CheckingSink:
                     )
 
 
+def _edge_rows(cast: pd.DataFrame, cols: RelationshipColumns) -> np.ndarray:
+    """Mask of the relationship rows with both endpoints set: those that become edges."""
+    ends = cast[[cols.from_src, cols.to_src]].map(is_empty_reference)
+    return ~ends.any(axis=1).to_numpy(dtype=bool)
+
+
 class Neo4jCheckingSink(CheckingSink):
     """``CheckingSink`` for Neo4j, which also checks the relationships.
 
-    It keeps the distinct keys of every entity a relationship links, and reports each
-    relationship row whose endpoints are both set but one names no node of its entity:
-    the ``MATCH`` of ``Neo4jSink`` would create no edge for it, without a word.
+    It keeps the distinct keys of every entity a relationship links. Of the relationship
+    rows whose endpoints are both set (the ones that become edges), it reports each one
+    whose endpoint names no node of its entity, which the ``MATCH`` of ``Neo4jSink``
+    would skip without a word, and each empty merge key, which its ``MERGE`` refuses.
     """
 
     def __init__(self, dbms: str, plan: ImportPlan, report: ValidationReport) -> None:
@@ -358,56 +396,54 @@ class Neo4jCheckingSink(CheckingSink):
         columns = list(cast.columns)
         keys = self._node_keys.get(partition)
         if keys is not None:
-            col = resolve_csv_column(*_key_leaf(binding), columns)
+            col = node_key_column(binding.cfg, columns)
             keys.update(v for v in map(_reference, cast[col]) if v is not None)
         # A relationship's properties come from its `from` entity's rows, the same rows
         # as here (an entity a relationship links has no `each` split): they are checked
-        # now, while the raw text is at hand to tell an empty cell from a failed cast.
+        # now, while the raw text is at hand to tell an empty cell from a failed cast,
+        # on the rows that become edges.
         for rname, rspec in self._rels.items():
             if rspec["from"] == partition:
+                to_binding = self.plan.bindings[self.dbms][rspec["to"]]
+                edges = _edge_rows(cast, relationship_columns(rspec, binding, to_binding, columns))
                 props = [resolve_csv_column(fk, spec, columns)
                          for fk, spec in (rspec.get("columns") or {}).items()]
                 _check_convertible(self.report, f"{self.dbms} · {rname}",
-                                   self._file_label(source), binding.kinds, raw, cast, props)
+                                   self._file_label(source), binding.kinds,
+                                   raw[edges], cast[edges], props)
 
     def inspect_relationship_rows(
         self, source: str, rname: str, rspec: Dict[str, Any],
         from_binding: EntityBinding, to_binding: EntityBinding, cast: pd.DataFrame,
     ) -> None:
-        columns = list(cast.columns)
-        ends = [
-            (rspec[end], resolve_csv_column(*_key_leaf(b), columns))
-            for end, b in (("from", from_binding), ("to", to_binding))
-        ]
-        file_label = self._file_label(source)
+        cols = relationship_columns(rspec, from_binding, to_binding, list(cast.columns))
+        edges = cast[_edge_rows(cast, cols)]
+        where, file_label = f"{self.dbms} · {rname}", self._file_label(source)
         rel_type = rspec.get("type") or rname
         detail = f"({rspec['from']})-[:{rel_type}]->({rspec['to']}): node not found"
-        values = [cast[col] for _, col in ends]
-        for idx, a, b in zip(cast.index, *values):
-            pair = (_reference(a), _reference(b))
-            if None in pair:
-                continue
-            for (entity, col), value in zip(ends, pair):
+        ends = ((rspec["from"], cols.from_src), (rspec["to"], cols.to_src))
+        for idx, a, b in zip(edges.index, edges[cols.from_src], edges[cols.to_src]):
+            for (entity, col), value in zip(ends, (cell_scalar(a), cell_scalar(b))):
                 if value not in self._node_keys[entity]:
                     self.report.add(
-                        "dangling_reference", f"{self.dbms} · {rname}", detail,
+                        "dangling_reference", where, detail,
                         Example(file_label, _line(idx), col, value, f"no {entity} with this key"),
                     )
                     break
+        for col in dict.fromkeys(cols.merge_src):
+            for idx in edges.index[_empty(edges[col])]:
+                self.report.add("empty_key", where, f"merge key column '{col}' is empty",
+                                Example(file_label, _line(idx), col, edges.at[idx, col]))
 
     def write_relationships(
         self, rname: str, rspec: Dict[str, Any],
         from_binding: EntityBinding, to_binding: EntityBinding, batch: pd.DataFrame,
     ) -> int:
         """The count ``Neo4jSink.write_relationships`` returns for the same rows."""
-        columns = list(batch.columns)
-        from_src = resolve_csv_column(*_key_leaf(from_binding), columns)
-        to_src = resolve_csv_column(*_key_leaf(to_binding), columns)
-        rel_cols = rspec.get("columns") or {}
-        mk_names = [
-            target_field_name(fk, spec) for fk, spec in rel_cols.items() if spec.get("is_key")
-        ]
-        return len(_rel_rows_for_batch(batch, from_src, to_src, rel_cols, mk_names))
+        cols = relationship_columns(rspec, from_binding, to_binding, list(batch.columns))
+        return len(_rel_rows_for_batch(
+            batch, cols.from_src, cols.to_src, rspec.get("columns") or {}, cols.merge_keys
+        ))
 
 
 def validate_data(

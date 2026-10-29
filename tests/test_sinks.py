@@ -15,7 +15,7 @@ from polyglotimportcsv.sinks.postgres_sink import PostgresSink
 from polyglotimportcsv.sinks.mongo_sink import MongoSink
 from polyglotimportcsv.sinks.cassandra_sink import CassandraSink
 from polyglotimportcsv.sinks.redis_sink import RedisSink
-from polyglotimportcsv.sinks.neo4j_sink import Neo4jSink
+from polyglotimportcsv.sinks.neo4j_sink import Neo4jSink, relationship_columns
 from polyglotimportcsv.csv_reader import ColumnStats
 from polyglotimportcsv.source_profile import SourceProfile
 from polyglotimportcsv.sources import SOURCE_COLUMN
@@ -137,6 +137,28 @@ def test_write_batch_inserts_deduped_rows_with_on_conflict():
     assert len(tuples) == 2
     assert "ON CONFLICT" in repr(sql_obj)
     assert page_size == 500
+
+
+def test_write_batch_sends_null_for_an_empty_text_foreign_key():
+    # An empty foreign key means no relationship: NULL, which the foreign key accepts,
+    # not '', which it would refuse. Other empty text columns keep ''.
+    orders_cfg = {"source": "orders",
+                  "columns": {"order_id": {"is_key": True}, "customer_id": {}, "note": {}}}
+    rels = {"order_customer": {"from": "orders", "to": "customers",
+                               "foreign_key": "customer_id", "references_key": "id"}}
+    sample = pd.DataFrame({"order_id": ["o1", "o2"], "customer_id": ["c1", ""],
+                           "note": ["", "x"], SOURCE_COLUMN: ["orders", "orders"]})
+    conn = _FakeConn()
+    sink = PostgresSink({"schema": "public", "relationships": rels},
+                        connection_factory=lambda c: conn)
+    binding = _bind_sample("orders", orders_cfg, sample, "orders")
+
+    sink.write_batch("orders", binding, sample)
+    sink.write_batch("notes", binding, sample)  # a table no relationship starts from
+
+    (_, orders, _), (_, notes, _) = conn.cur.execute_values_calls
+    assert orders == [("o1", "c1", ""), ("o2", None, "x")]
+    assert notes == [("o1", "c1", ""), ("o2", "", "x")]
 
 
 def test_write_batch_without_pk_has_no_on_conflict_clause():
@@ -813,6 +835,21 @@ def test_neo4j_write_relationships_unwind_merges_edges():
     assert {r["b_id"] for r in payload} == {"p1", "p2"}
     # order_number is the edge's is_key -> travels in the mk block, not rprops
     assert all("order_number" in r["mk"] for r in payload)
+
+
+def test_relationship_columns_reads_both_endpoints_from_the_from_chunk():
+    from_binding = _bind_sample("User", NEO4J_USER_CFG, _user_sample(["u1"]), "purchase")
+    to_binding = _bind_sample(
+        "Product", {"source": "stock", "columns": {"pid": {"is_key": True,
+                                                           "csv_column": "product_id",
+                                                           "schema_column": "code"}}},
+        pd.DataFrame({"product_id": ["p1"], SOURCE_COLUMN: ["stock"]}), "stock",
+    )
+    cols = relationship_columns(PURCHASED_RSPEC, from_binding, to_binding,
+                                list(_purchase_rel_chunk().columns))
+    assert (cols.from_src, cols.to_src, cols.from_key, cols.to_key) == (
+        "user_id", "product_id", "user_id", "code")
+    assert (cols.merge_keys, cols.merge_src) == (["order_number"], ["order_number"])
 
 
 def test_neo4j_write_relationships_skips_null_endpoints():

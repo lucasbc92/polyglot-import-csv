@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterator, List, Sequence, Tuple
 
+import pandas as pd
+
 COLUMN_SPEC_KEYS = frozenset(
     {"is_key", "db_type", "csv_column", "schema_column"}
 )
@@ -90,6 +92,14 @@ def primary_key_source_columns(
             else:
                 keys.append(field_key)
     return keys
+
+
+def is_empty_reference(value: Any) -> bool:
+    """Is a foreign key or relationship endpoint value empty? An empty reference means
+    there is no relationship: ``None``, a null-like (NaN, NaT, pd.NA) or ``""``."""
+    if isinstance(value, str):
+        return value == ""
+    return value is None or (pd.api.types.is_scalar(value) and bool(pd.isna(value)))
 
 
 def flat_leaf_columns(

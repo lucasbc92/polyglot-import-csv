@@ -6,7 +6,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from polyglotimportcsv.db_type_checks import cassandra_value_problem, postgres_value_problem
+from decimal import Decimal
+
+from polyglotimportcsv.db_type_checks import (
+    cassandra_value_problem,
+    postgres_stored_value,
+    postgres_value_problem,
+)
 
 NOW = datetime(2024, 1, 2, 3, 4, 5)
 NAN = float("nan")
@@ -418,3 +424,39 @@ def test_cassandra_types_match_the_importer_mapping():
     for cql_type, value in wrong.items():
         assert cassandra_value_problem(cql_type, value) is not None
     assert cassandra_value_problem("text", object()) is None
+
+
+# What a column stores for the value a sink sends: text types the text of what psycopg2
+# writes (an int as its digits, a float as the numeric literal repr() gives, a boolean
+# as true/false), number types the number a text parses to.
+_PG_STORED = [
+    ("TEXT", 1, "1"),
+    ("TEXT", "x9", "x9"),
+    ("TEXT", 50.5, "50.5"),
+    ("TEXT", 2.0, "2.0"),
+    ("TEXT", 1e-05, "0.00001"),
+    ("TEXT", 1e20, "100000000000000000000"),
+    ("TEXT", True, "true"),
+    ("varchar(10)", 7, "7"),
+    ("CHARACTER VARYING(3)", np.int64(7), "7"),
+    ("BIGINT", "007", 7),
+    ("BIGINT", " -3 ", -3),
+    ("INTEGER", 7.0, 7),
+    ("BIGINT", "x", "x"),          # refused by the type: unchanged
+    ("SMALLINT", 40000, 40000),    # out of range: unchanged
+    ("NUMERIC", "1.50", Decimal("1.5")),
+    ("NUMERIC(14,2)", "1.005", Decimal("1.01")),
+    ("NUMERIC(14,2)", 2, Decimal("2")),
+    ("NUMERIC(4)", 2.5, Decimal("3")),
+    ("DOUBLE PRECISION", "2.5", 2.5),
+    ("REAL", 3, 3.0),
+    ("TIMESTAMPTZ", NOW, NOW),     # not a text or number type: unchanged
+    ("BOOLEAN", "yes", "yes"),
+    ("TEXT", None, None),
+]
+
+
+@pytest.mark.parametrize("db_type,value,stored", _PG_STORED, ids=_ids(_PG_STORED))
+def test_postgres_stored_value(db_type, value, stored):
+    out = postgres_stored_value(db_type, value)
+    assert out == stored and type(out) is type(stored)

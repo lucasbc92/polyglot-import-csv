@@ -345,6 +345,32 @@ def test_inspect_rows_sees_file_row_positions(tmp_path):
     assert run.written == {"postgres": {"s_north": 1, "s_south": 1}}
 
 
+def test_rows_the_each_split_drops_go_to_inspect_unpartitioned_rows(tmp_path):
+    # An empty 'each' value names no partition, so the split drops the row. With chunks
+    # of 3 rows, the first chunk drops row 1 and the second rows 3 and 5; the entity
+    # without 'each' drops nothing, so the hook is never called for it.
+    rows = [(0, "n"), (1, ""), (2, "s"), (3, ""), (4, "n"), (5, "")]
+    _write_csv(tmp_path / "s.csv", ["n", "region"], rows)
+    cfg = {"sources": {"s": "s.csv"}, "postgres": {"entities": {
+        "split": {"source": "s", "filters": [{"column": "region", "operator": "each"}]},
+        "whole": {"source": "s"},
+    }}}
+    plan = dataclasses.replace(plan_import(cfg, tmp_path, dbms_names=["postgres"]),
+                               rows_per_chunk={"s": 3})
+    seen = []
+
+    class Spy(_FakeSink):
+        def inspect_unpartitioned_rows(self, source, binding, raw, cast):
+            assert binding is plan.bindings["postgres"]["split"]
+            assert list(raw.index) == list(cast.index) and set(raw["region"]) == {""}
+            seen.append((source, list(cast.index)))
+
+    run = sr.run_single_pass(plan, {"postgres": Spy()})
+
+    assert seen == [("s", [1]), ("s", [3, 5])]
+    assert run.written["postgres"] == {"split_n": 2, "split_s": 1, "whole": 6}
+
+
 def test_inspect_rows_sees_the_row_position_in_a_combined_file(tmp_path):
     rows = [("a" if i % 3 else "b", i) for i in range(10)]  # origin b on rows 0, 3, 6, 9
     _write_csv(tmp_path / "j.csv", ["action", "n"], rows)

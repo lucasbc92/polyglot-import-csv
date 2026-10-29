@@ -1,10 +1,12 @@
 """Check one value against the DBMS type a column is declared with.
 
-Both functions are pure and return ``None`` when the DBMS would accept the value,
-otherwise a short reason. The value is what a sink would send: ``None``, ``int``,
-``float``, ``bool``, ``datetime`` or ``str``. ``None`` is always accepted here (an
-empty key has its own rule); types outside the tables below are not checked.
-NumPy scalars are judged like the Python type they stand for.
+``postgres_value_problem`` and ``cassandra_value_problem`` are pure and return ``None``
+when the DBMS would accept the value, otherwise a short reason. The value is what a
+sink would send: ``None``, ``int``, ``float``, ``bool``, ``datetime`` or ``str``.
+``None`` is always accepted here (an empty key has its own rule); types outside the
+tables below are not checked. NumPy scalars are judged like the Python type they stand
+for. ``postgres_stored_value`` gives the value a PostgreSQL column keeps, so that two
+values can be compared as the database compares them.
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ from __future__ import annotations
 import math
 import re
 from datetime import date
+from decimal import ROUND_HALF_UP, Context, Decimal
 from typing import Any, List, Optional, Tuple
 
 import numpy as np
@@ -38,6 +41,7 @@ _PG_TIMESTAMP = frozenset(
     }
 )
 _PG_CHAR = frozenset({"VARCHAR", "CHARACTER VARYING", "CHAR", "CHARACTER"})
+_PG_TEXT = _PG_CHAR | {"TEXT"}
 
 _INTEGER_TEXT = re.compile(r"\s*[+-]?\d+\s*", re.ASCII)
 #: BIGINT, the widest integer type, has 19 digits at both ends of its range.
@@ -142,6 +146,53 @@ def postgres_value_problem(db_type: str, value: Any) -> Optional[str]:
         if len(text) > params[0]:
             return f"longer than {base}({params[0]})"
     return None
+
+
+def _sent_as_text(value: Any) -> Any:
+    """The text PostgreSQL stores in a text column for what psycopg2 sends for ``value``.
+
+    psycopg2 writes an int as its digits, a bool as ``true``/``false`` and a float as its
+    ``repr()``, which PostgreSQL reads as a numeric constant and prints in full, without
+    an exponent. Any other value is kept.
+    """
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if _is_int(value):
+        return str(value)
+    if isinstance(value, float):
+        return format(Decimal(repr(value)), "f")
+    return value
+
+
+def postgres_stored_value(db_type: str, value: Any) -> Any:
+    """``value`` as a PostgreSQL column of ``db_type`` stores it.
+
+    A text type keeps the text of what the sink sends (``_sent_as_text``); an integer
+    type the integer, a NUMERIC/DECIMAL type the decimal rounded to its scale, and a
+    floating type the float that a number or a numeric text parses to. A value of any
+    other type, or one the type would refuse, is returned unchanged.
+    """
+    value = _plain(value)
+    if value is None:
+        return None
+    base, params = _split_db_type(db_type)
+    if base in _PG_TEXT:
+        return _sent_as_text(value)
+    if postgres_value_problem(db_type, value) is not None:
+        return value
+    if base in _PG_INT_BITS:
+        return int(value.strip()) if isinstance(value, str) else int(value)
+    if base in ("NUMERIC", "DECIMAL"):
+        number = Decimal(value.strip() if isinstance(value, str) else repr(value))
+        if params:
+            scale = params[1] if len(params) > 1 else 0
+            # enough digits for any value the precision admits (the default context has 28)
+            number = number.quantize(Decimal(1).scaleb(-scale), rounding=ROUND_HALF_UP,
+                                     context=Context(prec=max(28, params[0] + 1)))
+        return number
+    if base in _PG_NUMERIC:
+        return float(value)
+    return value
 
 
 def cassandra_value_problem(cql_type: str, value: Any) -> Optional[str]:

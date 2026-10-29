@@ -128,6 +128,14 @@ def _process_chunk(
     return filtered, casted, filters
 
 
+def _dropped_by_split(casted: pd.DataFrame, parts: List[Tuple[str, pd.DataFrame]]) -> pd.Index:
+    """The rows of ``casted`` that are in none of the ``expand_each`` parts."""
+    if sum(len(part) for _, part in parts) == len(casted):
+        return casted.index[:0]
+    kept = casted.index[:0].append([part.index for _, part in parts])
+    return casted.index[~casted.index.isin(kept)]
+
+
 class DbmsStream:
     """One DBMS's entities fed chunk by chunk into its sink.
 
@@ -135,9 +143,11 @@ class DbmsStream:
     relationships (``feed_relationships`` for every chunk of
     ``relationship_sources()``). ``written`` and ``entity_rows`` count as it goes.
 
-    Two optional sink hooks, looked up like ``write_relationships``, see the rows
+    Three optional sink hooks, looked up like ``write_relationships``, see the rows
     before they are written: ``inspect_rows(source, partition, binding, raw, cast)``
-    once per (chunk, entity, partition), and
+    once per (chunk, entity, partition);
+    ``inspect_unpartitioned_rows(source, binding, raw, cast)`` once per (chunk, entity)
+    whose ``each`` split dropped rows (an empty ``each`` value names no partition); and
     ``inspect_relationship_rows(source, rname, rspec, from_binding, to_binding, cast)``
     before each ``write_relationships``. Their frames are indexed by the position
     of each data row in its file.
@@ -161,6 +171,7 @@ class DbmsStream:
         self._batch = {ename: plan.entity_batch(dbms, ename) for ename in self._entities}
         self._notify = partial(on_batch, dbms) if on_batch is not None else None
         self._inspect_rows = getattr(sink, "inspect_rows", None)
+        self._inspect_unpartitioned = getattr(sink, "inspect_unpartitioned_rows", None)
         self._inspect_rels = getattr(sink, "inspect_relationship_rows", None)
         self.written: Dict[str, int] = {}
         self.entity_rows: Dict[str, int] = {ename: 0 for ename in self._entities}
@@ -182,7 +193,14 @@ class DbmsStream:
                 continue
             binding = self._bindings[ename]
             raw, casted, filters = _process_chunk(chunk, ecfg, binding)
-            for partition_name, part_df in expand_each(casted, filters, ename):
+            parts = expand_each(casted, filters, ename)
+            if self._inspect_unpartitioned is not None:
+                dropped = _dropped_by_split(casted, parts)
+                if len(dropped):
+                    self._inspect_unpartitioned(
+                        source, binding, raw.loc[dropped], casted.loc[dropped]
+                    )
+            for partition_name, part_df in parts:
                 self.entity_rows[ename] += len(part_df)
                 if self._inspect_rows is not None:
                     part_raw = raw.loc[part_df.index]

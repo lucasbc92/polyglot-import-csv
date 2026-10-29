@@ -13,7 +13,11 @@ from typing import Any, Dict
 import pandas as pd
 from psycopg2.extras import execute_values
 
-from polyglotimportcsv.entity_utils import flat_leaf_columns, target_field_name
+from polyglotimportcsv.entity_utils import (
+    flat_leaf_columns,
+    is_empty_reference,
+    target_field_name,
+)
 from polyglotimportcsv.importers.postgres_importer import _connect, build_insert_sql
 from polyglotimportcsv.materialize import flatten_entity_dataframe
 from polyglotimportcsv.schema_generator import (
@@ -63,6 +67,13 @@ class PostgresSink:
         mat = flatten_entity_dataframe(batch, binding.cfg)
         if mat.empty:
             return 0
+        # An empty foreign key means no relationship: send NULL, which the foreign key
+        # added at close() accepts, rather than '', which it would refuse.
+        for rspec in self.relationships.values():
+            if rspec["from"] == partition_name:
+                fk = rspec["foreign_key"]
+                empty = mat[fk].map(is_empty_reference).astype(bool)
+                mat[fk] = mat[fk].astype(object).where(~empty, None)
         cols = list(mat.columns)
         pks = [
             target_field_name(fk, spec)
