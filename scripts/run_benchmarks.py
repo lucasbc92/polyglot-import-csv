@@ -25,6 +25,7 @@ from polyglotimportcsv.config_parser import load_config
 from polyglotimportcsv.metrics import environment_metadata
 from polyglotimportcsv.reporting import kv, setup_reporting
 from polyglotimportcsv.runner import run_import
+from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB
 
 _ALL_BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
 
@@ -33,7 +34,7 @@ CHECKPOINT_NAME = "benchmark_checkpoint.json"
 #: Metadata that has to agree for a checkpoint to be resumable. Runs measured
 #: under different axes describe a different matrix, and mixing them would
 #: silently corrupt the medians.
-RESUME_KEYS = ("seed", "sizes", "modes", "executions", "repetitions",
+RESUME_KEYS = ("seed", "sizes", "modes", "chunk_sizes", "repetitions",
                "trace_memory")
 
 
@@ -106,9 +107,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help="Runs per (size, mode); the median is reported (default: 3).")
     parser.add_argument("--only", default="",
                         help=f"Comma-separated backends (default: all). Choices: {', '.join(_ALL_BACKENDS)}.")
-    parser.add_argument("--executions", default="stream",
-                        help="Comma-separated write paths: stream,materialize (default: stream). "
-                             "Use 'materialize,stream' to compare peak_memory_mb.")
+    parser.add_argument("--chunk-sizes", default=str(DEFAULT_CHUNK_MB),
+                        help=f"Comma-separated read-block sizes in MB, each from {MIN_CHUNK_MB} to "
+                             f"{MAX_CHUNK_MB} (default: {DEFAULT_CHUNK_MB}). Use '8,64,256' to "
+                             "compare peak_memory_mb and time across block sizes.")
     parser.add_argument("--seed", type=int, default=42, help="Generator seed (default: 42).")
     parser.add_argument("--no-trace-memory", dest="trace_memory", action="store_false",
                         help="Do not run imports under tracemalloc. peak_memory_mb is then "
@@ -123,7 +125,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--data-dir", type=Path, default=Path("data/benchmark/generated"),
                         help="Where generated size datasets live (default: data/benchmark/generated).")
     parser.add_argument("--out", type=Path, default=Path("benchmarks"),
-                        help="Output directory for consolidated results (default: benchmarks).")
+                        help="Output directory for consolidated results (default: benchmarks). "
+                             "The benchmark_results.csv already in benchmarks/ has the old "
+                             "header (an execution column, no chunk_mb), so a run into that "
+                             "folder is refused: pass another folder, or move the old file aside.")
     parser.add_argument("--log-level", default="INFO",
                         help="Terminal log level (default: INFO). The session log file is always DEBUG.")
     parser.add_argument("--resume", action="store_true",
@@ -139,13 +144,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     sizes = _parse_int_list(args.sizes)
     modes = _parse_str_list(args.modes)
     only = _parse_str_list(args.only) or None
-    executions = _parse_str_list(args.executions)
+    chunk_sizes = _parse_int_list(args.chunk_sizes)
 
     meta = environment_metadata(args.config_dir, {})
     meta.update({"seed": args.seed, "sizes": sizes, "modes": modes,
                  "trace_memory": args.trace_memory,
                  "repetitions": args.repetitions,
-                 "executions": executions})
+                 "chunk_sizes": chunk_sizes})
 
     # The results CSV is only appended after the whole matrix ran: refuse an
     # old one now, not hours from now.
@@ -169,7 +174,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
         labeled = run_matrix(
             sizes=sizes, modes=modes, repetitions=args.repetitions,
-            executions=executions,
+            chunk_sizes=chunk_sizes,
             dbms_config_path=args.dbms_config, config_dir=args.config_dir,
             data_dir=args.data_dir, seed=args.seed, only=only,
             cleaners=CLEANERS, importer=run_import, load_cfg=load_config,

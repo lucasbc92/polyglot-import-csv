@@ -12,9 +12,9 @@ from typing import Callable, Dict, Iterable, List, Optional
 
 from polyglotimportcsv import benchmark_data
 from polyglotimportcsv.metrics import MetricsCollector
+from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB
 
 _ALL_BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
-_VALID_EXECUTIONS = ("stream", "materialize")
 
 _BYTES_PER_MB = 1024 * 1024
 
@@ -73,7 +73,7 @@ def _ensure_dataset(data_dir: Path, size: int, seed: int, mode: str, generate) -
 
 def _run_key(run: Dict[str, object]) -> tuple:
     """Identity of a labeled run: which matrix cell, and which repetition of it."""
-    return (run["size"], run["mode"], run["execution"], run["repetition"])
+    return (run["size"], run["mode"], run["chunk_mb"], run["repetition"])
 
 
 def _overrides(mode: str, dpath: Path) -> Dict[str, str]:
@@ -87,7 +87,7 @@ def run_matrix(
     sizes: Iterable[int],
     modes: Iterable[str],
     repetitions: int,
-    executions: Iterable[str] = ("stream",),
+    chunk_sizes: Iterable[int] = (DEFAULT_CHUNK_MB,),
     dbms_config_path: "Optional[str | Path]",
     config_dir: "str | Path",
     data_dir: "str | Path",
@@ -101,9 +101,13 @@ def run_matrix(
     trace_memory: bool = True,
     completed: Optional[List[Dict[str, object]]] = None,
 ) -> List[Dict[str, object]]:
-    """Run repetitions x sizes x modes x executions, cleaning before each import.
+    """Run repetitions x sizes x modes x chunk sizes, cleaning before each import.
 
-    One repetition is a full sweep of the (size, mode, execution) matrix,
+    ``chunk_sizes`` are read-block sizes in MB, each within
+    ``[MIN_CHUNK_MB, MAX_CHUNK_MB]``: the block size is what an import trades
+    between peak memory and time.
+
+    One repetition is a full sweep of the (size, mode, chunk size) matrix,
     not a burst of back-to-back runs of the same cell: warm-up then affects every
     cell's first pass equally instead of concentrating on whichever cell happens to
     run first. Returns labeled runs.
@@ -134,12 +138,12 @@ def run_matrix(
             f"unknown mode(s): {', '.join(unknown)}. Valid: {', '.join(_MODE_CONFIG)}"
         )
     requested = list(only) if only else None
-    executions = list(executions)
-    unknown_executions = [e for e in executions if e not in _VALID_EXECUTIONS]
-    if unknown_executions:
+    chunk_sizes = list(chunk_sizes)
+    out_of_range = [c for c in chunk_sizes if not MIN_CHUNK_MB <= c <= MAX_CHUNK_MB]
+    if out_of_range:
         raise ValueError(
-            f"unknown execution(s): {', '.join(unknown_executions)}. "
-            f"Valid: {', '.join(_VALID_EXECUTIONS)}"
+            f"chunk size(s) out of range: {', '.join(map(str, out_of_range))}. "
+            f"Valid: {MIN_CHUNK_MB} to {MAX_CHUNK_MB} MB"
         )
     # Prepare every (size, mode) cell up front. Generating datasets and loading
     # configs is not part of any measurement, so it stays out of the repetition
@@ -174,8 +178,8 @@ def run_matrix(
         for cell in cells:
             merged = cell["merged"]
             selected = cell["selected"]
-            for execution in executions:
-                key = (cell["size"], cell["mode"], execution, rep)
+            for chunk_mb in chunk_sizes:
+                key = (cell["size"], cell["mode"], chunk_mb, rep)
                 if key in already_measured:
                     continue
                 for backend in selected:
@@ -183,9 +187,8 @@ def run_matrix(
                     if block is not None and backend in cleaners:
                         cleaners[backend](block)
                 collector = MetricsCollector()
-                # Measure whole-import peak memory. Streaming's headline
-                # metric is a bounded peak (~one read chunk) versus the
-                # materialize path's peak that grows with dataset size.
+                # Measure whole-import peak memory, the figure the chunk size
+                # trades against time.
                 if trace_memory:
                     tracemalloc.start()
                     tracemalloc.reset_peak()
@@ -197,13 +200,14 @@ def run_matrix(
                     only=selected,
                     create_schema=True,
                     source_overrides=cell["overrides"],
+                    chunk_size_mb=chunk_mb,
                 )
                 peak_mb: Optional[float] = None
                 if trace_memory:
                     peak_mb = tracemalloc.get_traced_memory()[1] / _BYTES_PER_MB
                     tracemalloc.stop()
                 labeled.append({
-                    "size": cell["size"], "mode": cell["mode"], "execution": execution,
+                    "size": cell["size"], "mode": cell["mode"], "chunk_mb": chunk_mb,
                     "repetition": rep,
                     "peak_memory_mb": peak_mb,
                     "records": collector.to_records(),

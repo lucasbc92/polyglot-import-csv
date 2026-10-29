@@ -11,7 +11,7 @@ from polyglotimportcsv import benchmark_results as br
 def _run(size, mode, rep, seconds, peak=12.5):
     return {
         "size": size, "mode": mode,
-        "execution": "materialize", "peak_memory_mb": peak, "repetition": rep,
+        "chunk_mb": 8, "peak_memory_mb": peak, "repetition": rep,
         "records": [{
             "backend": "postgres", "entity": "products", "phase": "write",
             "rows": 100, "seconds": seconds, "rows_per_second": 100 / seconds,
@@ -29,33 +29,33 @@ def test_median_across_repetitions():
     assert r["rows"] == 100
     assert r["median_seconds"] == 0.3
     assert abs(r["rows_per_second"] - 100 / 0.3) < 1e-9
-    assert r["execution"] == "materialize"
+    assert r["chunk_mb"] == 8
 
 
-def test_execution_and_peak_memory_flow_to_results_and_csv(tmp_path):
-    # Same key across reps with differing peaks -> median peak; execution kept.
+def test_chunk_mb_and_peak_memory_flow_to_results_and_csv(tmp_path):
+    # Same key across reps with differing peaks -> median peak; chunk size kept.
     runs = [_run(1000, "multi", 0, 0.2, peak=10.0),
             _run(1000, "multi", 1, 0.2, peak=20.0),
             _run(1000, "multi", 2, 0.2, peak=15.0)]
     results = br.median_results(runs)
     assert len(results) == 1
-    assert results[0]["execution"] == "materialize"
+    assert results[0]["chunk_mb"] == 8
     assert results[0]["peak_memory_mb"] == 15.0
 
     meta = {"timestamp": "t"}
     _, csv_path = br.write_consolidated(results, meta, out_dir=tmp_path)
     with open(csv_path, newline="", encoding="utf-8") as fh:
         rows = list(csv.DictReader(fh))
-    assert rows[0]["execution"] == "materialize"
+    assert rows[0]["chunk_mb"] == "8"
     assert rows[0]["peak_memory_mb"] == "15.0"
 
 
-def test_distinct_execution_kept_separate():
+def test_distinct_chunk_mb_kept_separate():
     a = _run(1000, "multi", 0, 0.2)
     b = _run(1000, "multi", 0, 0.2)
-    b["execution"] = "stream"
+    b["chunk_mb"] = 64
     results = br.median_results([a, b])
-    assert {r["execution"] for r in results} == {"materialize", "stream"}
+    assert {r["chunk_mb"] for r in results} == {8, 64}
 
 
 def test_distinct_size_mode_kept_separate():
@@ -119,7 +119,7 @@ def test_group_order_preserved():
     # group order (via the `order` list), not fall back to dict/set iteration.
     run = {
         "size": 1000, "mode": "multi",
-        "execution": "materialize", "peak_memory_mb": 8.0, "repetition": 0,
+        "chunk_mb": 8, "peak_memory_mb": 8.0, "repetition": 0,
         "records": [
             {"backend": "redis", "entity": "orders", "phase": "write",
              "rows": 50, "seconds": 0.1, "rows_per_second": 500.0},
@@ -142,11 +142,18 @@ def test_result_fields_have_no_strategy_column():
     assert "strategy" not in br._RESULT_FIELDS
 
 
-def test_appending_to_a_csv_with_the_old_header_is_refused_and_leaves_it_intact(tmp_path):
+@pytest.mark.parametrize("header", [
+    # before the strategy column was removed
+    "timestamp,size,mode,strategy,execution,backend,entity,phase,rows,"
+    "median_seconds,rows_per_second,peak_memory_mb",
+    # before the execution column became chunk_mb
+    "timestamp,size,mode,execution,backend,entity,phase,rows,"
+    "median_seconds,rows_per_second,peak_memory_mb",
+])
+def test_appending_to_a_csv_with_the_old_header_is_refused_and_leaves_it_intact(
+        tmp_path, header):
     old = tmp_path / "benchmark_results.csv"
-    content = ("timestamp,size,mode,strategy,execution,backend,entity,phase,rows,"
-               "median_seconds,rows_per_second,peak_memory_mb\n"
-               "2026-08-01,1000,multi,optimized,stream,(stream),*,write,10,1.0,10.0,5.0\n")
+    content = header + "\n2026-08-01,1000,multi,stream,(stream),*,write,10,1.0,10.0,5.0\n"
     old.write_text(content, encoding="utf-8")
     results = br.median_results([_run(1000, "multi", 0, 0.2)])
 

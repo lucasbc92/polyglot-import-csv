@@ -7,6 +7,7 @@ import pytest
 from polyglotimportcsv import benchmark_data as bdata
 from polyglotimportcsv import benchmark_runner as brun
 from polyglotimportcsv.benchmark_results import median_results
+from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB
 
 
 def _write_csv(path: Path, columns, data_rows: int) -> None:
@@ -59,8 +60,9 @@ def test_run_matrix_iterates_and_cleans_before_import(tmp_path):
     cleaners = {"postgres": make_cleaner("postgres")}
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides):
+                      only, create_schema, source_overrides, chunk_size_mb):
         events.append(("import", str(config_path), tuple(sorted(source_overrides))))
+        assert chunk_size_mb == DEFAULT_CHUNK_MB
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
         return []
 
@@ -85,6 +87,7 @@ def test_run_matrix_iterates_and_cleans_before_import(tmp_path):
         (1000, "multi", 0), (1000, "multi", 1),
         (1000, "combined", 0), (1000, "combined", 1),
     }
+    assert {r["chunk_mb"] for r in labeled} == {DEFAULT_CHUNK_MB}
     # every import is immediately preceded by a clean
     imp_idx = [i for i, e in enumerate(events) if e[0] == "import"]
     for i in imp_idx:
@@ -104,14 +107,14 @@ def test_repetitions_sweep_the_whole_matrix_instead_of_repeating_one_cell(tmp_pa
     seen = []
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides):
+                      only, create_schema, source_overrides, chunk_size_mb):
         seen.append(Path(config_path).name)
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
         return []
 
     labeled = brun.run_matrix(
         sizes=[1000], modes=["multi", "combined"], repetitions=3,
-        executions=["materialize", "stream"],
+        chunk_sizes=[8, 64],
         dbms_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
         seed=1, only=["postgres"], cleaners={},
         importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
@@ -132,7 +135,7 @@ def test_datasets_are_prepared_before_the_first_import(tmp_path):
     events = []
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides):
+                      only, create_schema, source_overrides, chunk_size_mb):
         events.append("import")
         return []
 
@@ -156,7 +159,7 @@ def test_on_run_fires_after_each_import_and_survives_a_crash(tmp_path):
     seen: list[int] = []
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides):
+                      only, create_schema, source_overrides, chunk_size_mb):
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
         if len(seen) == 2:
             raise RuntimeError("backend blew up")
@@ -181,7 +184,7 @@ def test_run_matrix_builds_mode_overrides(tmp_path):
     seen = []
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides):
+                      only, create_schema, source_overrides, chunk_size_mb):
         seen.append((Path(config_path).name, set(source_overrides)))
         return []
 
@@ -225,11 +228,12 @@ def test_run_matrix_has_no_strategy_axis(tmp_path):
         )
 
 
-def test_run_matrix_rejects_unknown_execution(tmp_path):
-    with pytest.raises(ValueError, match="unknown execution"):
+@pytest.mark.parametrize("chunk_mb", [4, 300])
+def test_matrix_rejects_an_out_of_range_chunk_size(tmp_path, chunk_mb):
+    with pytest.raises(ValueError, match="chunk size"):
         brun.run_matrix(
             sizes=[10], modes=["multi"], repetitions=1,
-            executions=["strem"],  # typo: would silently run something else
+            chunk_sizes=(chunk_mb,),  # below MIN_CHUNK_MB or above MAX_CHUNK_MB
             dbms_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
             seed=1, only=["postgres"], cleaners={},
             importer=lambda *a, **k: [], load_cfg=lambda c, s: {"postgres": {}},
@@ -237,32 +241,33 @@ def test_run_matrix_rejects_unknown_execution(tmp_path):
         )
 
 
-def test_run_matrix_iterates_executions(tmp_path):
+def test_matrix_sweeps_chunk_sizes_and_labels_runs(tmp_path):
     seen = []
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides):
-        seen.append(config_path)
+                      only, create_schema, source_overrides, chunk_size_mb):
+        seen.append(chunk_size_mb)
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
         return []
 
     labeled = brun.run_matrix(
         sizes=[1000], modes=["multi"], repetitions=1,
-        executions=["materialize", "stream"],
+        chunk_sizes=(8, 64),
         dbms_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
         seed=1, only=["postgres"], cleaners={},
         importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
         generate=lambda out_dir, rows, seed, mode: None,
     )
-    assert len(seen) == 2
-    assert {r["execution"] for r in labeled} == {"materialize", "stream"}
+    assert seen == [8, 64]  # the importer reads each run's chunk size
+    assert [r["chunk_mb"] for r in labeled] == [8, 64]
+    assert all("execution" not in r for r in labeled)
     res = median_results(labeled)
-    assert {r["execution"] for r in res} == {"materialize", "stream"}
+    assert {r["chunk_mb"] for r in res} == {8, 64}
 
 
 def test_run_matrix_records_peak_memory(tmp_path):
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides):
+                      only, create_schema, source_overrides, chunk_size_mb):
         # Allocate something inside the timed/traced region so peak > 0.
         _ = [0] * 200_000
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)

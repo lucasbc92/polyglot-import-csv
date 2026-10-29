@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""CLI: measure what ``tracemalloc`` costs the benchmark, per execution path.
+"""CLI: measure what ``tracemalloc`` costs the benchmark, per chunk size.
 
 The matrix records ``peak_memory_mb`` by running every import under
 ``tracemalloc``, which instruments each allocation. Its cost therefore scales
-with how many allocations a path makes, and ``materialize`` (few large pandas
-allocations) and ``stream`` (many small per-chunk ones) do not allocate alike —
-so the overhead cannot be assumed to cancel out between the two. This runs one
-cell of the matrix both ways and reports the difference.
+with how many allocations a run makes, and chunk sizes do not allocate alike
+(a larger block means fewer, larger pandas allocations; a smaller one, more and
+smaller ones) — so the overhead cannot be assumed to be the same at every chunk
+size. This runs one cell of the matrix both ways and reports the difference.
 
 Traced and untraced runs are interleaved pass by pass, so warm-up (JVM JIT, DB
 buffers, page cache) lands on both arms equally instead of favouring whichever
@@ -34,6 +34,7 @@ from polyglotimportcsv.config_parser import load_config
 from polyglotimportcsv.metrics import EXCLUDED_PHASES
 from polyglotimportcsv.reporting import print_rich, setup_reporting
 from polyglotimportcsv.runner import run_import
+from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB
 
 _ALL_BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
 
@@ -45,6 +46,10 @@ _ALWAYS = logging.CRITICAL
 
 def _parse_str_list(raw: str) -> List[str]:
     return [x.strip() for x in raw.split(",") if x.strip()]
+
+
+def _parse_int_list(raw: str) -> List[int]:
+    return [int(x) for x in raw.split(",") if x.strip()]
 
 
 def reported_seconds(run: Dict[str, Any]) -> float:
@@ -62,26 +67,26 @@ def reported_seconds(run: Dict[str, Any]) -> float:
 def summarize(
     traced: List[Dict[str, Any]], untraced: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
-    """Per execution path, the median reported seconds of each arm and the overhead.
+    """Per chunk size, the median reported seconds of each arm and the overhead.
 
-    ``overhead_pct`` is how much longer the traced arm reports; ``None`` when an
-    execution path is missing from one of the arms or the untraced median is 0.
+    ``overhead_pct`` is how much longer the traced arm reports; ``None`` when a
+    chunk size is missing from one of the arms or the untraced median is 0.
     """
-    def medians(runs: List[Dict[str, Any]]) -> Dict[str, float]:
-        by_exec: Dict[str, List[float]] = {}
+    def medians(runs: List[Dict[str, Any]]) -> Dict[int, float]:
+        by_chunk: Dict[int, List[float]] = {}
         for run in runs:
-            by_exec.setdefault(str(run["execution"]), []).append(reported_seconds(run))
-        return {e: statistics.median(v) for e, v in by_exec.items()}
+            by_chunk.setdefault(run["chunk_mb"], []).append(reported_seconds(run))
+        return {c: statistics.median(v) for c, v in by_chunk.items()}
 
     on, off = medians(traced), medians(untraced)
     rows: List[Dict[str, Any]] = []
-    for execution in sorted(set(on) | set(off)):
-        t, u = on.get(execution), off.get(execution)
+    for chunk_mb in sorted(set(on) | set(off)):
+        t, u = on.get(chunk_mb), off.get(chunk_mb)
         overhead: Optional[float] = None
         if t is not None and u:
             overhead = (t / u - 1.0) * 100.0
         rows.append({
-            "execution": execution,
+            "chunk_mb": chunk_mb,
             "traced_seconds": t,
             "untraced_seconds": u,
             "overhead_pct": overhead,
@@ -91,14 +96,14 @@ def summarize(
 
 def _table(rows: List[Dict[str, Any]]) -> Table:
     table = Table(title="tracemalloc overhead", header_style="bold")
-    table.add_column("execution")
+    table.add_column("chunk MB", justify="right")
     table.add_column("traced s", justify="right")
     table.add_column("untraced s", justify="right")
     table.add_column("overhead", justify="right")
     for r in rows:
         t, u, o = r["traced_seconds"], r["untraced_seconds"], r["overhead_pct"]
         table.add_row(
-            r["execution"],
+            str(r["chunk_mb"]),
             "-" if t is None else f"{t:.3f}",
             "-" if u is None else f"{u:.3f}",
             "-" if o is None else f"{o:+.1f}%",
@@ -108,14 +113,15 @@ def _table(rows: List[Dict[str, Any]]) -> Table:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Measure the tracemalloc overhead per execution path."
+        description="Measure the tracemalloc overhead per chunk size."
     )
     parser.add_argument("--size", type=int, default=10000,
                         help="TOTAL row count across all sources (default: 10000).")
     parser.add_argument("--mode", default="multi",
                         help="Input mode: multi or combined (default: multi).")
-    parser.add_argument("--executions", default="materialize,stream",
-                        help="Comma-separated write paths (default: materialize,stream).")
+    parser.add_argument("--chunk-sizes", default=str(DEFAULT_CHUNK_MB),
+                        help=f"Comma-separated read-block sizes in MB, each from {MIN_CHUNK_MB} to "
+                             f"{MAX_CHUNK_MB} (default: {DEFAULT_CHUNK_MB}).")
     parser.add_argument("--repetitions", type=int, default=3,
                         help="Passes per arm; the median is reported (default: 3).")
     parser.add_argument("--only", default="",
@@ -129,13 +135,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     setup_reporting(getattr(logging, args.log_level.upper()))
-    executions = _parse_str_list(args.executions)
+    chunk_sizes = _parse_int_list(args.chunk_sizes)
     only = _parse_str_list(args.only) or None
 
     def one_pass(trace_memory: bool) -> List[Dict[str, Any]]:
         return run_matrix(
             sizes=[args.size], modes=[args.mode], repetitions=1,
-            executions=executions,
+            chunk_sizes=chunk_sizes,
             dbms_config_path=args.dbms_config, config_dir=args.config_dir,
             data_dir=args.data_dir, seed=args.seed, only=only,
             cleaners=CLEANERS, importer=run_import, load_cfg=load_config,

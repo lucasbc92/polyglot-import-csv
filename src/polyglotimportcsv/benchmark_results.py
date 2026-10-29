@@ -12,14 +12,14 @@ from polyglotimportcsv.benchmark_io import check_csv_header, write_json_and_csv
 from polyglotimportcsv.metrics import EXCLUDED_PHASES
 
 _RESULT_FIELDS = (
-    "timestamp", "size", "mode", "execution", "backend", "entity",
+    "timestamp", "size", "mode", "chunk_mb", "backend", "entity",
     "phase", "rows", "median_seconds", "rows_per_second", "peak_memory_mb",
 )
 _RESULTS_CSV = "benchmark_results.csv"
 
 
 def median_results(labeled_runs: List[Dict[str, object]]) -> List[Dict[str, object]]:
-    """Median ``seconds`` per ``(size, mode, execution, backend, entity, phase)``.
+    """Median ``seconds`` per ``(size, mode, chunk_mb, backend, entity, phase)``.
 
     ``rows`` is constant across repetitions (same dataset); ``rows_per_second``
     is recomputed from the median. ``peak_memory_mb`` is a per-import (whole
@@ -35,7 +35,7 @@ def median_results(labeled_runs: List[Dict[str, object]]) -> List[Dict[str, obje
         for rec in run["records"]:
             if rec["phase"] in EXCLUDED_PHASES:
                 continue
-            key = (run["size"], run["mode"], run["execution"],
+            key = (run["size"], run["mode"], run["chunk_mb"],
                    rec["backend"], rec["entity"], rec["phase"])
             if key not in groups:
                 groups[key] = {"rows": rec["rows"], "seconds": [], "peak": []}
@@ -45,14 +45,14 @@ def median_results(labeled_runs: List[Dict[str, object]]) -> List[Dict[str, obje
 
     results: List[Dict[str, object]] = []
     for key in order:
-        size, mode, execution, backend, entity, phase = key
+        size, mode, chunk_mb, backend, entity, phase = key
         g = groups[key]
         med = statistics.median(g["seconds"])
         rps = (g["rows"] / med) if med > 0 else None
         peaks = [p for p in g["peak"] if p is not None]
         peak = statistics.median(peaks) if peaks else None
         results.append({
-            "size": size, "mode": mode, "execution": execution,
+            "size": size, "mode": mode, "chunk_mb": chunk_mb,
             "backend": backend, "entity": entity, "phase": phase,
             "rows": g["rows"], "median_seconds": med, "rows_per_second": rps,
             "peak_memory_mb": peak,

@@ -16,10 +16,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import run_benchmarks as rb  # noqa: E402
 
 
-def _labeled(size, mode, execution, repetition, *, seconds=1.0):
+def _labeled(size, mode, chunk_mb, repetition, *, seconds=1.0):
     return {
         "size": size, "mode": mode,
-        "execution": execution, "repetition": repetition,
+        "chunk_mb": chunk_mb, "repetition": repetition,
         "peak_memory_mb": 1.0,
         "records": [{"backend": "postgres", "entity": "products",
                      "phase": "write", "rows": 10, "seconds": seconds}],
@@ -28,14 +28,14 @@ def _labeled(size, mode, execution, repetition, *, seconds=1.0):
 
 def _matrix(tmp_path, seen, **kwargs):
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides):
+                      only, create_schema, source_overrides, chunk_size_mb):
         seen.append(config_path)
         collector.record("postgres", "products", "write", rows=10, seconds=0.1)
         return []
 
     return brun.run_matrix(
         sizes=[1000], modes=["multi"], repetitions=2,
-        executions=["materialize", "stream"],
+        chunk_sizes=[8, 64],
         dbms_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
         seed=1, only=["postgres"], cleaners={},
         importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
@@ -46,8 +46,8 @@ def _matrix(tmp_path, seen, **kwargs):
 
 def test_completed_runs_are_not_measured_again(tmp_path):
     already = [
-        _labeled(1000, "multi", "materialize", 0),
-        _labeled(1000, "multi", "stream", 0),
+        _labeled(1000, "multi", 8, 0),
+        _labeled(1000, "multi", 64, 0),
     ]
     seen = []
 
@@ -55,24 +55,24 @@ def test_completed_runs_are_not_measured_again(tmp_path):
 
     # Pass 0 was already done; only pass 1's two cells still run.
     assert len(seen) == 2
-    assert [(r["execution"], r["repetition"]) for r in labeled[2:]] == [
-        ("materialize", 1), ("stream", 1),
+    assert [(r["chunk_mb"], r["repetition"]) for r in labeled[2:]] == [
+        (8, 1), (64, 1),
     ]
 
 
 def test_completed_runs_are_carried_into_the_result(tmp_path):
-    already = [_labeled(1000, "multi", "materialize", 0, seconds=42.0)]
+    already = [_labeled(1000, "multi", 8, 0, seconds=42.0)]
     seen = []
 
     labeled = _matrix(tmp_path, seen, completed=already)
 
-    assert len(labeled) == 4  # 2 executions x 2 repetitions, nothing lost
+    assert len(labeled) == 4  # 2 chunk sizes x 2 repetitions, nothing lost
     carried = [r for r in labeled if r["records"][0]["seconds"] == 42.0]
     assert len(carried) == 1  # the resumed measurement, not re-run
 
 
 def test_checkpoints_written_during_a_resume_include_the_earlier_runs(tmp_path):
-    already = [_labeled(1000, "multi", "materialize", 0)]
+    already = [_labeled(1000, "multi", 8, 0)]
     sizes_seen = []
     seen = []
 
@@ -86,9 +86,9 @@ def test_checkpoints_written_during_a_resume_include_the_earlier_runs(tmp_path):
 
 def test_resume_reads_runs_whose_axes_match(tmp_path):
     meta = {"seed": 42, "sizes": [1000], "modes": ["multi"],
-            "executions": ["stream"], "repetitions": 3}
+            "chunk_sizes": [8], "repetitions": 3}
     path = tmp_path / rb.CHECKPOINT_NAME
-    runs = [_labeled(1000, "multi", "stream", 0)]
+    runs = [_labeled(1000, "multi", 8, 0)]
     path.write_text(json.dumps({"metadata": meta, "runs": runs}), encoding="utf-8")
 
     assert rb.resume_runs(path, dict(meta)) == runs
@@ -100,10 +100,10 @@ def test_resume_without_a_checkpoint_starts_fresh(tmp_path):
 
 def test_resume_refuses_a_checkpoint_from_a_different_matrix(tmp_path):
     meta = {"seed": 42, "sizes": [1000], "modes": ["multi"],
-            "executions": ["stream"], "repetitions": 3}
+            "chunk_sizes": [8], "repetitions": 3}
     path = tmp_path / rb.CHECKPOINT_NAME
     path.write_text(
-        json.dumps({"metadata": meta, "runs": [_labeled(1000, "multi", "stream", 0)]}),
+        json.dumps({"metadata": meta, "runs": [_labeled(1000, "multi", 8, 0)]}),
         encoding="utf-8",
     )
 
@@ -112,17 +112,43 @@ def test_resume_refuses_a_checkpoint_from_a_different_matrix(tmp_path):
         rb.resume_runs(path, dict(meta, seed=7))
 
 
-def test_resume_names_every_axis_that_differs(tmp_path):
+def test_resume_refuses_a_checkpoint_with_other_chunk_sizes(tmp_path):
+    meta = {"seed": 42, "sizes": [1000], "modes": ["multi"],
+            "chunk_sizes": [8], "repetitions": 3}
+    path = tmp_path / rb.CHECKPOINT_NAME
+    path.write_text(
+        json.dumps({"metadata": meta, "runs": [_labeled(1000, "multi", 8, 0)]}),
+        encoding="utf-8",
+    )
+
+    # Runs at one chunk size say nothing about another: they would fill its cells.
+    with pytest.raises(ValueError, match="chunk_sizes"):
+        rb.resume_runs(path, dict(meta, chunk_sizes=[8, 64]))
+
+
+def test_resume_refuses_a_checkpoint_from_before_the_chunk_axis(tmp_path):
+    # A checkpoint of the execution axis has no chunk_sizes, and its runs carry
+    # no chunk_mb: continuing it would crash the matrix on the first labeled run.
     meta = {"seed": 42, "sizes": [1000], "modes": ["multi"],
             "executions": ["stream"], "repetitions": 3}
     path = tmp_path / rb.CHECKPOINT_NAME
     path.write_text(json.dumps({"metadata": meta, "runs": []}), encoding="utf-8")
 
+    with pytest.raises(ValueError, match="chunk_sizes"):
+        rb.resume_runs(path, dict(meta, chunk_sizes=[8]))
+
+
+def test_resume_names_every_axis_that_differs(tmp_path):
+    meta = {"seed": 42, "sizes": [1000], "modes": ["multi"],
+            "chunk_sizes": [8], "repetitions": 3}
+    path = tmp_path / rb.CHECKPOINT_NAME
+    path.write_text(json.dumps({"metadata": meta, "runs": []}), encoding="utf-8")
+
     with pytest.raises(ValueError) as excinfo:
-        rb.resume_runs(path, dict(meta, sizes=[1000, 10000], executions=["materialize"]))
+        rb.resume_runs(path, dict(meta, sizes=[1000, 10000], chunk_sizes=[64]))
 
     msg = str(excinfo.value)
-    assert "sizes" in msg and "executions" in msg
+    assert "sizes" in msg and "chunk_sizes" in msg
 
 
 def test_a_crashing_matrix_is_recorded_in_the_session_log(tmp_path, monkeypatch):
@@ -158,8 +184,8 @@ def test_a_crashing_matrix_is_recorded_in_the_session_log(tmp_path, monkeypatch)
 
 def test_resume_refuses_a_checkpoint_with_naive_runs(tmp_path):
     meta = {"seed": 42, "sizes": [1000], "modes": ["multi"],
-            "executions": ["materialize"], "repetitions": 3}
-    naive_run = dict(_labeled(1000, "multi", "materialize", 0), strategy="naive")
+            "chunk_sizes": [8], "repetitions": 3}
+    naive_run = dict(_labeled(1000, "multi", 8, 0), strategy="naive")
     path = tmp_path / rb.CHECKPOINT_NAME
     path.write_text(json.dumps({"metadata": meta, "runs": [naive_run]}), encoding="utf-8")
 
@@ -170,8 +196,8 @@ def test_resume_refuses_a_checkpoint_with_naive_runs(tmp_path):
 
 def test_resume_accepts_runs_labeled_optimized_by_older_versions(tmp_path):
     meta = {"seed": 42, "sizes": [1000], "modes": ["multi"],
-            "executions": ["stream"], "repetitions": 3}
-    run = dict(_labeled(1000, "multi", "stream", 0), strategy="optimized")
+            "chunk_sizes": [8], "repetitions": 3}
+    run = dict(_labeled(1000, "multi", 8, 0), strategy="optimized")
     path = tmp_path / rb.CHECKPOINT_NAME
     path.write_text(json.dumps({"metadata": meta, "runs": [run]}), encoding="utf-8")
 
