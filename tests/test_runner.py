@@ -300,22 +300,91 @@ def test_chunk_and_batch_sizes_reach_the_plan(tmp_path, monkeypatch):
     assert seen == {"chunk_mb": 16, "batch_size": 2048}
 
 
-def test_the_write_does_not_repeat_the_cast_warnings_of_the_validation_read(tmp_path, caplog):
+@pytest.mark.parametrize("kwargs,expected", [({}, True), ({"create_schema": False}, False)])
+def test_create_schema_reaches_the_write(tmp_path, monkeypatch, kwargs, expected):
+    cfg = _events(tmp_path)
+    seen = []
+    real = runner.run_stream_import
+
+    def spy(plan, **write_kwargs):
+        seen.append(write_kwargs["create_schema"])
+        return real(plan, **write_kwargs)
+
+    monkeypatch.setattr(runner, "run_stream_import", spy)
+    run_import(cfg, sink_factories=_factories(), **kwargs)
+    assert seen == [expected]
+
+
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_the_default_display_is_a_sample_of_fifty_rows(tmp_path, capsys, dry_run):
+    cfg = _events(tmp_path, n=60)
+    run_import(cfg, dry_run=dry_run, sink_factories=_factories())
+    out = capsys.readouterr().out
+    assert "postgres · events: 50 of 60 row(s)" in out
+    assert "[50] " in out and "[51] " not in out
+
+
+_CAST_LOGGER = logging.getLogger("polyglotimportcsv.casting")
+_QTY_WARNING = "column 'qty': 1 value(s) could not be cast to integer and stayed text"
+
+
+def _unmapped_cast_fallback(tmp_path):
+    """ev.csv with an unmapped qty column holding one value the integer cast leaves as
+    text: a cast warning in each read that casts it, not a validation error."""
     qty = [str(i) for i in range(10)]
     qty[4] = "3.0"  # integral, so the column is integer; int("3.0") fails and the text stays
     _write_csv(tmp_path / "ev.csv", ["id", "qty"], list(zip(range(10), qty)))
-    cfg = _config_file(tmp_path, {
+    return _config_file(tmp_path, {
         "sources": {"ev": "ev.csv"},
-        # qty is not mapped: its cast fallback is a warning, not a validation error
         "postgres": {"entities": {"events": {"source": "ev", "columns": {"id": {"is_key": True}}}}},
     })
 
-    with caplog.at_level(logging.WARNING, logger="polyglotimportcsv.casting"):
+
+def _cast_messages(caplog):
+    return [r.getMessage() for r in caplog.records if r.name == _CAST_LOGGER.name]
+
+
+def test_the_write_does_not_repeat_the_cast_warnings_of_the_validation_read(tmp_path, caplog):
+    cfg = _unmapped_cast_fallback(tmp_path)
+
+    with caplog.at_level(logging.WARNING, logger=_CAST_LOGGER.name):
         run_import(cfg, sink_factories=_factories())
 
-    cast = [r.getMessage() for r in caplog.records if r.name == "polyglotimportcsv.casting"]
-    assert cast == ["column 'qty': 1 value(s) could not be cast to integer and stayed text"]
-    assert logging.getLogger("polyglotimportcsv.casting").filters == []
+    assert _cast_messages(caplog) == [_QTY_WARNING]
+    assert _CAST_LOGGER.filters == []
+
+
+def test_a_cast_warning_only_the_write_emits_still_prints(tmp_path, monkeypatch, caplog):
+    cfg = _unmapped_cast_fallback(tmp_path)
+    new = "column 'other': 2 value(s) could not be cast to float and stayed text"
+    real = runner.run_stream_import
+
+    def write_with_a_new_warning(*args, **kwargs):
+        _CAST_LOGGER.warning(new)
+        return real(*args, **kwargs)  # casts qty again: the repeat is dropped
+
+    monkeypatch.setattr(runner, "run_stream_import", write_with_a_new_warning)
+    with caplog.at_level(logging.WARNING, logger=_CAST_LOGGER.name):
+        run_import(cfg, sink_factories=_factories())
+
+    assert _cast_messages(caplog) == [_QTY_WARNING, new]
+
+
+def test_no_cast_filter_or_handler_is_left_when_a_read_fails(tmp_path, monkeypatch):
+    handlers = list(_CAST_LOGGER.handlers)
+    (tmp_path / "bad").mkdir()
+    with pytest.raises(DataValidationError):  # the validation read logs a cast warning, then fails
+        run_import(_events(tmp_path / "bad", bad_date_at=3), sink_factories=_factories())
+    assert _CAST_LOGGER.filters == [] and _CAST_LOGGER.handlers == handlers
+
+    def write_fails(*args, **kwargs):
+        raise RuntimeError("the DBMS went away")
+
+    monkeypatch.setattr(runner, "run_stream_import", write_fails)
+    (tmp_path / "ok").mkdir()
+    with pytest.raises(RuntimeError, match="went away"):
+        run_import(_unmapped_cast_fallback(tmp_path / "ok"), sink_factories=_factories())
+    assert _CAST_LOGGER.filters == [] and _CAST_LOGGER.handlers == handlers
 
 
 def test_a_real_import_stops_before_reading_data_when_a_dbms_is_down(monkeypatch):

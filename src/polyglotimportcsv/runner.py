@@ -6,7 +6,7 @@ import logging
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, Iterable, Iterator, List, Optional, Tuple
+from typing import Callable, ContextManager, Dict, Iterable, Iterator, List, Optional, Set, Tuple
 
 from rich import box
 from rich.table import Table
@@ -178,22 +178,41 @@ def _unused_origins(plan: ImportPlan) -> List[Tuple[str, int]]:
     ]
 
 
-def _below_warning(record: logging.LogRecord) -> bool:
-    return record.levelno < logging.WARNING
+class _CastWarnings:
+    """The cast warnings (``casting.cast_frame``) the validation read has shown.
 
-
-@contextmanager
-def _cast_warnings_already_shown() -> Iterator[None]:
-    """Drop the cast warnings logged inside the block.
-
-    The write casts the same rows, with the same kinds, as the validation read, which
-    has already logged every value that fell back (``casting.cast_frame``).
+    The write casts the same rows as the validation read, so it would log the same
+    warnings again: ``without_repeats`` drops those, and only those. A warning the
+    validation read did not log still prints. Each filter stays on ``casting.logger``
+    only for its block.
     """
-    casting.logger.addFilter(_below_warning)
-    try:
-        yield
-    finally:
-        casting.logger.removeFilter(_below_warning)
+
+    def __init__(self) -> None:
+        self._shown: Set[str] = set()
+
+    def _remember(self, record: logging.LogRecord) -> bool:
+        if record.levelno >= logging.WARNING:
+            self._shown.add(record.getMessage())
+        return True
+
+    def _unseen(self, record: logging.LogRecord) -> bool:
+        return record.levelno < logging.WARNING or record.getMessage() not in self._shown
+
+    @contextmanager
+    def _filtered(self, check: Callable[[logging.LogRecord], bool]) -> Iterator[None]:
+        casting.logger.addFilter(check)
+        try:
+            yield
+        finally:
+            casting.logger.removeFilter(check)
+
+    def recording(self) -> ContextManager[None]:
+        """Remember every cast warning logged inside the block."""
+        return self._filtered(self._remember)
+
+    def without_repeats(self) -> ContextManager[None]:
+        """Drop, inside the block, the cast warnings ``recording`` remembered."""
+        return self._filtered(self._unseen)
 
 
 def _print_summary(
@@ -284,8 +303,10 @@ def run_import(
 
     step("Validate data")
     preview = StreamDataPreview(False if benchmark else show_data, sample_size)
+    cast_warnings = _CastWarnings()
     start = time.perf_counter()
-    report, expected = validate_data(plan, on_batch=preview.observe if dry_run else None)
+    with cast_warnings.recording():
+        report, expected = validate_data(plan, on_batch=preview.observe if dry_run else None)
     collector.record("(all)", "*", "validate", rows=rows, seconds=time.perf_counter() - start)
     if not report.ok():
         print_validation_report(report)
@@ -312,7 +333,7 @@ def run_import(
         note("DDL will be created lazily per partition (--create-schema)")
     else:
         note("existing schema only (--no-create-schema)")
-    with _cast_warnings_already_shown():
+    with cast_warnings.without_repeats():
         counts = run_stream_import(
             plan,
             sink_factories=sink_factories or default_sink_factories(),
