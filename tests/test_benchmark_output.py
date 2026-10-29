@@ -40,22 +40,19 @@ def test_benchmark_csv_appends_history(tmp_path):
     assert len(lines) == 3  # one header + two runs
 
 
-def test_run_import_benchmark_writes_files_and_suppresses_dump(tmp_path, monkeypatch):
+def test_run_import_benchmark_writes_files_and_suppresses_dump(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
-    forces = []
-    monkeypatch.setattr(
-        "polyglotimportcsv.runner.dump_entity_frame",
-        lambda b, e, df, *, force=None, sample_size=None: forces.append(force),
-    )
 
-    def stub(cfg, entities, *, dry_run, create_schema):
-        return ["[postgres] stub"]
+    run_import(CFG, dry_run=True, only=["postgres"], show_data=True, benchmark=True)
 
-    run_import(CFG, dry_run=True, only=["postgres"], importers={"postgres": stub}, benchmark=True)
-    assert forces and all(f is False for f in forces)
-    out = tmp_path / "benchmarks"
-    assert list(out.glob("benchmark_*.json"))
-    assert (out / "benchmark_history.csv").is_file()
+    out_dir = tmp_path / "benchmarks"
+    [json_path] = out_dir.glob("benchmark_*.json")
+    assert (out_dir / "benchmark_history.csv").is_file()
+    data = json.loads(json_path.read_text(encoding="utf-8"))
+    assert [m["phase"] for m in data["metrics"]] == ["infer", "validate"]
+    out = capsys.readouterr().out
+    assert "Benchmark JSON" in out
+    assert "postgres · " not in out  # --benchmark implies --no-data, even over --show-data
 
 
 def test_append_to_mismatched_header_raises(tmp_path):

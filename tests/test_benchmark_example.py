@@ -1,6 +1,8 @@
-"""The committed reference dataset drives dry-run smoke + mode-equivalence."""
+"""The committed reference dataset drives the dry-run smoke, in both layouts."""
 
 from pathlib import Path
+
+import pytest
 
 from polyglotimportcsv import benchmark_data as bd
 from polyglotimportcsv.metrics import MetricsCollector
@@ -27,25 +29,15 @@ def test_reference_dataset_committed_and_1k():
     assert n("ecommerce_join.csv") == 1000  # sum of the four sources
 
 
-def _filter_rows(config, overrides):
+@pytest.mark.parametrize("mode", ["multi", "combined"])
+def test_dry_run_smoke_on_reference(mode):
+    cfg_name = "import_config.json" if mode == "multi" else "import_config_combined.json"
+    overrides = (
+        {src: str(BENCH / fname) for src, fname in bd.SOURCE_FILES.items()}
+        if mode == "multi" else {"ecommerce": str(BENCH / bd.JOIN_FILE)}
+    )
     c = MetricsCollector()
-    run_import(config, dry_run=True, collector=c, source_overrides=overrides)
-    return {(m.entity): m.rows for m in c.entries() if m.phase == "filter"}
-
-
-def test_dry_run_smoke_on_reference():
-    overrides = {src: str(BENCH / fname) for src, fname in bd.SOURCE_FILES.items()}
-    lines = run_import(ECOM / "import_config.json", dry_run=True, source_overrides=overrides)
-    assert lines  # produced output, no exception
-
-
-def test_mode_equivalence_entity_counts():
-    multi = _filter_rows(
-        ECOM / "import_config.json",
-        {src: str(BENCH / fname) for src, fname in bd.SOURCE_FILES.items()},
-    )
-    combined = _filter_rows(
-        ECOM / "import_config_combined.json",
-        {"ecommerce": str(BENCH / bd.JOIN_FILE)},
-    )
-    assert multi == combined
+    lines = run_import(ECOM / cfg_name, dry_run=True, source_overrides=overrides, collector=c)
+    assert any(line.startswith("[neo4j] :PURCHASED: ") for line in lines)
+    # every one of the 1000 rows is read by the inference and by the validation
+    assert {m.phase: m.rows for m in c.entries()} == {"infer": 1000, "validate": 1000}

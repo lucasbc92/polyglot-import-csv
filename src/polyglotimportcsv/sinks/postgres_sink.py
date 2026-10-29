@@ -88,7 +88,8 @@ class PostgresSink:
         # DB-free-testable (a fake cursor never needs to satisfy psycopg2's
         # C-level "must be a real connection/cursor" check for Identifier
         # quoting) while producing byte-identical SQL against a real cursor.
-        execute_values(self._cur, stmt, tuples, page_size=500)
+        # page_size is the whole batch: one INSERT, one round trip per batch.
+        execute_values(self._cur, stmt, tuples, page_size=len(tuples))
         return len(tuples)
 
     def close(self) -> None:

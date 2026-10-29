@@ -36,9 +36,9 @@ def reads(monkeypatch):
     calls = []
     real = ss._read_chunks
 
-    def counting(path, chunksize, usecols=None):
+    def counting(name, path, chunksize, usecols=None):
         calls.append((path.name, usecols))
-        return real(path, chunksize, usecols)
+        return real(name, path, chunksize, usecols)
 
     monkeypatch.setattr(ss, "_read_chunks", counting)
     return calls

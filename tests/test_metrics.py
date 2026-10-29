@@ -16,10 +16,6 @@ CFG = DATA / "import_config.json"
 CFG_COMBINED = DATA / "import_config_combined.json"
 
 
-def _stub(cfg, entities, *, dry_run, create_schema):
-    return ["[postgres] stub"]
-
-
 def _data_rows(path: Path) -> int:
     with open(path, "rb") as fh:
         return sum(1 for _ in fh) - 1  # minus header
@@ -60,45 +56,27 @@ def test_timed_phase_records_into_current():
     assert m.seconds >= 0
 
 
-def test_run_import_records_read_and_map_phases():
+def test_the_phases_are_the_three_reads():
+    assert metrics.PHASES == ("infer", "validate", "write")
+
+
+def _read_rows(config_path: Path) -> dict:
     c = MetricsCollector()
-    run_import(
-        CFG, dry_run=True, only=["postgres"], importers={"postgres": _stub}, collector=c
-    )
-    phases = {(m.backend, m.phase) for m in c.entries()}
-    assert ("(sources)", "read") in phases
-    assert ("postgres", "map") in phases
-    assert metrics.current() is None  # runner must reset after the run
+    run_import(config_path, dry_run=True, collector=c)
+    return {m.phase: m.rows for m in c.entries()}
 
 
-def _read_rows(config_path: Path) -> int:
-    c = MetricsCollector()
-    run_import(
-        config_path, dry_run=True, only=["postgres"],
-        importers={"postgres": _stub}, collector=c,
-    )
-    [read] = [m for m in c.entries() if m.phase == "read"]
-    return read.rows
-
-
-def test_read_rows_counts_multi_sources():
-    expected = sum(
+def test_infer_and_validate_count_every_data_row_once_in_both_layouts():
+    """A combined CSV is profiled by origin value: each of its rows counts once, so
+    both layouts of the same data report the same rows read."""
+    multi = sum(
         _data_rows(DATA / f"ecommerce_{src}.csv")
         for src in ("stock", "purchase", "select_product", "add_to_cart")
     )
+    assert _data_rows(DATA / "ecommerce_join.csv") == multi
+    expected = {"infer": multi, "validate": multi}
     assert _read_rows(CFG) == expected
-
-
-def test_read_rows_counts_combined_file_once():
-    """A combined CSV also registers one slice per origin value. Those slices are
-    the same rows again, so counting the whole source registry would report twice
-    the rows read and inflate combined-mode read throughput 2x in the benchmarks."""
-    assert _read_rows(CFG_COMBINED) == _data_rows(DATA / "ecommerce_join.csv")
-
-
-def test_read_rows_match_across_modes():
-    # Same underlying dataset in both layouts: the read metric must agree.
-    assert _read_rows(CFG_COMBINED) == _read_rows(CFG)
+    assert _read_rows(CFG_COMBINED) == expected
 
 
 def test_metrics_table_renders_rows():

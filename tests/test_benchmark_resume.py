@@ -28,8 +28,8 @@ def _labeled(size, mode, execution, repetition, *, seconds=1.0):
 
 def _matrix(tmp_path, seen, **kwargs):
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides, execution):
-        seen.append(execution)
+                      only, create_schema, source_overrides):
+        seen.append(config_path)
         collector.record("postgres", "products", "write", rows=10, seconds=0.1)
         return []
 
@@ -51,10 +51,13 @@ def test_completed_runs_are_not_measured_again(tmp_path):
     ]
     seen = []
 
-    _matrix(tmp_path, seen, completed=already)
+    labeled = _matrix(tmp_path, seen, completed=already)
 
     # Pass 0 was already done; only pass 1's two cells still run.
-    assert seen == ["materialize", "stream"]
+    assert len(seen) == 2
+    assert [(r["execution"], r["repetition"]) for r in labeled[2:]] == [
+        ("materialize", 1), ("stream", 1),
+    ]
 
 
 def test_completed_runs_are_carried_into_the_result(tmp_path):

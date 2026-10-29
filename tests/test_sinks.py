@@ -136,7 +136,23 @@ def test_write_batch_inserts_deduped_rows_with_on_conflict():
     sql_obj, tuples, page_size = conn.cur.execute_values_calls[0]
     assert len(tuples) == 2
     assert "ON CONFLICT" in repr(sql_obj)
-    assert page_size == 500
+    assert page_size == len(tuples)
+
+
+def test_write_batch_is_one_round_trip_however_large_the_batch():
+    """page_size is the whole batch, so execute_values sends a single statement."""
+    conn = _FakeConn()
+    sink = PostgresSink({"schema": "public"}, connection_factory=lambda c: conn)
+    binding = _bind_sample("inventory", INVENTORY_CFG, _stock_sample(), "stock")
+    batch = pd.concat([_stock_sample().iloc[[2]]] * 1500, ignore_index=True)
+    batch["product_id"] = [str(i) for i in range(1500)]
+
+    written = sink.write_batch("inventory", binding, batch)
+
+    assert written == 1500
+    (_, tuples, page_size), = conn.cur.execute_values_calls
+    assert len(tuples) == 1500
+    assert page_size == len(batch)
 
 
 def test_write_batch_sends_null_for_an_empty_text_foreign_key():
@@ -732,6 +748,21 @@ def test_neo4j_write_batch_unwind_merges_nodes():
     assert sum(len(p["batch"]) for p in node_batches) == 3
     keys = {row["k"] for p in node_batches for row in p["batch"]}
     assert keys == {"u1", "u2", "u3"}
+
+
+def test_neo4j_write_batch_is_one_unwind_however_large_the_batch():
+    rec = {"run": [], "tx_run": []}
+    driver = _FakeNeoDriver(rec)
+    sink = Neo4jSink({"connection": {}}, driver_factory=lambda c: driver)
+    ids = [f"u{i}" for i in range(1500)]
+    binding = _bind_sample("User", NEO4J_USER_CFG, _user_sample(ids), "purchase")
+
+    written = sink.write_batch("User", binding, _user_sample(ids))
+
+    assert written == 1500
+    node_batches = [p for q, p in rec["tx_run"] if "UNWIND" in q and "MERGE (n" in q]
+    assert len(node_batches) == 1
+    assert len(node_batches[0]["batch"]) == 1500
 
 
 def test_neo4j_write_batch_empty_does_nothing():

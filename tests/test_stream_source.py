@@ -1,3 +1,5 @@
+import re
+
 import pandas as pd
 import pytest
 from polyglotimportcsv import stream_source as ss
@@ -89,6 +91,23 @@ def test_read_source_headers_rejects_a_combined_file_without_data_columns(tmp_pa
         ss.read_source_headers({"e": {"file": "j.csv"}}, tmp_path, {})
 
 
+@pytest.mark.parametrize("decl", ["e.csv", {"file": "e.csv"}], ids=["plain", "combined"])
+def test_a_zero_byte_file_is_a_source_error_in_every_read(tmp_path, decl):
+    """pandas' EmptyDataError would reach the CLI as a traceback."""
+    (tmp_path / "e.csv").write_bytes(b"")
+    cfg = {"src": decl}
+    message = re.escape(f"Source 'src': CSV file is empty (no header row): {tmp_path / 'e.csv'}")
+    with pytest.raises(SourceError, match=message):
+        ss.read_source_headers(cfg, tmp_path)
+    with pytest.raises(SourceError, match=message):
+        ss.chunk_rows("src", tmp_path / "e.csv", 8)
+    with pytest.raises(SourceError, match=message):
+        list(ss.iter_entity_chunks(cfg, tmp_path, rows_per_chunk={"src": 10}))
+    with pytest.raises(SourceError, match=message):
+        list(ss.iter_entity_chunks(cfg, tmp_path, rows_per_chunk={"src": 10},
+                                   only_columns={"src": ["a"]}))
+
+
 def _csv(tmp_path, name, cols, rows):
     path = tmp_path / name
     _write_csv(path, [f"c{j}" for j in range(cols)],
@@ -99,24 +118,24 @@ def _csv(tmp_path, name, cols, rows):
 def test_chunk_rows_follows_the_memory_budget(tmp_path):
     narrow = _csv(tmp_path, "n.csv", cols=3, rows=5000)
     wide = _csv(tmp_path, "w.csv", cols=30, rows=5000)
-    assert ss.chunk_rows(narrow, 1) > ss.chunk_rows(wide, 1) >= 1
-    assert ss.chunk_rows(narrow, 2) >= 2 * ss.chunk_rows(narrow, 1) - 1
+    assert ss.chunk_rows("n", narrow, 1) > ss.chunk_rows("w", wide, 1) >= 1
+    assert ss.chunk_rows("n", narrow, 2) >= 2 * ss.chunk_rows("n", narrow, 1) - 1
 
 
 def test_chunk_rows_reads_a_bom_crlf_file(tmp_path):
     p = tmp_path / "b.csv"
     p.write_bytes("\ufeffa,b\r\n1,x\r\n2,y\r\n".encode("utf-8"))
-    assert ss.chunk_rows(p, 8) >= 1
+    assert ss.chunk_rows("b", p, 8) >= 1
     assert ss.read_source_headers({"b": "b.csv"}, tmp_path, {}) == {"b": ["a", "b"]}
 
 
 def test_chunk_rows_of_a_file_without_rows_is_one(tmp_path):
     (tmp_path / "h.csv").write_text("a,b\n", encoding="utf-8")
-    assert ss.chunk_rows(tmp_path / "h.csv", 8) == 1
+    assert ss.chunk_rows("h", tmp_path / "h.csv", 8) == 1
 
 
 def test_chunk_rows_never_drops_below_one_row(tmp_path):
-    assert ss.chunk_rows(_csv(tmp_path, "w.csv", cols=30, rows=50), 0.00001) == 1
+    assert ss.chunk_rows("w", _csv(tmp_path, "w.csv", cols=30, rows=50), 0.00001) == 1
 
 
 def test_source_path_resolves_plain_combined_and_overridden_sources(tmp_path):

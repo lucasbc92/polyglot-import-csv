@@ -1,21 +1,26 @@
-"""Orchestrate source loading, entity resolution, validation, and per-backend import."""
+"""Orchestrate an import: header and DBMS checks, then the inference, validation and write reads."""
 
 from __future__ import annotations
 
 import logging
 import time
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from typing import Dict, Iterable, Iterator, List, Optional, Tuple
 
-import pandas as pd
 from rich import box
 from rich.table import Table
 from rich.text import Text
 
-from polyglotimportcsv import metrics
-from polyglotimportcsv.business_exception import ConfigError, DbmsUnavailableError
+from polyglotimportcsv import casting, metrics
+from polyglotimportcsv.business_exception import (
+    ConfigError,
+    DataValidationError,
+    DbmsUnavailableError,
+)
 from polyglotimportcsv.config_parser import load_config, load_dbms_config, resolve_dbms_config_path
 from polyglotimportcsv.data_preview import StreamDataPreview
+from polyglotimportcsv.data_validation import print_validation_report, validate_data
 from polyglotimportcsv.dbms_check import (
     DOWN,
     INVALID,
@@ -26,27 +31,28 @@ from polyglotimportcsv.dbms_check import (
     not_ready_message,
 )
 from polyglotimportcsv.dbms_sink import SinkFactory
-from polyglotimportcsv.import_plan import plan_import
-from polyglotimportcsv.importers import default_importer_registry
-from polyglotimportcsv.importers.base import ImporterRegistry
-from polyglotimportcsv.mapping_resolver import resolve_backend_entities
-from polyglotimportcsv.stream_runner import run_stream_import
+from polyglotimportcsv.import_plan import DEFAULT_BATCH_SIZE, ImportPlan, plan_import
+from polyglotimportcsv.stream_binding import entity_source_names
+from polyglotimportcsv.stream_runner import StreamCounts, run_stream_import
 from polyglotimportcsv.reporting import (
     DEFAULT_SAMPLE_SIZE,
     backend_text,
     banner,
-    dump_entity_frame,
     kv,
     metrics_table,
     note,
     print_rich,
-    section,
     step,
     success,
+    warn,
 )
 from polyglotimportcsv.sinks import default_sink_factories
-from polyglotimportcsv.sources import load_sources
-from polyglotimportcsv.validation import BACKENDS, validate_backend_entities
+from polyglotimportcsv.stream_source import (
+    DEFAULT_CHUNK_MB,
+    check_source_overrides,
+    read_source_headers,
+)
+from polyglotimportcsv.validation import BACKENDS, validate_headers
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +128,7 @@ def _require_dbms(
     config: Dict,
     only: Optional[Iterable[str]],
 ) -> None:
-    """Stop before any CSV is read when a target DBMS is not ready."""
+    """Stop before any data row is read when a target DBMS is not ready."""
     report = _check_dbms_step(config_path, dbms_config_path, config, only)
     if not report.ok:
         raise DbmsUnavailableError(not_ready_message(report))
@@ -147,6 +153,68 @@ def run_check(
     return report
 
 
+def _summary_lines(counts: StreamCounts) -> List[str]:
+    """One ``[dbms] partition: N row(s)`` line per partition, relationships as ``:TYPE``."""
+    return [
+        f"[{dbms}] {partition}: {rows} row(s)"
+        for dbms, written in counts.written.items()
+        for partition, rows in sorted(written.items())
+    ]
+
+
+def _unused_origins(plan: ImportPlan) -> List[Tuple[str, int]]:
+    """``(origin value, rows)`` of every origin of a combined file that no entity of the
+    selected DBMS reads."""
+    used = {
+        name
+        for dbms in plan.dbms_names
+        for ename, ecfg in (plan.config[dbms].get("entities") or {}).items()
+        for name in entity_source_names(ename, ecfg)
+    }
+    return [
+        (name, profile.rows)
+        for name, profile in plan.profiles.items()
+        if not isinstance(plan.sources_cfg[profile.declared], str) and name not in used
+    ]
+
+
+def _below_warning(record: logging.LogRecord) -> bool:
+    return record.levelno < logging.WARNING
+
+
+@contextmanager
+def _cast_warnings_already_shown() -> Iterator[None]:
+    """Drop the cast warnings logged inside the block.
+
+    The write casts the same rows, with the same kinds, as the validation read, which
+    has already logged every value that fell back (``casting.cast_frame``).
+    """
+    casting.logger.addFilter(_below_warning)
+    try:
+        yield
+    finally:
+        casting.logger.removeFilter(_below_warning)
+
+
+def _print_summary(
+    lines: List[str],
+    collector: metrics.MetricsCollector,
+    benchmark: bool,
+    config_path: Path,
+    plan: ImportPlan,
+) -> None:
+    for line in lines:
+        _print_backend_line(line)
+    print_rich(metrics_table(collector.to_records()))
+    if benchmark:
+        meta = metrics.environment_metadata(
+            config_path, {name: profile.rows for name, profile in plan.profiles.items()}
+        )
+        json_path, csv_path = metrics.write_benchmark_files(collector, meta)
+        kv("Benchmark JSON", json_path)
+        kv("Benchmark CSV", csv_path)
+
+
 def run_import(
     config_path: str | Path,
     *,
@@ -154,223 +222,116 @@ def run_import(
     dry_run: bool = False,
     create_schema: bool = True,
     only: Optional[Iterable[str]] = None,
-    importers: Optional[ImporterRegistry] = None,
     source_overrides: Optional[Dict[str, str]] = None,
     show_data: Optional[bool] = None,
     sample_size: int = DEFAULT_SAMPLE_SIZE,
     collector: Optional[metrics.MetricsCollector] = None,
     benchmark: bool = False,
-    execution: str = "stream",
+    chunk_size_mb: float = DEFAULT_CHUNK_MB,
+    batch_size: int = DEFAULT_BATCH_SIZE,
     sink_factories: Optional[Dict[str, SinkFactory]] = None,
 ) -> List[str]:
     """
-    Load config and sources, bind entities, validate, then run configured backends.
+    Check everything, then import, in three reads of the sources.
 
     Data comes from the config's ``sources`` block (one CSV per entity, or a
     combined CSV with the origin in column 0). ``source_overrides`` remaps a
     source name to another CSV path without editing the config (CLI --source).
 
-    ``execution`` selects the write path. ``stream`` (default) streams each
-    source in bounded memory through a ``DbmsSink`` per DBMS; ``materialize``
-    reproduces the full-materialization phase baseline unchanged. A dry-run or
-    a ``--benchmark`` phase capture always uses the materialize path: dry-run
-    plans without connecting, and the per-phase benchmark metrics only the
-    materialize importers record.
+    The headers are checked first, then the target DBMS (not in a dry-run). The
+    inference read profiles every source the selected DBMS use, in read blocks of
+    about ``chunk_size_mb``; the validation read checks every row the write would
+    send, through the write's own engine. Any problem stops the run before anything
+    is written. The write read streams one DBMS at a time through its sink, in
+    batches of up to ``batch_size`` rows, and its counts are compared with those of
+    the validation read. A dry-run stops after the validation read.
 
-    ``show_data`` and ``sample_size`` choose the per-entity data display:
+    ``show_data`` and ``sample_size`` choose the per-partition data display:
     ``True`` shows every row, ``False`` none, and ``None`` (the default) the
-    first ``sample_size`` rows of each entity plus its total.
+    first ``sample_size`` rows of each partition plus its total; ``benchmark``
+    implies ``False``. Returns the summary lines, one per partition.
     """
-    if execution not in ("stream", "materialize"):
-        raise ValueError(
-            f"unknown execution: {execution!r}. Valid: stream, materialize"
-        )
-
     config_path = Path(config_path)
-    use_stream = execution == "stream" and not dry_run and not benchmark
-
-    mode = "dry-run" if dry_run else "import"
-    subtitle = f"mode: {mode}" if not use_stream else f"mode: {mode} · execution: stream"
-    banner("Polyglot Import CSV", subtitle=subtitle)
-
+    banner("Polyglot Import CSV", subtitle=f"mode: {'dry-run' if dry_run else 'import'}")
     collector = collector if collector is not None else metrics.MetricsCollector()
-    prev_collector = metrics.current()
-    metrics.set_current(collector)
-    try:
-        if use_stream:
-            return _run_stream(
-                config_path,
-                dbms_config_path=dbms_config_path,
-                create_schema=create_schema,
-                only=only,
-                source_overrides=source_overrides,
-                sink_factories=sink_factories or default_sink_factories(),
-                collector=collector,
-                show_data=show_data,
-                sample_size=sample_size,
-            )
-        return _run(
-            config_path,
-            dbms_config_path=dbms_config_path,
-            dry_run=dry_run,
-            create_schema=create_schema,
-            only=only,
-            importers=importers,
-            source_overrides=source_overrides,
-            show_data=False if benchmark else show_data,
-            sample_size=sample_size,
-            collector=collector,
-            benchmark=benchmark,
-        )
-    finally:
-        metrics.set_current(prev_collector)
 
-
-def _run_stream(
-    config_path: Path,
-    *,
-    dbms_config_path: Optional[str | Path],
-    create_schema: bool,
-    only: Optional[Iterable[str]],
-    source_overrides: Optional[Dict[str, str]],
-    sink_factories: Dict[str, SinkFactory],
-    collector: metrics.MetricsCollector,
-    show_data: Optional[bool],
-    sample_size: int,
-) -> List[str]:
-    """Bounded-memory streaming path: plan the import, then ``run_stream_import`` it."""
     step("Load config", str(config_path))
     config = load_config(config_path, dbms_config_path)
-    backends_in_cfg = [b for b in BACKENDS if b in config]
-    note(f"{len(backends_in_cfg)} backend(s) configured: {', '.join(backends_in_cfg)}")
-    _require_dbms(config_path, dbms_config_path, config, only)
+    declared = [b for b in BACKENDS if b in config]
+    note(f"{len(declared)} DBMS configured: {', '.join(declared)}")
+    dbms_names = _dbms_targets(config, only)
 
+    step("Check sources")
+    sources_cfg = config.get("sources") or {}
+    check_source_overrides(sources_cfg, source_overrides)
+    headers = read_source_headers(sources_cfg, config_path.parent, source_overrides)
+
+    step("Validate mappings")
+    combined = [name for name, decl in sources_cfg.items() if not isinstance(decl, str)]
+    validate_headers(config, headers, combined, dbms_names)
+
+    if not dry_run:
+        _require_dbms(config_path, dbms_config_path, config, only)
+
+    step("Infer types")
+    start = time.perf_counter()
+    plan = plan_import(
+        config, config_path.parent, dbms_names=dbms_names, overrides=source_overrides,
+        chunk_mb=chunk_size_mb, batch_size=batch_size,
+    )
+    rows = sum(profile.rows for profile in plan.profiles.values())
+    collector.record("(sources)", "*", "infer", rows=rows, seconds=time.perf_counter() - start)
+
+    step("Validate data")
+    preview = StreamDataPreview(False if benchmark else show_data, sample_size)
+    start = time.perf_counter()
+    report, expected = validate_data(plan, on_batch=preview.observe if dry_run else None)
+    collector.record("(all)", "*", "validate", rows=rows, seconds=time.perf_counter() - start)
+    if not report.ok():
+        print_validation_report(report)
+        raise DataValidationError(
+            f"Data validation failed: {report.total()} problem(s) in "
+            f"{len(report.groups())} group(s); nothing was written."
+        )
+    for dbms, entities in expected.entity_rows.items():
+        for ename, n in entities.items():
+            if n == 0:
+                logger.warning("entity %s/%s bound to 0 row(s)", dbms, ename)
+    for name, n in _unused_origins(plan):
+        note(f"origin '{name}' ({n} row(s)) feeds no entity")
+
+    if dry_run:
+        preview.finish()
+        lines = _summary_lines(expected)
+        _print_summary(lines, collector, benchmark, config_path, plan)
+        success("Finished dry-run — nothing was written")
+        return lines
+
+    step("Write")
     if create_schema:
         note("DDL will be created lazily per partition (--create-schema)")
     else:
         note("existing schema only (--no-create-schema)")
-
-    plan = plan_import(
-        config, config_path.parent,
-        dbms_names=_dbms_targets(config, only), overrides=source_overrides or {},
-    )
-    preview = StreamDataPreview(show_data, sample_size)
-    write_start = time.perf_counter()
-    counts = run_stream_import(
-        plan,
-        sink_factories=sink_factories,
-        create_schema=create_schema,
-        on_batch=preview.observe,
-    )
-    preview.finish()
-    # One summary metric for the whole streaming import. Streaming is
-    # DBMS-agnostic and does not break into read/map/filter/write phases the
-    # way the materialize importers do, so record a single aggregate row; it
-    # also gives the benchmark a carrier for the per-import peak_memory_mb.
-    collector.record(
-        "(stream)", "*", "write",
-        rows=sum(rows for written in counts.written.values() for rows in written.values()),
-        seconds=time.perf_counter() - write_start,
-    )
-    log_lines = [
-        f"[{dbms}] {partition}: {rows} row(s)"
-        for dbms, written in counts.written.items()
-        for partition, rows in sorted(written.items())
-    ]
-    for line in log_lines:
-        _print_backend_line(line)
-    success(f"Finished import (stream) — {len(log_lines)} partition(s) written")
-    return log_lines
-
-
-def _run(
-    config_path: Path,
-    *,
-    dbms_config_path: Optional[str | Path],
-    dry_run: bool,
-    create_schema: bool,
-    only: Optional[Iterable[str]],
-    importers: Optional[ImporterRegistry],
-    source_overrides: Optional[Dict[str, str]],
-    show_data: Optional[bool],
-    sample_size: int,
-    collector: metrics.MetricsCollector,
-    benchmark: bool,
-) -> List[str]:
-    mode = "dry-run" if dry_run else "import"
-    step("Load config", str(config_path))
-    config = load_config(config_path, dbms_config_path)
-    backends_in_cfg = [b for b in BACKENDS if b in config]
-    note(f"{len(backends_in_cfg)} backend(s) configured: {', '.join(backends_in_cfg)}")
-    if not dry_run:
-        _require_dbms(config_path, dbms_config_path, config, only)
-
-    step("Load sources")
-    read_start = time.perf_counter()
-    sources_cfg = config.get("sources") or {}
-    sources = load_sources(sources_cfg, config_path.parent, overrides=source_overrides)
-    collector.record(
-        "(sources)",
-        "*",
-        "read",
-        # A combined CSV registers one slice per origin value on top of the whole
-        # file. Those slices are views over rows already counted under the declared
-        # source, so only declared sources count: summing the whole registry would
-        # report twice the rows actually read.
-        rows=sum(len(sources[name].df) for name in sources_cfg if name in sources),
-        seconds=time.perf_counter() - read_start,
-    )
-    for name in sorted(sources):
-        sd = sources[name]
-        note(f"source {name}: {len(sd.df)} row(s), {len(sd.file_header)} data column(s)")
-
-    registry = importers or default_importer_registry()
-
-    only_set: Optional[Set[str]] = None
-    if only is not None:
-        only_set = {x.strip().lower() for x in only if x and str(x).strip()}
-        note(f"filter: only {', '.join(sorted(only_set))}")
-
-    if dry_run:
-        note("no database connections will be opened")
-    elif create_schema:
-        note("DDL will be created where applicable (--create-schema)")
-    else:
-        note("existing schema only (--no-create-schema)")
-
-    cast_cache: Dict[Tuple[str, object], pd.DataFrame] = {}
-    log_lines: List[str] = []
-    for backend in BACKENDS:
-        if backend not in config:
-            continue
-        if only_set and backend not in only_set:
-            continue
-        fn = registry.get(backend)
-        if fn is None:
-            continue
-        section(f"Backend · {backend}")
-        bcfg = config[backend]
-        with collector.timed(backend, "*", "map") as t:
-            bound = resolve_backend_entities(bcfg, sources, cast_cache)
-            t.rows = sum(len(be.df) for be in bound.values())
-        validate_backend_entities(backend, bcfg, bound)
-        for ename, be in bound.items():
-            if len(be.df) == 0:
-                logger.warning("entity %s/%s bound to 0 row(s)", backend, ename)
-            dump_entity_frame(backend, ename, be.df, force=show_data, sample_size=sample_size)
-        backend_lines = fn(bcfg, bound, dry_run=dry_run, create_schema=create_schema)
-        log_lines.extend(backend_lines)
-        for line in backend_lines:
-            _print_backend_line(line)
-
-    if collector.entries():
-        print_rich(metrics_table(collector.to_records()))
-    if benchmark:
-        meta = metrics.environment_metadata(
-            config_path, {n: len(sd.df) for n, sd in sources.items()}
+    with _cast_warnings_already_shown():
+        counts = run_stream_import(
+            plan,
+            sink_factories=sink_factories or default_sink_factories(),
+            create_schema=create_schema,
+            on_batch=preview.observe,
+            collector=collector,
         )
-        json_path, csv_path = metrics.write_benchmark_files(collector, meta)
-        kv("Benchmark JSON", json_path)
-        kv("Benchmark CSV", csv_path)
-    success(f"Finished {mode} — {len(log_lines)} log line(s) from importer(s)")
-    return log_lines
+    preview.finish()
+    # Validation and write run the same code over the same rows, so a difference is a
+    # defect of the tool. What was written stays written: a warning, not a failure.
+    for dbms in plan.dbms_names:
+        validated, written = expected.written.get(dbms, {}), counts.written.get(dbms, {})
+        for partition in sorted(validated.keys() | written.keys()):
+            if validated.get(partition, 0) != written.get(partition, 0):
+                warn(
+                    f"{dbms} · {partition}: {written.get(partition, 0)} row(s) written, "
+                    f"but the validation read counted {validated.get(partition, 0)}"
+                )
+    lines = _summary_lines(counts)
+    _print_summary(lines, collector, benchmark, config_path, plan)
+    success(f"Finished import — {len(lines)} partition(s) written")
+    return lines

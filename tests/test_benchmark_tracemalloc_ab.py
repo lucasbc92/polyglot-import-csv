@@ -97,7 +97,7 @@ def test_run_matrix_without_trace_memory_does_not_trace(tmp_path):
     tracing = []
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides, execution):
+                      only, create_schema, source_overrides):
         tracing.append(tracemalloc.is_tracing())
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
         return []
@@ -119,7 +119,7 @@ def test_run_matrix_traces_by_default(tmp_path):
     tracing = []
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides, execution):
+                      only, create_schema, source_overrides):
         tracing.append(tracemalloc.is_tracing())
         _ = [0] * 200_000  # allocate inside the traced region so peak > 0
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)

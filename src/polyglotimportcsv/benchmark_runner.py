@@ -197,7 +197,6 @@ def run_matrix(
                     only=selected,
                     create_schema=True,
                     source_overrides=cell["overrides"],
-                    execution=execution,
                 )
                 peak_mb: Optional[float] = None
                 if trace_memory:

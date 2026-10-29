@@ -1,4 +1,4 @@
-"""Smoke tests: v2 config dry-run pipeline over the e-commerce example."""
+"""Smoke tests: the dry-run (headers, inference and validation reads) over the e-commerce example."""
 
 from pathlib import Path
 
@@ -13,24 +13,26 @@ CFG = ROOT / "data" / "ecommerce" / "import_config.json"
 
 def test_dry_run_smoke():
     lines = run_import(CFG, dry_run=True, create_schema=False, only=["postgres"])
-    assert any("postgres" in L for L in lines)
+    assert lines and all(line.startswith("[postgres] ") for line in lines)
 
 
-def test_dry_run_all_backends():
-    """All 5 backends appear in dry-run output with expected row counts."""
-    lines = run_import(CFG, dry_run=True)
-    text = "\n".join(lines)
-    assert "entity orders: 8 row(s)" in text
-    assert "entity inventory: 8 row(s)" in text
-    assert "entity categories: 8 row(s)" in text
-    assert "entity products: 8 row(s)" in text
-    assert "collection product_catalog: 8 document(s)" in text
-    assert "table user_activity_log: 32 row(s)" in text
-    assert "entity shopping_cart: 8 row(s)" in text
-    assert "entity user_session: 8 row(s)" in text
-    assert "label User: 8 row(s)" in text
-    assert "label Product: 8 row(s)" in text
-    assert "relationship type PURCHASED" in text
+@pytest.mark.parametrize("cfg_name", ["import_config.json", "import_config_combined.json"])
+def test_dry_run_counts_every_dbms(cfg_name):
+    """The validation read's counts, per DBMS and partition; both layouts of the
+    example hold the same rows, so they give the same counts."""
+    assert run_import(CFG.with_name(cfg_name), dry_run=True) == [
+        "[postgres] categories: 8 row(s)",
+        "[postgres] inventory: 8 row(s)",
+        "[postgres] orders: 8 row(s)",
+        "[postgres] products: 8 row(s)",
+        "[mongodb] product_catalog: 8 row(s)",
+        "[cassandra] user_activity_log: 32 row(s)",
+        "[redis] shopping_cart: 8 row(s)",
+        "[redis] user_session: 8 row(s)",
+        "[neo4j] :PURCHASED: 8 row(s)",
+        "[neo4j] Product: 8 row(s)",
+        "[neo4j] User: 8 row(s)",
+    ]
 
 
 def test_unknown_source_raises(tmp_path):

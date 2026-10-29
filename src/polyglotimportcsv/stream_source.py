@@ -27,27 +27,41 @@ PROBE_ROWS = 1000
 _READ_OPTIONS = {"dtype": str, "keep_default_na": False, "encoding": "utf-8-sig"}
 
 
-def _read_chunks(path: Path, chunksize: int, usecols: Optional[List[str]] = None):
+def _read_csv(name: str, path: Path, **options: Any):
+    """``pd.read_csv`` of source ``name`` with the read options of this module.
+
+    A file with no header row at all (zero bytes, or only blank lines) is a
+    ``SourceError``: pandas' ``EmptyDataError`` would reach the CLI as a traceback.
+    pandas raises it when the read starts, also for a chunked read.
+    """
+    try:
+        return pd.read_csv(path, **options, **_READ_OPTIONS)
+    except pd.errors.EmptyDataError as e:
+        raise SourceError(f"Source '{name}': CSV file is empty (no header row): {path}") from e
+
+
+def _read_chunks(name: str, path: Path, chunksize: int, usecols: Optional[List[str]] = None):
     """Same read options as csv_reader.read_csv, with chunksize for streaming.
 
     ``usecols`` limits the read to those columns, which skips building the others.
     """
-    return pd.read_csv(path, chunksize=chunksize, usecols=usecols, **_READ_OPTIONS)
+    return _read_csv(name, path, chunksize=chunksize, usecols=usecols)
 
 
-def _read_header(path: Path) -> List[str]:
+def _read_header(name: str, path: Path) -> List[str]:
     """The file's column names, origin column included, from a read of zero rows."""
-    return [str(c) for c in pd.read_csv(path, nrows=0, **_READ_OPTIONS).columns]
+    return [str(c) for c in _read_csv(name, path, nrows=0).columns]
 
 
-def chunk_rows(path: Path, chunk_mb: float) -> int:
-    """Rows per read block so that one block takes about ``chunk_mb`` of memory.
+def chunk_rows(name: str, path: Path, chunk_mb: float) -> int:
+    """Rows per read block of source ``name`` so that one block takes about ``chunk_mb``
+    of memory.
 
     The width of a row is measured on the first ``PROBE_ROWS`` rows, read as strings
     like every other read here, so the budget is approximate: a file whose rows grow
     wider further down will exceed it. A file without rows gives ``1``.
     """
-    probe = pd.read_csv(path, nrows=PROBE_ROWS, **_READ_OPTIONS)
+    probe = _read_csv(name, path, nrows=PROBE_ROWS)
     if len(probe) == 0:
         return 1
     bytes_per_row = probe.memory_usage(deep=True, index=False).sum() / len(probe)
@@ -90,8 +104,8 @@ def read_source_headers(
 
     Returns ``{source_name: data_columns}``. For a combined source the origin
     column (column 0) is left out, as in ``iter_entity_chunks``. Raises
-    ``SourceError`` for a missing file and for a combined file with fewer than
-    two columns.
+    ``SourceError`` for a missing or empty file and for a combined file with fewer
+    than two columns.
     """
     base_dir = Path(base_dir)
     overrides = overrides or {}
@@ -99,7 +113,7 @@ def read_source_headers(
     for name, decl in (sources_cfg or {}).items():
         combined = not isinstance(decl, str)
         path = source_path(name, decl, base_dir, overrides)
-        header = _read_header(path)
+        header = _read_header(name, path)
         if combined:
             if len(header) < 2:
                 raise SourceError(
@@ -141,7 +155,7 @@ def iter_entity_chunks(
         columns = (only_columns or {}).get(name)
         if isinstance(decl, str):
             path = _resolve_path(name, decl, base_dir, overrides)
-            for chunk in _read_chunks(path, size, None if columns is None else list(columns)):
+            for chunk in _read_chunks(name, path, size, None if columns is None else list(columns)):
                 chunk = chunk.copy()
                 chunk[SOURCE_COLUMN] = name
                 yield name, chunk
@@ -149,8 +163,8 @@ def iter_entity_chunks(
 
         # Combined file: column 0 is the origin column (spec §2.2).
         path = _resolve_path(name, decl["file"], base_dir, overrides)
-        usecols = None if columns is None else [_read_header(path)[0], *columns]
-        for chunk in _read_chunks(path, size, usecols):
+        usecols = None if columns is None else [_read_header(name, path)[0], *columns]
+        for chunk in _read_chunks(name, path, size, usecols):
             if len(chunk.columns) < 2:
                 raise SourceError(
                     f"Source '{name}': combined CSV needs an origin column plus data columns: {path}"

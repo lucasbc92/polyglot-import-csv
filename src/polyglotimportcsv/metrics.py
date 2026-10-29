@@ -1,8 +1,9 @@
 """Per-phase import metrics: collector + module-level current instance (spec §4.4).
 
-The runner owns one ``MetricsCollector`` per run and publishes it via
-``set_current``; importers record through ``timed_phase`` without any change
-to their frozen signature. Phases: read, filter, map, write.
+The runner owns one ``MetricsCollector`` per run and records the three reads of
+an import into it: ``infer`` and ``validate`` once each, ``write`` once per DBMS.
+``set_current`` and ``timed_phase`` are what the materialize importers record
+through.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from typing import Dict, Iterator, List, Optional, Tuple
 
 from polyglotimportcsv.benchmark_io import write_json_and_csv
 
-PHASES = ("read", "filter", "map", "write")
+PHASES = ("infer", "validate", "write")
 
 #: Phases that are measured but left out of the reports — both the end-of-run
 #: terminal table and the consolidated benchmark output. Kept here so the two

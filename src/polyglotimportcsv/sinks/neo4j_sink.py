@@ -126,7 +126,10 @@ class Neo4jSink:
         if not props_list:
             return 0
         label = _sanitize_label(partition_name)
-        return _merge_nodes_batched(self._session, label, key_name, props_list, lambda n: None)
+        # One UNWIND for the whole batch: one round trip per batch.
+        return _merge_nodes_batched(
+            self._session, label, key_name, props_list, lambda n: None, batch=len(props_list)
+        )
 
     def write_relationships(
         self,

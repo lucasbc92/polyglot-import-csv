@@ -98,47 +98,81 @@ def test_cli_benchmark_flag_passes_through(tmp_path, monkeypatch):
     assert captured["benchmark"] is True
 
 
-def test_cli_execution_defaults_to_stream(monkeypatch):
-    captured = {}
+def test_cli_chunk_and_batch_defaults(monkeypatch):
+    captured = _capture_run_import(monkeypatch)
+    res = CliRunner().invoke(main, ["--config", str(ECOMMERCE / "import_config.json"), "--dry-run"])
+    assert res.exit_code == 0, res.output
+    assert captured["chunk_size_mb"] == 8
+    assert captured["batch_size"] == 1024
+    assert "execution" not in captured
 
-    def fake_run_import(config_path, **kwargs):
-        captured.update(kwargs)
-        return []
 
-    monkeypatch.setattr("polyglotimportcsv.cli.run_import", fake_run_import)
-    from click.testing import CliRunner as _CR
-    res = _CR().invoke(main, [
-        "--config", "data/ecommerce/import_config.json", "--dry-run",
+def test_cli_passes_chunk_and_batch_sizes(monkeypatch):
+    captured = _capture_run_import(monkeypatch)
+    res = CliRunner().invoke(main, [
+        "--config", str(ECOMMERCE / "import_config.json"), "--dry-run",
+        "--chunk-size", "64", "--batch-size", "4096",
     ])
     assert res.exit_code == 0, res.output
-    assert captured["execution"] == "stream"
+    assert captured["chunk_size_mb"] == 64
+    assert captured["batch_size"] == 4096
 
 
-def test_cli_passes_execution_materialize(monkeypatch):
-    captured = {}
-
-    def fake_run_import(config_path, **kwargs):
-        captured.update(kwargs)
-        return []
-
-    monkeypatch.setattr("polyglotimportcsv.cli.run_import", fake_run_import)
-    from click.testing import CliRunner as _CR
-    res = _CR().invoke(main, [
-        "--config", "data/ecommerce/import_config.json", "--dry-run",
-        "--execution", "materialize",
-    ])
-    assert res.exit_code == 0, res.output
-    assert captured["execution"] == "materialize"
-
-
-def test_cli_rejects_unknown_execution():
-    from click.testing import CliRunner as _CR
-    res = _CR().invoke(main, [
-        "--config", "data/ecommerce/import_config.json",
-        "--execution", "nonsense",
+@pytest.mark.parametrize("flag,value", [
+    ("--chunk-size", "7"), ("--chunk-size", "257"),
+    ("--batch-size", "1023"), ("--batch-size", "8193"),
+])
+def test_cli_rejects_out_of_range_sizes(flag, value, monkeypatch):
+    monkeypatch.setattr("polyglotimportcsv.cli.run_import", _no_run)
+    res = CliRunner().invoke(main, [
+        "--config", str(ECOMMERCE / "import_config.json"), "--dry-run", flag, value,
     ])
     assert res.exit_code == 2
-    assert "execution" in res.output.lower()
+    assert flag in res.output
+
+
+def test_cli_has_no_execution_option(monkeypatch):
+    monkeypatch.setattr("polyglotimportcsv.cli.run_import", _no_run)
+    res = CliRunner().invoke(main, [
+        "--config", str(ECOMMERCE / "import_config.json"), "--execution", "stream",
+    ])
+    assert res.exit_code == 2
+    assert "No such option" in res.output and "--execution" in res.output
+
+
+def test_cli_option_help_and_metadata():
+    options = {p.name: p for p in main.params}
+    chunk, batch = options["chunk_size_mb"], options["batch_size"]
+    assert chunk.opts == ["--chunk-size"] and batch.opts == ["--batch-size"]
+    assert (chunk.metavar, chunk.show_default, chunk.default) == ("MB", True, 8)
+    assert (batch.metavar, batch.show_default, batch.default) == ("N", True, 1024)
+    assert chunk.help == (
+        "Memory budget of each read chunk, in MB (8-256). "
+        "Rows per chunk follow each file's row width."
+    )
+    assert batch.help == "Rows per write batch (1024-8192), capped at the rows of one read chunk."
+    assert options["dry_run"].help == (
+        "Run every check, on headers and on the data rows, and print the row counts; "
+        "do not connect to databases."
+    )
+
+
+def test_cli_reports_a_zero_byte_csv_without_a_traceback(tmp_path):
+    (tmp_path / "ev.csv").write_bytes(b"")
+    cfg = tmp_path / "import_config.json"
+    cfg.write_text(
+        '{"sources": {"ev": "ev.csv"}, '
+        '"redis": {"entities": {"ev": {"columns": {"id": {"is_key": true}}}}}}',
+        encoding="utf-8",
+    )
+    (tmp_path / "dbms_config.json").write_text(
+        '{"version": 1, "redis": {"connection": {"host": "127.0.0.1"}}}', encoding="utf-8"
+    )
+    result = CliRunner().invoke(main, ["--config", str(cfg), "--dry-run"])
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SystemExit)  # a clean exit, not an uncaught error
+    assert "Source 'ev': CSV file is empty (no header row)" in result.output
+    assert "Traceback" not in result.output
 
 
 def test_cli_rejects_the_removed_strategy_option(monkeypatch):
@@ -178,6 +212,10 @@ def test_run_import_has_no_strategy_parameter():
     import inspect
     from polyglotimportcsv.runner import run_import
     assert "strategy" not in inspect.signature(run_import).parameters
+
+
+def _no_run(*args, **kwargs):
+    raise AssertionError("run_import must not be called")
 
 
 def _capture_run_import(monkeypatch):

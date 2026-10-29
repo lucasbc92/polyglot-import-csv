@@ -11,8 +11,10 @@ import click
 
 from polyglotimportcsv.business_exception import BusinessException
 from polyglotimportcsv.dbms_check import not_ready_message
+from polyglotimportcsv.import_plan import DEFAULT_BATCH_SIZE, MAX_BATCH_SIZE, MIN_BATCH_SIZE
 from polyglotimportcsv.reporting import DEFAULT_SAMPLE_SIZE, error, kv, setup_reporting
 from polyglotimportcsv.runner import run_check, run_import
+from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +64,8 @@ def _parse_source_overrides(pairs: Tuple[str, ...]) -> Dict[str, str]:
 @click.option(
     "--dry-run",
     is_flag=True,
-    help="Validate and print planned row counts; do not connect to databases.",
+    help="Run every check, on headers and on the data rows, and print the row counts; "
+    "do not connect to databases.",
 )
 @click.option(
     "--check-dbms",
@@ -83,12 +86,23 @@ def _parse_source_overrides(pairs: Tuple[str, ...]) -> Dict[str, str]:
     help="Comma-separated backends to run (postgres,redis,mongodb,cassandra,neo4j). Empty = all configured.",
 )
 @click.option(
-    "--execution",
-    default="stream",
+    "--chunk-size",
+    "chunk_size_mb",
+    type=click.IntRange(MIN_CHUNK_MB, MAX_CHUNK_MB),
+    default=DEFAULT_CHUNK_MB,
     show_default=True,
-    type=click.Choice(["stream", "materialize"], case_sensitive=False),
-    help="Write path. 'stream' imports in bounded memory (~one read chunk); "
-    "'materialize' reproduces the full-materialization phase baseline.",
+    metavar="MB",
+    help="Memory budget of each read chunk, in MB (8-256). "
+    "Rows per chunk follow each file's row width.",
+)
+@click.option(
+    "--batch-size",
+    "batch_size",
+    type=click.IntRange(MIN_BATCH_SIZE, MAX_BATCH_SIZE),
+    default=DEFAULT_BATCH_SIZE,
+    show_default=True,
+    metavar="N",
+    help="Rows per write batch (1024-8192), capped at the rows of one read chunk.",
 )
 @click.option(
     "--source",
@@ -132,7 +146,8 @@ def main(
     check_dbms_only: bool,
     create_schema: bool,
     only: str,
-    execution: str,
+    chunk_size_mb: int,
+    batch_size: int,
     source_pairs: Tuple[str, ...],
     log_level: str,
     show_data: Optional[bool],
@@ -170,7 +185,8 @@ def main(
             show_data=show_data,
             sample_size=sample_size if sample_size is not None else DEFAULT_SAMPLE_SIZE,
             benchmark=benchmark,
-            execution=execution,
+            chunk_size_mb=chunk_size_mb,
+            batch_size=batch_size,
         )
     except BusinessException as e:
         error(str(e))

@@ -59,7 +59,7 @@ def test_run_matrix_iterates_and_cleans_before_import(tmp_path):
     cleaners = {"postgres": make_cleaner("postgres")}
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides, execution="stream"):
+                      only, create_schema, source_overrides):
         events.append(("import", str(config_path), tuple(sorted(source_overrides))))
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
         return []
@@ -104,8 +104,8 @@ def test_repetitions_sweep_the_whole_matrix_instead_of_repeating_one_cell(tmp_pa
     seen = []
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides, execution):
-        seen.append((Path(config_path).name, execution))
+                      only, create_schema, source_overrides):
+        seen.append(Path(config_path).name)
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
         return []
 
@@ -119,9 +119,8 @@ def test_repetitions_sweep_the_whole_matrix_instead_of_repeating_one_cell(tmp_pa
     )
 
     one_pass = [
-        ("import_config.json", "materialize"), ("import_config.json", "stream"),
-        ("import_config_combined.json", "materialize"),
-        ("import_config_combined.json", "stream"),
+        "import_config.json", "import_config.json",
+        "import_config_combined.json", "import_config_combined.json",
     ]
     assert seen == one_pass * 3
     # ...and the repetition label follows the pass, not the position in the cell.
@@ -133,7 +132,7 @@ def test_datasets_are_prepared_before_the_first_import(tmp_path):
     events = []
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides, execution):
+                      only, create_schema, source_overrides):
         events.append("import")
         return []
 
@@ -157,7 +156,7 @@ def test_on_run_fires_after_each_import_and_survives_a_crash(tmp_path):
     seen: list[int] = []
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides, execution="stream"):
+                      only, create_schema, source_overrides):
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
         if len(seen) == 2:
             raise RuntimeError("backend blew up")
@@ -182,7 +181,7 @@ def test_run_matrix_builds_mode_overrides(tmp_path):
     seen = []
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides, execution="stream"):
+                      only, create_schema, source_overrides):
         seen.append((Path(config_path).name, set(source_overrides)))
         return []
 
@@ -242,8 +241,8 @@ def test_run_matrix_iterates_executions(tmp_path):
     seen = []
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides, execution):
-        seen.append(execution)
+                      only, create_schema, source_overrides):
+        seen.append(config_path)
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
         return []
 
@@ -255,7 +254,7 @@ def test_run_matrix_iterates_executions(tmp_path):
         importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
         generate=lambda out_dir, rows, seed, mode: None,
     )
-    assert sorted(seen) == ["materialize", "stream"]
+    assert len(seen) == 2
     assert {r["execution"] for r in labeled} == {"materialize", "stream"}
     res = median_results(labeled)
     assert {r["execution"] for r in res} == {"materialize", "stream"}
@@ -263,7 +262,7 @@ def test_run_matrix_iterates_executions(tmp_path):
 
 def test_run_matrix_records_peak_memory(tmp_path):
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides, execution):
+                      only, create_schema, source_overrides):
         # Allocate something inside the timed/traced region so peak > 0.
         _ = [0] * 200_000
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)

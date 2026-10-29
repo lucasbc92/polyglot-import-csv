@@ -120,7 +120,7 @@ def plan_import(
     overrides = dict(overrides or {})
     sources_cfg = dbms_sources(config, dbms_names)
     rows_per_chunk = {
-        name: chunk_rows(source_path(name, decl, base_dir, overrides), chunk_mb)
+        name: chunk_rows(name, source_path(name, decl, base_dir, overrides), chunk_mb)
         for name, decl in sources_cfg.items()
     }
     unions = [
