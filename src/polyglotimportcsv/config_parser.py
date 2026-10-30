@@ -10,7 +10,8 @@ The configuration is split into two files:
 
 ``load_config`` validates each file against its own JSON Schema, ensures the
 import configuration only targets DBMSs declared in the DBMS configuration,
-and returns a single merged structure (the shape the importers expect).
+and returns a single merged structure: the import configuration with the
+connection settings of each DBMS added to its block.
 """
 
 from __future__ import annotations

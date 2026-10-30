@@ -1,4 +1,4 @@
-"""Bounded-memory proof (spec: streaming import, Task 6).
+"""Bounded-memory proof.
 
 Checked without any live database: peak memory stays roughly constant as total
 row count grows (bounded by one read chunk plus the still-open partition

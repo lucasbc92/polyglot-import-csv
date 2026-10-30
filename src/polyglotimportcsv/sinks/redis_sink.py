@@ -1,4 +1,4 @@
-"""RedisSink: DbmsSink adapter for Redis (spec: streaming import, Task 5).
+"""RedisSink: DbmsSink adapter for Redis.
 
 Shapes each row into a key-value pair (``_kv_pairs`` -> ``redis_payload_from_row``)
 and writes the pairs with ``_write_batched`` (``client.pipeline``).

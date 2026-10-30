@@ -1,4 +1,4 @@
-"""Bind a streamed entity from the profiles of its sources (spec: streaming import).
+"""Bind a streamed entity from the profiles of its sources.
 
 Binds each entity with the pieces of ``mapping_resolver`` (``bind_entity_source``,
 ``expand_entity_columns``), over a header-only ``SourceData`` registry built from the

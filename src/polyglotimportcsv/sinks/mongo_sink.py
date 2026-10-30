@@ -1,4 +1,4 @@
-"""MongoSink: DbmsSink adapter for MongoDB (spec: streaming import, Task 4).
+"""MongoSink: DbmsSink adapter for MongoDB.
 
 Shapes each row into a document with ``mongo_document_from_row``.
 """

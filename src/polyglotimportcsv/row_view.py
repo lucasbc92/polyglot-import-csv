@@ -9,9 +9,9 @@ partition -- at 100k rows that is the allocation that aborted a benchmark matrix
 
 ``iter_rows`` reads each column once as a NumPy array and hands out a lightweight
 view exposing the same surface the row-shaping helpers already use -- ``row[col]``,
-``row.get(col)``, ``col in row.index``, ``list(row.index)`` -- so the importers and
-sinks keep their per-row logic unchanged. The column list is built once per frame
-instead of once per row.
+``row.get(col)``, ``col in row.index``, ``list(row.index)`` -- so the row-shaping
+helpers and the sinks keep their per-row logic unchanged. The column list is built
+once per frame instead of once per row.
 
 Values come back as NumPy scalars rather than the Python objects the object-matrix
 detour produced. Every consumer funnels them through ``row_shaping.cell_scalar``

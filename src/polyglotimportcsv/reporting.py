@@ -235,7 +235,7 @@ def dump_rows(
 def dump_rows_page(rows: Sequence[Dict[str, Any]], start: int) -> None:
     """Print ``rows`` numbered from ``start``, with no header.
 
-    The stream path prints an entity batch by batch, so its numbering has to
+    The data display prints an entity batch by batch, so its numbering has to
     carry on from where the previous batch stopped.
     """
     for i, row in enumerate(rows, start=start):

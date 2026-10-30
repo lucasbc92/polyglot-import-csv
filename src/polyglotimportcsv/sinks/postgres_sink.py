@@ -1,4 +1,4 @@
-"""PostgresSink: DbmsSink adapter for PostgreSQL (spec: streaming import, Task 4).
+"""PostgresSink: DbmsSink adapter for PostgreSQL.
 
 Shapes each batch with ``flatten_entity_dataframe`` and writes it with one
 ``execute_values`` INSERT built by ``importers.postgres_importer.build_insert_sql``.
@@ -85,7 +85,7 @@ class PostgresSink:
         # (it calls stmt.as_string(cur) internally), which keeps this call
         # DB-free-testable (a fake cursor never needs to satisfy psycopg2's
         # C-level "must be a real connection/cursor" check for Identifier
-        # quoting) while producing the same SQL against a real cursor.
+        # quoting) and still yields the SQL a real cursor would produce.
         # page_size is the whole batch: one INSERT, one round trip per batch.
         execute_values(self._cur, stmt, tuples, page_size=len(tuples))
         return len(tuples)

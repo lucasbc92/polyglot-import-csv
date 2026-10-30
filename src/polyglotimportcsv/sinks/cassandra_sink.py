@@ -1,4 +1,4 @@
-"""CassandraSink: DbmsSink adapter for Apache Cassandra (spec: streaming import, Task 5).
+"""CassandraSink: DbmsSink adapter for Apache Cassandra.
 
 Builds the column plan and DDL/CQL with ``_cassandra_column_plan``,
 ``_cassandra_table_ddl``, ``_cassandra_insert_cql`` and ``_cassandra_keyspace_ddl``,

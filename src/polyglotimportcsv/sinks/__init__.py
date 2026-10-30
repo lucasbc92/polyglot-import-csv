@@ -1,4 +1,4 @@
-"""DbmsSink adapters for the streaming import path (spec: streaming import, Task 4+).
+"""DbmsSink adapters, one per DBMS.
 
 Each module implements ``DbmsSink`` (see ``polyglotimportcsv.dbms_sink``) for
 one DBMS, on top of the row-shaping and batched-write helpers under
@@ -18,7 +18,7 @@ from polyglotimportcsv.sinks.redis_sink import RedisSink
 
 
 def default_sink_factories() -> Dict[str, SinkFactory]:
-    """Wired defaults for the streaming import path (production CLI).
+    """Wired defaults (production CLI).
 
     Each factory receives the DBMS's ``backend_cfg`` (``config[dbms]``) and
     builds the adapter with its real driver; tests inject fakes instead. Only

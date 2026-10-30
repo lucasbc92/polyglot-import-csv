@@ -11,13 +11,21 @@ in `archive-prefix/` is superseded and must not be used.
 written twice therefore holds two runs' rows under one filename. Every current
 campaign below was verified to hold exactly one run.
 
+The four campaigns below were measured when the tool could still import in two
+ways: loading each source whole in memory (the *whole-file load*) or streaming it
+in chunks (`stream`). The `execution` column of their CSVs tells them apart:
+`stream` for the second and the other value for the first. Version 3.0.0 removed
+that choice: every import streams, in three reads (inference, validation and
+write). New campaigns therefore vary the read chunk size instead (see "Campaigns of
+the current version"), and their phases are `infer`, `validate` and `write`.
+
 ### Current data
 
 | Folder | Axes | tracemalloc | Use it for |
 |---|---|---|---|
-| `.` (root) | 1k/10k/100k × multi/combined × optimized × materialize/stream × 3 | **on** | `peak_memory_mb` only |
+| `.` (root) | 1k/10k/100k × multi/combined × optimized × whole-file load/stream × 3 | **on** | `peak_memory_mb` only |
 | `timings/` | same axes | **off** | `median_seconds` only |
-| `naive/` | 10k × multi/combined × naive+optimized × materialize × 3 | **on** | peak, naive vs optimized |
+| `naive/` | 10k × multi/combined × naive+optimized × whole-file load × 3 | **on** | peak, naive vs optimized |
 | `timings-naive/` | same axes | **off** | time, naive vs optimized |
 
 The `naive` strategy was removed from the tool in 2.0.0. `naive/` and
@@ -39,7 +47,7 @@ traced run distorts the phases *against each other*. Hence the paired campaigns.
 - **Row counts identical across all four campaigns** for every shared cell — the
   workload is the same; only time and memory differ.
 - `peak_memory_mb` reproduces to within **0.1%** across two independent campaigns
-  (10k optimized materialize, measured 03:14 and 11:04). Same-cell *timings*
+  (10k optimized whole-file load, measured 03:14 and 11:04). Same-cell *timings*
   differ by **15–38%** between campaigns.
 
 ### Interruptions (both recovered correctly)
@@ -72,20 +80,20 @@ consistent pass.
 
 ### Headline results
 
-**Memory — materialize vs stream (traced, peak MB, multi):**
+**Memory — whole-file load vs stream (traced, peak MB, multi):**
 
-| Size | materialize | stream | ratio |
+| Size | whole-file load | stream | ratio |
 |---|---|---|---|
 | 1 000 | 10.5 | 10.7 | 0.98× |
 | 10 000 | 95.3 | 47.8 | 2.0× |
 | 100 000 | 950.7 | 75.9 | **12.5×** |
 
-Materialize grows linearly with the dataset (10.5 → 95.3 → 950.7). Stream flattens
-(10.7 → 47.8 → 75.9). `combined` mode behaves the same (12.6× at 100k).
+The whole-file load grows linearly with the dataset (10.5 → 95.3 → 950.7). Stream
+flattens (10.7 → 47.8 → 75.9). `combined` mode behaves the same (12.6× at 100k).
 
-**Time — materialize vs stream (untraced, total seconds, multi):**
+**Time — whole-file load vs stream (untraced, total seconds, multi):**
 
-| Size | materialize | stream | stream penalty |
+| Size | whole-file load | stream | stream penalty |
 |---|---|---|---|
 | 1 000 | 2.87 | 4.63 | +61% |
 | 10 000 | 16.20 | 20.94 | +29% |
@@ -93,7 +101,7 @@ Materialize grows linearly with the dataset (10.5 → 95.3 → 950.7). Stream fl
 
 The streaming penalty *shrinks* as the memory advantage grows.
 
-**Naive vs optimized (untraced, 10k, materialize):**
+**Naive vs optimized (untraced, 10k, whole-file load):**
 
 | Mode | naive | optimized | speedup |
 |---|---|---|---|
@@ -103,7 +111,7 @@ The streaming penalty *shrinks* as the memory advantage grows.
 Concentrated in map (38.54 → 0.91 s, 42×) and write (95.36 → 12.44 s, 7.7×).
 Both write the same 27 494 rows.
 
-**Per-DBMS write throughput (untraced, 100k multi materialize):**
+**Per-DBMS write throughput (untraced, 100k multi, whole-file load):**
 
 | DBMS | rows | seconds | rows/s |
 |---|---|---|---|
@@ -128,7 +136,7 @@ Both write the same 27 494 rows.
    There is no per-DBMS or per-phase breakdown for streaming; the `read`/`map`
    columns read 0.00 for stream rows and must not be presented as "streaming does
    no reading".
-5. **Naive was measured only at 10k, materialize only.** In 1.1.0, streaming ignores
+5. **Naive was measured only at 10k, with the whole-file load only.** In 1.1.0, streaming ignores
    `--strategy naive` by design (`v1.1.0:src/polyglotimportcsv/runner.py:251`).
    State the scope.
 6. **Naive shows a *lower* peak than optimized** (14.4 vs 95.4 MB at 10k). This is
@@ -137,6 +145,28 @@ Both write the same 27 494 rows.
    (`v1.1.0:src/polyglotimportcsv/importers/neo4j_importer.py:287`) while naive
    iterates row by row (`:283`). Batching trades memory for throughput. Explain it or omit it —
    do not present it as an anomaly.
+
+### Campaigns of the current version
+
+`scripts/run_benchmarks.py` has a chunk-size axis, `--chunk-sizes`, in place of the
+removed write-path axis. It takes read chunk sizes in MB, separated by commas
+(default `8`; each from 8 to 256), and every size is another cell of the matrix. The
+consolidated `benchmark_results.csv` has these columns:
+
+    timestamp,size,mode,chunk_mb,backend,entity,phase,rows,median_seconds,rows_per_second,peak_memory_mb
+
+The `phase` column holds `infer` and `validate`, once per import, and `write`, once
+per DBMS. A results file with the old header (an `execution` column and no
+`chunk_mb`) is refused with exit code 2 before anything is measured, so a campaign
+of this version goes into another folder:
+
+    python scripts/run_benchmarks.py --sizes 100000 --modes multi \
+      --chunk-sizes 8,64,256 --repetitions 3 --out benchmarks/chunk-sizes
+
+As in the campaigns above, memory and time come from separate runs: a traced run
+(the default) for `peak_memory_mb` and an untraced one (`--no-trace-memory`) for
+`median_seconds`. `--resume` continues an interrupted matrix only when
+`--chunk-sizes` and the other axis flags match.
 
 ## Português (BR)
 
@@ -148,13 +178,22 @@ duas vezes, portanto, guarda as linhas de duas execuções sob um único nome de
 arquivo. Cada campanha atual abaixo foi verificada e contém exatamente uma
 execução.
 
+As quatro campanhas abaixo foram medidas quando a ferramenta ainda importava de
+duas formas: carregando cada origem inteira na memória (a *carga integral*) ou
+transmitindo-a em blocos (`stream`). A coluna `execution` dos CSVs distingue as
+duas: `stream` para a segunda e o outro valor para a primeira. A versão 3.0.0
+removeu essa escolha: toda importação transmite, em três leituras (inferência,
+validação e gravação). As campanhas novas, portanto, variam o tamanho do bloco de
+leitura (veja "Campanhas da versão atual"), e suas fases são `infer`, `validate` e
+`write`.
+
 ### Dados atuais
 
 | Pasta | Eixos | tracemalloc | Use para |
 |---|---|---|---|
-| `.` (raiz) | 1k/10k/100k × multi/combined × optimized × materialize/stream × 3 | **ligado** | só `peak_memory_mb` |
+| `.` (raiz) | 1k/10k/100k × multi/combined × optimized × carga integral/stream × 3 | **ligado** | só `peak_memory_mb` |
 | `timings/` | mesmos eixos | **desligado** | só `median_seconds` |
-| `naive/` | 10k × multi/combined × naive+optimized × materialize × 3 | **ligado** | pico, naive vs optimized |
+| `naive/` | 10k × multi/combined × naive+optimized × carga integral × 3 | **ligado** | pico, naive vs optimized |
 | `timings-naive/` | mesmos eixos | **desligado** | tempo, naive vs optimized |
 
 A estratégia `naive` foi removida da ferramenta na versão 2.0.0. `naive/` e
@@ -181,7 +220,7 @@ Daí as campanhas pareadas.
 - **Contagens de linhas idênticas nas quatro campanhas** para toda célula
   compartilhada — a carga de trabalho é a mesma; só tempo e memória diferem.
 - `peak_memory_mb` reproduz dentro de **0.1%** entre duas campanhas
-  independentes (10k optimized materialize, medidas às 03:14 e 11:04). Os
+  independentes (10k optimized carga integral, medidas às 03:14 e 11:04). Os
   *tempos* da mesma célula diferem em **15–38%** entre campanhas.
 
 ### Interrupções (ambas recuperadas corretamente)
@@ -217,21 +256,21 @@ Superado por `naive/` + `timings-naive/`, que cobrem as duas estratégias em uma
 
 ### Resultados principais
 
-**Memória — materialize vs stream (rastreado, pico em MB, multi):**
+**Memória — carga integral vs stream (rastreado, pico em MB, multi):**
 
-| Tamanho | materialize | stream | razão |
+| Tamanho | carga integral | stream | razão |
 |---|---|---|---|
 | 1 000 | 10.5 | 10.7 | 0.98× |
 | 10 000 | 95.3 | 47.8 | 2.0× |
 | 100 000 | 950.7 | 75.9 | **12.5×** |
 
-O materialize cresce linearmente com o dataset (10.5 → 95.3 → 950.7). O stream
+A carga integral cresce linearmente com o dataset (10.5 → 95.3 → 950.7). O stream
 se estabiliza (10.7 → 47.8 → 75.9). O modo `combined` se comporta da mesma
 forma (12.6× em 100k).
 
-**Tempo — materialize vs stream (não rastreado, segundos totais, multi):**
+**Tempo — carga integral vs stream (não rastreado, segundos totais, multi):**
 
-| Tamanho | materialize | stream | penalidade do stream |
+| Tamanho | carga integral | stream | penalidade do stream |
 |---|---|---|---|
 | 1 000 | 2.87 | 4.63 | +61% |
 | 10 000 | 16.20 | 20.94 | +29% |
@@ -239,7 +278,7 @@ forma (12.6× em 100k).
 
 A penalidade do streaming *diminui* conforme a vantagem de memória cresce.
 
-**Naive vs optimized (não rastreado, 10k, materialize):**
+**Naive vs optimized (não rastreado, 10k, carga integral):**
 
 | Modo | naive | optimized | ganho |
 |---|---|---|---|
@@ -249,7 +288,7 @@ A penalidade do streaming *diminui* conforme a vantagem de memória cresce.
 Concentrado no mapeamento (38.54 → 0.91 s, 42×) e na escrita (95.36 → 12.44 s,
 7.7×). As duas escrevem as mesmas 27 494 linhas.
 
-**Vazão de escrita por SGBD (não rastreado, 100k multi materialize):**
+**Vazão de escrita por SGBD (não rastreado, 100k multi, carga integral):**
 
 | SGBD | linhas | segundos | linhas/s |
 |---|---|---|---|
@@ -276,7 +315,7 @@ Concentrado no mapeamento (38.54 → 0.91 s, 42×) e na escrita (95.36 → 12.44
    leitura+mapeamento+escrita fundidos. Não há detalhamento por SGBD ou por
    fase para o streaming; as colunas `read`/`map` leem 0.00 nas linhas de
    stream e não devem ser apresentadas como "o streaming não lê nada".
-5. **O naive só foi medido em 10k, só em materialize.** Na versão 1.1.0, o
+5. **O naive só foi medido em 10k, só com a carga integral.** Na versão 1.1.0, o
    streaming ignora `--strategy naive` por design
    (`v1.1.0:src/polyglotimportcsv/runner.py:251`). Deixe esse escopo claro.
 6. **O naive mostra pico *menor* que o optimized** (14.4 vs 95.4 MB em 10k).
@@ -286,3 +325,26 @@ Concentrado no mapeamento (38.54 → 0.91 s, 42×) e na escrita (95.36 → 12.44
    naive itera linha a linha (`:283`). O
    agrupamento em lotes troca memória por vazão. Explique isso ou omita — não
    apresente como uma anomalia.
+
+### Campanhas da versão atual
+
+O `scripts/run_benchmarks.py` tem um eixo de tamanho de bloco, `--chunk-sizes`, no
+lugar do eixo do caminho de escrita, que foi removido. Ele recebe tamanhos de bloco
+de leitura em MB, separados por vírgula (padrão `8`; cada um de 8 a 256), e cada
+tamanho é mais uma célula da matriz. O `benchmark_results.csv` consolidado tem estas
+colunas:
+
+    timestamp,size,mode,chunk_mb,backend,entity,phase,rows,median_seconds,rows_per_second,peak_memory_mb
+
+A coluna `phase` traz `infer` e `validate`, uma vez por importação, e `write`, uma
+vez por SGBD. Um arquivo de resultados com o cabeçalho antigo (uma coluna `execution`
+e nenhuma `chunk_mb`) é recusado com código de saída 2 antes de medir qualquer coisa,
+então uma campanha desta versão vai para outra pasta:
+
+    python scripts/run_benchmarks.py --sizes 100000 --modes multi \
+      --chunk-sizes 8,64,256 --repetitions 3 --out benchmarks/chunk-sizes
+
+Como nas campanhas acima, memória e tempo vêm de execuções separadas: uma execução
+rastreada (o padrão) para o `peak_memory_mb` e uma não rastreada
+(`--no-trace-memory`) para o `median_seconds`. O `--resume` só continua uma matriz
+interrompida quando `--chunk-sizes` e os demais flags de eixo coincidem.

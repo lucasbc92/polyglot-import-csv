@@ -1,6 +1,6 @@
 """Equivalence oracle: iter_rows must be indistinguishable from iterrows.
 
-Every importer and sink shapes rows through one of four helpers. Swapping the
+Every sink shapes rows through one of four helpers. Swapping the
 frame-wide iteration underneath them is only safe if each helper produces
 byte-identical output -- same values AND same Python types, since a np.int64
 leaking where an int used to be would reach the DB drivers (and json.dumps).

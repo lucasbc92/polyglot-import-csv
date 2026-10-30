@@ -1,4 +1,4 @@
-"""Bounded-memory streaming engine over the import plan (spec: streaming import).
+"""Bounded-memory streaming engine over the import plan.
 
 Reads the plan's sources in the plan's read blocks (``stream_source``), applies
 row-local filters/casting/each-splitting per block (``filter_engine``,
