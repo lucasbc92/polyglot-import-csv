@@ -1,4 +1,4 @@
-"""The card holding every execution option of the CLI the GUI offers.
+"""The card holding the CLI options the GUI offers.
 
 ``--benchmark`` is deliberately absent: the GUI never benchmarks. It stays in
 the CLI, where the evaluation needs it.
@@ -25,11 +25,15 @@ from PySide6.QtWidgets import (
 from polyglotimportcsv.gui.state import (
     DBMS_NAMES,
     DEFAULT_SAMPLE_SIZE,
-    EXECUTIONS,
     LOG_LEVELS,
     MAX_SAMPLE_SIZE,
 )
 from polyglotimportcsv.gui.widgets.info_badge import InfoBadge
+from polyglotimportcsv.import_plan import DEFAULT_BATCH_SIZE, MAX_BATCH_SIZE, MIN_BATCH_SIZE
+from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB
+
+#: How far one arrow click moves the batch size.
+BATCH_STEP = 1024
 
 SHOW_DATA_CHOICES = (
     ("sample", "Amostra (--sample)"),
@@ -39,17 +43,18 @@ SHOW_DATA_CHOICES = (
 _SHOW_DATA_VALUES = {"sample": None, "all": True, "none": False}
 
 HELP = {
-    "stream": (
-        "Importa em fluxo: lê cada CSV em blocos e grava bloco a bloco. A memória "
-        "usada não cresce com o tamanho do arquivo. É o modo recomendado."
+    "chunk_size": (
+        "Memória de cada bloco de leitura, em MB (8 a 256). A ferramenta calcula quantas "
+        "linhas cabem no bloco pela largura das linhas de cada arquivo. Blocos maiores "
+        "usam mais memória."
     ),
-    "materialize": (
-        "Carrega cada fonte inteira na memória, monta todas as entidades e só então "
-        "grava. Útil para inspecionar os dados; exige memória proporcional ao arquivo."
+    "batch_size": (
+        "Linhas por lote de gravação (1024 a 8192). O lote nunca passa das linhas de um "
+        "bloco de leitura."
     ),
     "dry_run": (
-        "Valida as configurações e mostra quantos registros iriam para cada destino, "
-        "sem conectar a nenhum SGBD. Usa sempre a materialização."
+        "Faz todas as verificações, inclusive a leitura dos dados, e mostra quantos "
+        "registros iriam para cada destino, sem conectar a nenhum SGBD."
     ),
     "create_schema": (
         "Cria tabelas, coleções, keyspace e índices que ainda não existirem antes de gravar."
@@ -66,14 +71,13 @@ HELP = {
 
 
 class OptionsPanel(QGroupBox):
-    """Checkboxes, radios, a combo and a spin box, one per CLI option."""
+    """Checkboxes, radios, a combo and spin boxes, one per CLI option."""
 
     changed = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__("Opções de execução", parent)
         self.dbms_boxes = {}  # type: Dict[str, QCheckBox]
-        self.execution_buttons = {}  # type: Dict[str, QRadioButton]
         self.show_data_buttons = {}  # type: Dict[str, QRadioButton]
         self.info_badges = {}  # type: Dict[str, InfoBadge]
         self._groups = []  # type: List[QButtonGroup]
@@ -81,8 +85,21 @@ class OptionsPanel(QGroupBox):
         layout = QGridLayout(self)
         layout.addWidget(QLabel("Bancos de dados (--only)", self), 0, 0)
         layout.addLayout(self._build_dbms_row(), 0, 1)
-        layout.addWidget(QLabel("Execução (--execution)", self), 1, 0)
-        layout.addLayout(self._build_execution_row(), 1, 1)
+
+        self.chunk_spin = QSpinBox(self)
+        self.chunk_spin.setRange(MIN_CHUNK_MB, MAX_CHUNK_MB)
+        self.chunk_spin.setValue(DEFAULT_CHUNK_MB)
+        self.chunk_spin.valueChanged.connect(self.changed)
+        layout.addWidget(QLabel("Bloco em MB (--chunk-size)", self), 1, 0)
+        layout.addLayout(self._build_spin_row(self.chunk_spin, "chunk_size"), 1, 1)
+
+        self.batch_spin = QSpinBox(self)
+        self.batch_spin.setRange(MIN_BATCH_SIZE, MAX_BATCH_SIZE)
+        self.batch_spin.setSingleStep(BATCH_STEP)
+        self.batch_spin.setValue(DEFAULT_BATCH_SIZE)
+        self.batch_spin.valueChanged.connect(self.changed)
+        layout.addWidget(QLabel("Lote (--batch-size)", self), 2, 0)
+        layout.addLayout(self._build_spin_row(self.batch_spin, "batch_size"), 2, 1)
 
         self.dry_run_box = QCheckBox("Simulação (--dry-run)", self)
         self.create_schema_box = QCheckBox("Criar esquema (--create-schema)", self)
@@ -94,8 +111,8 @@ class OptionsPanel(QGroupBox):
             modifiers.addWidget(self._badge(key))
             modifiers.addSpacing(12)
         modifiers.addStretch(1)
-        layout.addWidget(QLabel("Modificadores", self), 2, 0)
-        layout.addLayout(modifiers, 2, 1)
+        layout.addWidget(QLabel("Modificadores", self), 3, 0)
+        layout.addLayout(modifiers, 3, 1)
 
         self.log_combo = QComboBox(self)
         self.log_combo.addItems(list(LOG_LEVELS))
@@ -105,15 +122,15 @@ class OptionsPanel(QGroupBox):
         log_row.addWidget(self.log_combo)
         log_row.addWidget(self._badge("log_level"))
         log_row.addStretch(1)
-        layout.addWidget(QLabel("Nível de log (--log-level)", self), 3, 0)
-        layout.addLayout(log_row, 3, 1)
+        layout.addWidget(QLabel("Nível de log (--log-level)", self), 4, 0)
+        layout.addLayout(log_row, 4, 1)
 
-        layout.addWidget(QLabel("Exibição de dados", self), 4, 0)
-        layout.addLayout(self._build_show_data_row(), 4, 1)
+        layout.addWidget(QLabel("Exibição de dados", self), 5, 0)
+        layout.addLayout(self._build_show_data_row(), 5, 1)
 
         self.error_label = QLabel("", self)
         self.error_label.setObjectName("errorLabel")
-        layout.addWidget(self.error_label, 5, 0, 1, 2)
+        layout.addWidget(self.error_label, 6, 0, 1, 2)
         layout.setColumnStretch(1, 1)
 
     # -- reading ----------------------------------------------------------
@@ -121,8 +138,11 @@ class OptionsPanel(QGroupBox):
     def only(self) -> Tuple[str, ...]:
         return tuple(name for name in DBMS_NAMES if self.dbms_boxes[name].isChecked())
 
-    def execution(self) -> str:
-        return self._selected(self.execution_buttons, "stream")
+    def chunk_size_mb(self) -> int:
+        return self.chunk_spin.value()
+
+    def batch_size(self) -> int:
+        return self.batch_spin.value()
 
     def dry_run(self) -> bool:
         return self.dry_run_box.isChecked()
@@ -150,7 +170,8 @@ class OptionsPanel(QGroupBox):
                 box.setChecked(False)
 
     def set_errors(self, errors: Dict[str, str]) -> None:
-        messages = [errors[key] for key in ("only", "sample_size") if key in errors]
+        keys = ("only", "chunk_size_mb", "batch_size", "sample_size")
+        messages = [errors[key] for key in keys if key in errors]
         self.error_label.setText("  ·  ".join(messages))
 
     # -- internals --------------------------------------------------------
@@ -170,19 +191,10 @@ class OptionsPanel(QGroupBox):
         row.addStretch(1)
         return row
 
-    def _build_execution_row(self) -> QHBoxLayout:
+    def _build_spin_row(self, spin: QSpinBox, help_key: str) -> QHBoxLayout:
         row = QHBoxLayout()
-        group = QButtonGroup(self)
-        self._groups.append(group)
-        for value in EXECUTIONS:
-            button = QRadioButton(value, self)
-            button.setChecked(value == "stream")
-            button.toggled.connect(self._on_radio_toggled)
-            group.addButton(button)
-            self.execution_buttons[value] = button
-            row.addWidget(button)
-            row.addWidget(self._badge(value))
-            row.addSpacing(12)
+        row.addWidget(spin)
+        row.addWidget(self._badge(help_key))
         row.addStretch(1)
         return row
 

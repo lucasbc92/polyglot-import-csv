@@ -5,8 +5,7 @@
 adapter (``PostgresSink``, ``MongoSink``, ``CassandraSink``, ``RedisSink``,
 ``Neo4jSink``). The orchestrator never speaks SQL/Cypher and never
 deduplicates rows: both are the sink's responsibility. Row-shaping for the
-target DBMS happens inside ``write_batch``, reusing the same helpers the
-materialize importers use.
+target DBMS happens inside ``write_batch``.
 """
 
 from __future__ import annotations
@@ -25,8 +24,8 @@ class DbmsSink(Protocol):
         """Data-independent DBMS-level setup (e.g. keyspace/database). May be a no-op.
 
         Called at most once per run, before any chunk is processed. Must NOT
-        depend on any bound entity: in streaming mode, bindings only exist
-        after the first chunk of each entity has been read.
+        depend on any bound entity: it is given none (per-entity setup belongs
+        in ``ensure_partition``).
         """
         ...
 

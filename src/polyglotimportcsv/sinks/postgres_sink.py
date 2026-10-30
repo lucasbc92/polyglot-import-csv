@@ -1,9 +1,7 @@
 """PostgresSink: DbmsSink adapter for PostgreSQL (spec: streaming import, Task 4).
 
-Reuses the same row-shaping (``flatten_entity_dataframe``) and batched-write
-(``build_insert_sql`` + ``execute_values``) helpers as the materialize
-importer (``importers.postgres_importer.run_postgres_import``), so both
-paths issue byte-identical SQL for the same entity config.
+Shapes each batch with ``flatten_entity_dataframe`` and writes it with one
+``execute_values`` INSERT built by ``importers.postgres_importer.build_insert_sql``.
 """
 
 from __future__ import annotations
@@ -13,9 +11,13 @@ from typing import Any, Dict
 import pandas as pd
 from psycopg2.extras import execute_values
 
-from polyglotimportcsv.entity_utils import flat_leaf_columns, target_field_name
+from polyglotimportcsv.entity_utils import (
+    flat_leaf_columns,
+    is_empty_reference,
+    target_field_name,
+)
 from polyglotimportcsv.importers.postgres_importer import _connect, build_insert_sql
-from polyglotimportcsv.materialize import flatten_entity_dataframe
+from polyglotimportcsv.row_shaping import flatten_entity_dataframe
 from polyglotimportcsv.schema_generator import (
     build_postgres_create_tables,
     build_postgres_drop_foreign_keys,
@@ -63,6 +65,13 @@ class PostgresSink:
         mat = flatten_entity_dataframe(batch, binding.cfg)
         if mat.empty:
             return 0
+        # An empty foreign key means no relationship: send NULL, which the foreign key
+        # added at close() accepts, rather than '', which it would refuse.
+        for rspec in self.relationships.values():
+            if rspec["from"] == partition_name:
+                fk = rspec["foreign_key"]
+                empty = mat[fk].map(is_empty_reference).astype(bool)
+                mat[fk] = mat[fk].astype(object).where(~empty, None)
         cols = list(mat.columns)
         pks = [
             target_field_name(fk, spec)
@@ -76,8 +85,9 @@ class PostgresSink:
         # (it calls stmt.as_string(cur) internally), which keeps this call
         # DB-free-testable (a fake cursor never needs to satisfy psycopg2's
         # C-level "must be a real connection/cursor" check for Identifier
-        # quoting) while producing byte-identical SQL against a real cursor.
-        execute_values(self._cur, stmt, tuples, page_size=500)
+        # quoting) while producing the same SQL against a real cursor.
+        # page_size is the whole batch: one INSERT, one round trip per batch.
+        execute_values(self._cur, stmt, tuples, page_size=len(tuples))
         return len(tuples)
 
     def close(self) -> None:

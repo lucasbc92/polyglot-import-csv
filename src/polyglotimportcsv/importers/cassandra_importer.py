@@ -1,4 +1,4 @@
-"""Import rows into Apache Cassandra."""
+"""Cassandra helpers shared by ``CassandraSink``: session, DDL/CQL builders and batched write."""
 
 from __future__ import annotations
 
@@ -20,17 +20,12 @@ try:
 except Exception:  # pragma: no cover - driver/reactor may be unavailable
     execute_concurrent_with_args = None
 
-from polyglotimportcsv import metrics
 from polyglotimportcsv.business_exception import ImportExecutionError
 from polyglotimportcsv.entity_utils import (
     flat_leaf_columns,
     resolve_csv_column,
     target_field_name,
 )
-from polyglotimportcsv.filter_engine import apply_filters, expand_each
-from polyglotimportcsv.mapping_resolver import BoundEntity
-from polyglotimportcsv.reporting import entity_progress
-from polyglotimportcsv.row_view import iter_rows
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +104,7 @@ def _primary_key_clause(part_db: List[str], clust_db: List[str]) -> str:
 
 
 def _cassandra_keyspace_ddl(keyspace: str) -> str:
-    """CREATE KEYSPACE DDL, shared by the materialize importer and CassandraSink."""
+    """CREATE KEYSPACE DDL."""
     return (
         f"CREATE KEYSPACE IF NOT EXISTS {keyspace} "
         "WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};"
@@ -125,8 +120,7 @@ def _cassandra_column_plan(
     ``pmap`` maps source column -> db column name; ``ordered_src``/``ordered_db``
     are the partition+cluster+other columns in insert order (source and db
     names respectively); ``cql_by_src`` is the CQL type per source column;
-    ``pk_clause`` is the ``PRIMARY KEY`` clause. Shared by the materialize
-    importer (``run_cassandra_import``) and ``CassandraSink``.
+    ``pk_clause`` is the ``PRIMARY KEY`` clause.
     """
     pmap = _source_to_db_map(ecfg, csv_columns)
     part_src = ecfg.get("cassandra_partition") or []
@@ -159,7 +153,7 @@ def _cassandra_table_ddl(
     cql_by_src: Dict[str, str],
     pk_clause: str,
 ) -> str:
-    """CREATE TABLE DDL for one partition, shared by the importer and CassandraSink."""
+    """CREATE TABLE DDL for one partition."""
     col_defs = [f'"{pmap[src]}" {cql_by_src[src]}' for src in ordered_src]
     return f'CREATE TABLE IF NOT EXISTS "{table}" (' + ", ".join(col_defs) + f", {pk_clause});"
 
@@ -260,72 +254,3 @@ def _write_batched(
         pending = failed
     advance(len(params_list))
     return len(params_list)
-
-
-def run_cassandra_import(
-    backend_cfg: Dict[str, Any],
-    entities: Dict[str, "BoundEntity"],
-    *,
-    dry_run: bool,
-    create_schema: bool,
-    session_factory: Callable[[Dict[str, Any]], Tuple[Any, Any]] = _default_cassandra_session,
-) -> List[str]:
-    lines: List[str] = []
-    conn = backend_cfg.get("connection") or {}
-    keyspace = conn.get("keyspace", "ecommerce")
-
-    if dry_run:
-        lines.append("[cassandra] dry-run: would create tables and insert rows.")
-        for ename, be in entities.items():
-            non_each = [f for f in (be.cfg.get("filters") or []) if f.get("operator") != "each"]
-            with metrics.timed_phase("cassandra", ename, "filter") as t:
-                dff = apply_filters(be.df, non_each, be.kinds)
-                t.rows = len(dff)
-            for part_name, part_df in expand_each(dff, be.cfg.get("filters") or [], ename):
-                lines.append(f"  table {part_name}: {len(part_df)} row(s)")
-        return lines
-
-    try:
-        cluster, session = session_factory(conn)
-    except ImportExecutionError:
-        raise
-    except Exception as e:
-        raise ImportExecutionError(f"Cassandra connection failed: {e}") from e
-
-    if create_schema:
-        keyspace_ddl = _cassandra_keyspace_ddl(keyspace)
-        logger.debug("[cassandra] DDL: %s", keyspace_ddl)
-        session.execute(keyspace_ddl)
-    session.set_keyspace(keyspace)
-
-    for ename, be in entities.items():
-        csv_columns = list(be.df.columns)
-        pmap, ordered_src, ordered_db, cql_by_src, pk_clause = _cassandra_column_plan(
-            be.cfg, be.kinds, csv_columns
-        )
-
-        non_each = [f for f in (be.cfg.get("filters") or []) if f.get("operator") != "each"]
-        with metrics.timed_phase("cassandra", ename, "filter") as t:
-            dff = apply_filters(be.df, non_each, be.kinds)
-            t.rows = len(dff)
-        for table, part_df in expand_each(dff, be.cfg.get("filters") or [], ename):
-            if create_schema:
-                ddl = _cassandra_table_ddl(table, ordered_src, pmap, cql_by_src, pk_clause)
-                logger.debug("[cassandra] DDL: %s", ddl)
-                session.execute(ddl)
-
-            cql = _cassandra_insert_cql(table, ordered_db)
-            logger.debug("[cassandra] CQL: %s (%d row(s))", cql, len(part_df))
-            prep = session.prepare(cql)
-            if part_df.empty:
-                logger.warning("[cassandra] table %s has 0 row(s) after filters", table)
-            with metrics.timed_phase("cassandra", table, "write") as tw:
-                params_list = [_row_values(row, ordered_src, cql_by_src)
-                               for row in iter_rows(part_df)]
-                with entity_progress(f"cassandra · {table}", len(params_list)) as advance:
-                    count = _write_batched(session, prep, params_list, advance)
-                tw.rows = count
-            lines.append(f"[cassandra] inserted {count} row(s) into {keyspace}.{table}")
-
-    cluster.shutdown()
-    return lines

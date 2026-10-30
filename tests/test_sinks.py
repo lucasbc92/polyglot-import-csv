@@ -15,9 +15,11 @@ from polyglotimportcsv.sinks.postgres_sink import PostgresSink
 from polyglotimportcsv.sinks.mongo_sink import MongoSink
 from polyglotimportcsv.sinks.cassandra_sink import CassandraSink
 from polyglotimportcsv.sinks.redis_sink import RedisSink
-from polyglotimportcsv.sinks.neo4j_sink import Neo4jSink
+from polyglotimportcsv.sinks.neo4j_sink import Neo4jSink, relationship_columns
+from polyglotimportcsv.csv_reader import ColumnStats
+from polyglotimportcsv.source_profile import SourceProfile
 from polyglotimportcsv.sources import SOURCE_COLUMN
-from polyglotimportcsv.stream_binding import bind_entity_from_sample
+from polyglotimportcsv.stream_binding import bind_entity
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "data" / "ecommerce" / "import_config.json"
 _CONFIG = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
@@ -29,11 +31,22 @@ PRODUCT_CATALOG_CFG = _CONFIG["mongodb"]["entities"]["product_catalog"]
 USER_SESSION_CFG = _CONFIG["redis"]["entities"]["user_session"]
 NEO4J_CFG = _CONFIG["neo4j"]
 NEO4J_USER_CFG = NEO4J_CFG["entities"]["User"]
-# The real config's only cassandra entity unions 4 sources (list); streaming
-# doesn't support union sources (see stream_runner), so this sink test uses a
-# single-source copy of the same entity/column shape.
+# The real config's only cassandra entity unions 4 sources (list); this sink
+# test uses a single-source copy of the same entity/column shape, so it binds
+# from one sample (_bind_sample).
 CASSANDRA_CFG = dict(_CONFIG["cassandra"]["entities"]["user_activity_log"])
 CASSANDRA_CFG["source"] = "stock"
+
+
+def _bind_sample(ename, ecfg, sample: pd.DataFrame, source_name: str):
+    """Bind ``ename`` to ``source_name`` as if ``sample`` were that whole source."""
+    header = [c for c in sample.columns if c != SOURCE_COLUMN]
+    stats = {c: ColumnStats() for c in header}
+    for c in header:
+        stats[c].update(sample[c], exact=True)
+    profile = SourceProfile(name=source_name, declared=source_name, path=None,
+                            header=header, rows=len(sample), stats=stats)
+    return bind_entity(ename, ecfg, {source_name: profile})
 
 
 def _stock_sample() -> pd.DataFrame:
@@ -100,7 +113,7 @@ def _patch_execute_values(monkeypatch):
 def test_ensure_partition_issues_create_table_ddl():
     conn = _FakeConn()
     sink = PostgresSink({"schema": "public"}, connection_factory=lambda c: conn)
-    binding = bind_entity_from_sample("inventory", INVENTORY_CFG, _stock_sample(), "stock")
+    binding = _bind_sample("inventory", INVENTORY_CFG, _stock_sample(), "stock")
 
     sink.ensure_partition("inventory", binding)
 
@@ -112,7 +125,7 @@ def test_ensure_partition_issues_create_table_ddl():
 def test_write_batch_inserts_deduped_rows_with_on_conflict():
     conn = _FakeConn()
     sink = PostgresSink({"schema": "public"}, connection_factory=lambda c: conn)
-    binding = bind_entity_from_sample("inventory", INVENTORY_CFG, _stock_sample(), "stock")
+    binding = _bind_sample("inventory", INVENTORY_CFG, _stock_sample(), "stock")
 
     written = sink.write_batch("inventory", binding, _stock_sample())
 
@@ -123,7 +136,45 @@ def test_write_batch_inserts_deduped_rows_with_on_conflict():
     sql_obj, tuples, page_size = conn.cur.execute_values_calls[0]
     assert len(tuples) == 2
     assert "ON CONFLICT" in repr(sql_obj)
-    assert page_size == 500
+    assert page_size == len(tuples)
+
+
+def test_write_batch_is_one_round_trip_however_large_the_batch():
+    """page_size is the whole batch, so execute_values sends a single statement."""
+    conn = _FakeConn()
+    sink = PostgresSink({"schema": "public"}, connection_factory=lambda c: conn)
+    binding = _bind_sample("inventory", INVENTORY_CFG, _stock_sample(), "stock")
+    batch = pd.concat([_stock_sample().iloc[[2]]] * 1500, ignore_index=True)
+    batch["product_id"] = [str(i) for i in range(1500)]
+
+    written = sink.write_batch("inventory", binding, batch)
+
+    assert written == 1500
+    (_, tuples, page_size), = conn.cur.execute_values_calls
+    assert len(tuples) == 1500
+    assert page_size == len(batch)
+
+
+def test_write_batch_sends_null_for_an_empty_text_foreign_key():
+    # An empty foreign key means no relationship: NULL, which the foreign key accepts,
+    # not '', which it would refuse. Other empty text columns keep ''.
+    orders_cfg = {"source": "orders",
+                  "columns": {"order_id": {"is_key": True}, "customer_id": {}, "note": {}}}
+    rels = {"order_customer": {"from": "orders", "to": "customers",
+                               "foreign_key": "customer_id", "references_key": "id"}}
+    sample = pd.DataFrame({"order_id": ["o1", "o2"], "customer_id": ["c1", ""],
+                           "note": ["", "x"], SOURCE_COLUMN: ["orders", "orders"]})
+    conn = _FakeConn()
+    sink = PostgresSink({"schema": "public", "relationships": rels},
+                        connection_factory=lambda c: conn)
+    binding = _bind_sample("orders", orders_cfg, sample, "orders")
+
+    sink.write_batch("orders", binding, sample)
+    sink.write_batch("notes", binding, sample)  # a table no relationship starts from
+
+    (_, orders, _), (_, notes, _) = conn.cur.execute_values_calls
+    assert orders == [("o1", "c1", ""), ("o2", None, "x")]
+    assert notes == [("o1", "c1", ""), ("o2", "", "x")]
 
 
 def test_write_batch_without_pk_has_no_on_conflict_clause():
@@ -135,7 +186,7 @@ def test_write_batch_without_pk_has_no_on_conflict_clause():
 
     conn = _FakeConn()
     sink = PostgresSink({"schema": "public"}, connection_factory=lambda c: conn)
-    binding = bind_entity_from_sample("inventory", pkless_cfg, _stock_sample(), "stock")
+    binding = _bind_sample("inventory", pkless_cfg, _stock_sample(), "stock")
 
     written = sink.write_batch("inventory", binding, _stock_sample())
 
@@ -147,7 +198,7 @@ def test_write_batch_without_pk_has_no_on_conflict_clause():
 def test_write_batch_empty_writes_nothing():
     conn = _FakeConn()
     sink = PostgresSink({"schema": "public"}, connection_factory=lambda c: conn)
-    binding = bind_entity_from_sample("inventory", INVENTORY_CFG, _stock_sample(), "stock")
+    binding = _bind_sample("inventory", INVENTORY_CFG, _stock_sample(), "stock")
 
     written = sink.write_batch("inventory", binding, _stock_sample().iloc[0:0])
 
@@ -163,8 +214,8 @@ def test_close_issues_fk_ddl_when_relationships_present_and_closes_connection():
         connection_factory=lambda c: conn,
     )
     sample = _stock_sample()
-    products_binding = bind_entity_from_sample("products", PRODUCTS_CFG, sample, "stock")
-    categories_binding = bind_entity_from_sample("categories", CATEGORIES_CFG, sample, "stock")
+    products_binding = _bind_sample("products", PRODUCTS_CFG, sample, "stock")
+    categories_binding = _bind_sample("categories", CATEGORIES_CFG, sample, "stock")
     sink.ensure_partition("products", products_binding)
     sink.ensure_partition("categories", categories_binding)
     conn.cur.executed.clear()  # isolate the FK-only assertions
@@ -179,7 +230,7 @@ def test_close_issues_fk_ddl_when_relationships_present_and_closes_connection():
 def test_close_skips_fk_ddl_when_no_relationships_declared():
     conn = _FakeConn()
     sink = PostgresSink({"schema": "public"}, connection_factory=lambda c: conn)
-    binding = bind_entity_from_sample("inventory", INVENTORY_CFG, _stock_sample(), "stock")
+    binding = _bind_sample("inventory", INVENTORY_CFG, _stock_sample(), "stock")
     sink.ensure_partition("inventory", binding)
     conn.cur.executed.clear()
 
@@ -230,7 +281,7 @@ def test_create_schema_then_close_round_trips_every_declared_fk():
     dropped_up_front = {s for s in conn.cur.executed if "DROP CONSTRAINT" in s}
     conn.cur.executed.clear()
     sink.ensure_partition(
-        "products", bind_entity_from_sample("products", PRODUCTS_CFG, _stock_sample(), "stock")
+        "products", _bind_sample("products", PRODUCTS_CFG, _stock_sample(), "stock")
     )
     sink.close()
 
@@ -275,7 +326,7 @@ class _FakeClient:
 def test_mongo_write_batch_inserts_one_batch_of_right_length():
     client = _FakeClient()
     sink = MongoSink({"connection": {"database": "shop"}}, client_factory=lambda c: client)
-    binding = bind_entity_from_sample(
+    binding = _bind_sample(
         "product_catalog", PRODUCT_CATALOG_CFG, _stock_sample(), "stock"
     )
 
@@ -293,7 +344,7 @@ def test_mongo_write_batch_inserts_one_batch_of_right_length():
 def test_mongo_write_batch_empty_inserts_nothing():
     client = _FakeClient()
     sink = MongoSink({"connection": {"database": "shop"}}, client_factory=lambda c: client)
-    binding = bind_entity_from_sample(
+    binding = _bind_sample(
         "product_catalog", PRODUCT_CATALOG_CFG, _stock_sample(), "stock"
     )
 
@@ -306,7 +357,7 @@ def test_mongo_write_batch_empty_inserts_nothing():
 def test_mongo_create_schema_and_ensure_partition_are_noops():
     client = _FakeClient()
     sink = MongoSink({"connection": {"database": "shop"}}, client_factory=lambda c: client)
-    binding = bind_entity_from_sample(
+    binding = _bind_sample(
         "product_catalog", PRODUCT_CATALOG_CFG, _stock_sample(), "stock"
     )
     sink.create_schema()
@@ -373,7 +424,7 @@ def _user_session_sample():
 def test_redis_write_batch_pipelines_all_rows_in_one_call():
     client = _FakeRedisClient()
     sink = RedisSink({"connection": {}}, client_factory=lambda c: client)
-    binding = bind_entity_from_sample(
+    binding = _bind_sample(
         "user_session", USER_SESSION_CFG, _user_session_sample(), "select_product"
     )
 
@@ -389,7 +440,7 @@ def test_redis_write_batch_pipelines_all_rows_in_one_call():
 def test_redis_write_batch_empty_does_nothing():
     client = _FakeRedisClient()
     sink = RedisSink({"connection": {}}, client_factory=lambda c: client)
-    binding = bind_entity_from_sample(
+    binding = _bind_sample(
         "user_session", USER_SESSION_CFG, _user_session_sample(), "select_product"
     )
 
@@ -402,7 +453,7 @@ def test_redis_write_batch_empty_does_nothing():
 def test_redis_create_schema_and_ensure_partition_are_noops():
     client = _FakeRedisClient()
     sink = RedisSink({"connection": {}}, client_factory=lambda c: client)
-    binding = bind_entity_from_sample(
+    binding = _bind_sample(
         "user_session", USER_SESSION_CFG, _user_session_sample(), "select_product"
     )
 
@@ -480,7 +531,7 @@ def test_cassandra_ensure_partition_issues_table_ddl_and_caches_prepared():
     sink = CassandraSink(
         {"connection": {"keyspace": "ecom"}}, session_factory=lambda c: (cluster, session)
     )
-    binding = bind_entity_from_sample(
+    binding = _bind_sample(
         "user_activity_log", CASSANDRA_CFG, _activity_sample(), "stock"
     )
 
@@ -526,7 +577,7 @@ def test_cassandra_write_batch_uses_concurrency_64(monkeypatch):
     sink = CassandraSink(
         {"connection": {"keyspace": "ecom"}}, session_factory=lambda c: (cluster, session)
     )
-    binding = bind_entity_from_sample(
+    binding = _bind_sample(
         "user_activity_log", CASSANDRA_CFG, _activity_sample(), "stock"
     )
     sink.ensure_partition("user_activity_log", binding)
@@ -554,7 +605,7 @@ def test_cassandra_write_batch_empty_does_nothing(monkeypatch):
     sink = CassandraSink(
         {"connection": {"keyspace": "ecom"}}, session_factory=lambda c: (cluster, session)
     )
-    binding = bind_entity_from_sample(
+    binding = _bind_sample(
         "user_activity_log", CASSANDRA_CFG, _activity_sample(), "stock"
     )
     sink.ensure_partition("user_activity_log", binding)
@@ -574,7 +625,7 @@ def test_cassandra_write_batch_raises_when_driver_unavailable(monkeypatch):
     sink = CassandraSink(
         {"connection": {"keyspace": "ecom"}}, session_factory=lambda c: (cluster, session)
     )
-    binding = bind_entity_from_sample(
+    binding = _bind_sample(
         "user_activity_log", CASSANDRA_CFG, _activity_sample(), "stock"
     )
     sink.ensure_partition("user_activity_log", binding)
@@ -596,8 +647,7 @@ def test_cassandra_close_shuts_down_cluster():
 
 
 # ---------------------------------------------------------------------------
-# Neo4jSink: fake driver/session/tx (mirrors _FakeDriver in
-# test_importer_write_batching). Nodes only; relationships are out of scope.
+# Neo4jSink: fake driver/session/tx. Nodes only; relationships are out of scope.
 # ---------------------------------------------------------------------------
 
 
@@ -672,7 +722,7 @@ def test_neo4j_ensure_partition_creates_uniqueness_constraint():
     rec = {"run": [], "tx_run": []}
     driver = _FakeNeoDriver(rec)
     sink = Neo4jSink({"connection": {}}, driver_factory=lambda c: driver)
-    binding = bind_entity_from_sample(
+    binding = _bind_sample(
         "User", NEO4J_USER_CFG, _user_sample(["u1", "u2"]), "purchase"
     )
 
@@ -685,7 +735,7 @@ def test_neo4j_write_batch_unwind_merges_nodes():
     rec = {"run": [], "tx_run": []}
     driver = _FakeNeoDriver(rec)
     sink = Neo4jSink({"connection": {}}, driver_factory=lambda c: driver)
-    binding = bind_entity_from_sample(
+    binding = _bind_sample(
         "User", NEO4J_USER_CFG, _user_sample(["u1", "u2", "u3"]), "purchase"
     )
 
@@ -699,11 +749,26 @@ def test_neo4j_write_batch_unwind_merges_nodes():
     assert keys == {"u1", "u2", "u3"}
 
 
+def test_neo4j_write_batch_is_one_unwind_however_large_the_batch():
+    rec = {"run": [], "tx_run": []}
+    driver = _FakeNeoDriver(rec)
+    sink = Neo4jSink({"connection": {}}, driver_factory=lambda c: driver)
+    ids = [f"u{i}" for i in range(1500)]
+    binding = _bind_sample("User", NEO4J_USER_CFG, _user_sample(ids), "purchase")
+
+    written = sink.write_batch("User", binding, _user_sample(ids))
+
+    assert written == 1500
+    node_batches = [p for q, p in rec["tx_run"] if "UNWIND" in q and "MERGE (n" in q]
+    assert len(node_batches) == 1
+    assert len(node_batches[0]["batch"]) == 1500
+
+
 def test_neo4j_write_batch_empty_does_nothing():
     rec = {"run": [], "tx_run": []}
     driver = _FakeNeoDriver(rec)
     sink = Neo4jSink({"connection": {}}, driver_factory=lambda c: driver)
-    binding = bind_entity_from_sample(
+    binding = _bind_sample(
         "User", NEO4J_USER_CFG, _user_sample(["u1"]), "purchase"
     )
 
@@ -720,7 +785,7 @@ def test_neo4j_dedupe_first_wins_holds_across_write_batch_calls():
     rec = {"run": [], "tx_run": []}
     driver = _FakeNeoDriver(rec)
     sink = Neo4jSink({"connection": {}}, driver_factory=lambda c: driver)
-    binding = bind_entity_from_sample(
+    binding = _bind_sample(
         "User", NEO4J_USER_CFG, _user_sample(["u0", "u1"]), "purchase"
     )
 
@@ -733,6 +798,25 @@ def test_neo4j_dedupe_first_wins_holds_across_write_batch_calls():
     assert len(node_batches) == 2
     keys = sorted(row["k"] for p in node_batches for row in p["batch"])
     assert keys == ["u0", "u1", "u2"]
+
+
+def test_neo4j_write_batch_warns_about_the_duplicate_keys_it_skips(caplog):
+    rec = {"run": [], "tx_run": []}
+    driver = _FakeNeoDriver(rec)
+    sink = Neo4jSink({"connection": {}}, driver_factory=lambda c: driver)
+    binding = _bind_sample(
+        "User", NEO4J_USER_CFG, _user_sample(["u0", "u1"]), "purchase"
+    )
+
+    with caplog.at_level(logging.WARNING, logger="polyglotimportcsv.sinks.neo4j_sink"):
+        written = sink.write_batch("User", binding, _user_sample(["u0", "u1", "u0", "u2", "u1"]))
+
+    assert written == 3
+    assert any(
+        r.levelno == logging.WARNING
+        and "User: 2 duplicate key value(s) skipped" in r.message
+        for r in caplog.records
+    )
 
 
 def test_neo4j_no_nodes_only_warning_when_relationships_declared(caplog):
@@ -782,8 +866,8 @@ def test_neo4j_write_relationships_unwind_merges_edges():
     driver = _FakeNeoDriver(rec)
     sink = Neo4jSink({"connection": {}}, driver_factory=lambda c: driver)
 
-    from_binding = bind_entity_from_sample("User", NEO4J_USER_CFG, _user_sample(["u1", "u2"]), "purchase")
-    to_binding = bind_entity_from_sample(
+    from_binding = _bind_sample("User", NEO4J_USER_CFG, _user_sample(["u1", "u2"]), "purchase")
+    to_binding = _bind_sample(
         "Product", NEO4J_PRODUCT_CFG,
         pd.DataFrame({"product_id": ["p1", "p2"], "product_name": ["a", "b"],
                       "product_brand": ["x", "y"], SOURCE_COLUMN: ["stock", "stock"]}),
@@ -802,13 +886,28 @@ def test_neo4j_write_relationships_unwind_merges_edges():
     assert all("order_number" in r["mk"] for r in payload)
 
 
+def test_relationship_columns_reads_both_endpoints_from_the_from_chunk():
+    from_binding = _bind_sample("User", NEO4J_USER_CFG, _user_sample(["u1"]), "purchase")
+    to_binding = _bind_sample(
+        "Product", {"source": "stock", "columns": {"pid": {"is_key": True,
+                                                           "csv_column": "product_id",
+                                                           "schema_column": "code"}}},
+        pd.DataFrame({"product_id": ["p1"], SOURCE_COLUMN: ["stock"]}), "stock",
+    )
+    cols = relationship_columns(PURCHASED_RSPEC, from_binding, to_binding,
+                                list(_purchase_rel_chunk().columns))
+    assert (cols.from_src, cols.to_src, cols.from_key, cols.to_key) == (
+        "user_id", "product_id", "user_id", "code")
+    assert (cols.merge_keys, cols.merge_src) == (["order_number"], ["order_number"])
+
+
 def test_neo4j_write_relationships_skips_null_endpoints():
     rec = {"run": [], "tx_run": []}
     driver = _FakeNeoDriver(rec)
     sink = Neo4jSink({"connection": {}}, driver_factory=lambda c: driver)
 
-    from_binding = bind_entity_from_sample("User", NEO4J_USER_CFG, _user_sample(["u1"]), "purchase")
-    to_binding = bind_entity_from_sample(
+    from_binding = _bind_sample("User", NEO4J_USER_CFG, _user_sample(["u1"]), "purchase")
+    to_binding = _bind_sample(
         "Product", NEO4J_PRODUCT_CFG,
         pd.DataFrame({"product_id": ["p1"], "product_name": ["a"],
                       "product_brand": ["x"], SOURCE_COLUMN: ["stock"]}),
@@ -817,7 +916,7 @@ def test_neo4j_write_relationships_skips_null_endpoints():
     # A genuinely null endpoint key (None, as an all-NaN cast column would yield)
     # is dropped by _rel_rows_for_batch. An empty string, by contrast, survives
     # here and is skipped later by Cypher MATCH (not exercised by the fake
-    # driver) -- both match the materialize path, which uses the same helper.
+    # driver).
     chunk = pd.DataFrame(
         {"user_id": ["u1", None], "product_id": ["p1", "p2"], "order_number": ["o1", "o2"],
          "quantity": ["1", "2"], "price": ["10", "20"], "rating": ["5", "4"],

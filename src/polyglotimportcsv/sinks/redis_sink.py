@@ -1,9 +1,7 @@
 """RedisSink: DbmsSink adapter for Redis (spec: streaming import, Task 5).
 
-Reuses the same key-value shaping (``_kv_pairs`` -> ``redis_payload_from_row``)
-and batched-write helper (``_write_batched`` -> ``client.pipeline``) as the
-materialize importer (``importers.redis_importer.run_redis_import``), so both
-paths issue the same SET pipeline shape for the same entity config.
+Shapes each row into a key-value pair (``_kv_pairs`` -> ``redis_payload_from_row``)
+and writes the pairs with ``_write_batched`` (``client.pipeline``).
 """
 
 from __future__ import annotations
@@ -42,7 +40,7 @@ class RedisSink:
         pairs = _kv_pairs(batch, binding.cfg)
         if not pairs:
             return 0
-        # A single pipeline covers the whole (already <= BATCH-sized) batch:
+        # A single pipeline covers the whole (already write-batch-sized) batch:
         # pass batch=len(pairs) so `_write_batched` issues exactly one
         # pipeline execute() instead of re-chunking at its own default of 1000.
         return _write_batched(self._client, pairs, lambda n: None, batch=len(pairs))

@@ -1,21 +1,13 @@
-"""Import key-value rows into Redis."""
+"""Redis helpers shared by ``RedisSink``: client, key-value shaping and pipelined SET."""
 
 from __future__ import annotations
 
-import logging
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import redis
 
-from polyglotimportcsv import metrics
-from polyglotimportcsv.business_exception import ImportExecutionError
-from polyglotimportcsv.mapping_resolver import BoundEntity
-from polyglotimportcsv.filter_engine import apply_filters, expand_each
-from polyglotimportcsv.materialize import redis_payload_from_row
-from polyglotimportcsv.reporting import entity_progress
+from polyglotimportcsv.row_shaping import redis_payload_from_row
 from polyglotimportcsv.row_view import iter_rows
-
-logger = logging.getLogger(__name__)
 
 
 def _default_redis_client(conn: Dict[str, Any]):
@@ -49,50 +41,3 @@ def _write_batched(client, pairs: List[Tuple[str, str]], advance, batch: int = 1
         count += len(chunk)
         advance(len(chunk))
     return count
-
-
-def run_redis_import(
-    backend_cfg: Dict[str, Any],
-    entities: Dict[str, "BoundEntity"],
-    *,
-    dry_run: bool,
-    create_schema: bool,
-    client_factory: Callable[[Dict[str, Any]], Any] = _default_redis_client,
-) -> List[str]:
-    lines: List[str] = []
-    conn = backend_cfg.get("connection") or {}
-    _ = create_schema  # Redis has no DDL
-
-    if dry_run:
-        lines.append("[redis] dry-run: would SET keys for entities.")
-        for ename, be in entities.items():
-            non_each = [f for f in (be.cfg.get("filters") or []) if f.get("operator") != "each"]
-            with metrics.timed_phase("redis", ename, "filter") as t:
-                dff = apply_filters(be.df, non_each, be.kinds)
-                t.rows = len(dff)
-            for part_name, part_df in expand_each(dff, be.cfg.get("filters") or [], ename):
-                lines.append(f"  entity {part_name}: {len(part_df)} row(s)")
-        return lines
-
-    client = client_factory(conn)
-    try:
-        client.ping()
-    except Exception as e:
-        raise ImportExecutionError(f"Redis connection failed: {e}") from e
-
-    for ename, be in entities.items():
-        non_each = [f for f in (be.cfg.get("filters") or []) if f.get("operator") != "each"]
-        with metrics.timed_phase("redis", ename, "filter") as t:
-            dff = apply_filters(be.df, non_each, be.kinds)
-            t.rows = len(dff)
-        for part_name, part_df in expand_each(dff, be.cfg.get("filters") or [], ename):
-            if part_df.empty:
-                logger.warning("[redis] entity %s has 0 row(s) after filters", part_name)
-            with metrics.timed_phase("redis", part_name, "write") as tw:
-                pairs = _kv_pairs(part_df, be.cfg)
-                with entity_progress(f"redis · {part_name}", len(pairs)) as advance:
-                    count = _write_batched(client, pairs, advance)
-                tw.rows = count
-            logger.debug("[redis] SET %d key(s) for %s", count, part_name)
-            lines.append(f"[redis] SET {count} key(s) for {part_name}")
-    return lines

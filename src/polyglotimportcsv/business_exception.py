@@ -17,6 +17,10 @@ class MappingError(BusinessException):
     """Unknown column/index/range, or entity without a resolvable source."""
 
 
+class DataValidationError(BusinessException):
+    """Data rows break the import configuration (validation layer 3)."""
+
+
 class ImportExecutionError(BusinessException):
     """Failure while connecting to or writing into a target DBMS."""
 
@@ -24,6 +28,6 @@ class ImportExecutionError(BusinessException):
 class DbmsUnavailableError(BusinessException):
     """A target DBMS does not answer, or its connection setting is invalid.
 
-    Raised by the check that precedes every real import, before any CSV is
-    read or anything is written.
+    Raised by the check that precedes every real import, after the headers
+    are checked and before any data row is read or anything is written.
     """

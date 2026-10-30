@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import pandas as pd
 
 from polyglotimportcsv.business_exception import MappingError
-from polyglotimportcsv.casting import KIND_TO_DB_TYPE, cast_frame
+from polyglotimportcsv.casting import KIND_TO_DB_TYPE
 from polyglotimportcsv.column_selector import select_columns
 from polyglotimportcsv.csv_reader import infer_column_kinds
 from polyglotimportcsv.sources import SOURCE_COLUMN, SourceData
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -31,8 +28,8 @@ def union_data_cols(headers: List[List[str]]) -> List[str]:
     """First-seen union of column names across ``headers``, in list order.
 
     The single source of truth for the union superset ordering rule, shared by
-    the materialize path (``_union_source``) and the streaming sample bind
-    (``stream_binding``) so both compute an identical superset.
+    ``_union_source``, ``source_profile`` and ``validation`` so all compute an
+    identical superset.
     """
     data_cols: List[str] = []
     for header in headers:
@@ -117,24 +114,6 @@ def bind_entity_source(
     )
 
 
-def _binding_cache_key(entity_cfg: Dict[str, Any], entity_name: str) -> tuple:
-    """Collision-proof cast-cache key for an already-validated binding.
-
-    Must be called only after ``bind_entity_source`` has validated the
-    binding, so ``ref`` here is guaranteed to be ``None``, a ``str``, or a
-    non-empty ``list``. A plain "+".join(names) string key would collide
-    between distinct union bindings (e.g. ["a+b", "c"] vs ["a", "b+c"]) and
-    with a real source literally named after the join; keying on a typed
-    tuple instead makes those cases distinguishable.
-    """
-    ref = entity_cfg.get("source")
-    if ref is None:
-        return ("single", entity_name)
-    if isinstance(ref, str):
-        return ("single", ref)
-    return ("union", tuple(ref))
-
-
 def expand_entity_columns(
     entity_name: str, entity_cfg: Dict[str, Any], source: SourceData
 ) -> Dict[str, Any]:
@@ -161,34 +140,3 @@ def expand_entity_columns(
         expanded[col] = {"db_type": KIND_TO_DB_TYPE.get(kind, "TEXT")}
     expanded.update(manual)
     return expanded
-
-
-def resolve_backend_entities(
-    backend_cfg: Dict[str, Any],
-    sources: Dict[str, SourceData],
-    cast_cache: Optional[Dict[tuple, pd.DataFrame]] = None,
-) -> Dict[str, BoundEntity]:
-    """Bind every entity of one backend and cast its frame to native values."""
-    cast_cache = cast_cache if cast_cache is not None else {}
-    out: Dict[str, BoundEntity] = {}
-    for ename, ecfg in (backend_cfg.get("entities") or {}).items():
-        src = bind_entity_source(ename, ecfg, sources)
-        cfg = dict(ecfg)
-        cfg["columns"] = expand_entity_columns(ename, ecfg, src)
-        manual_cols = set(ecfg.get("columns") or {})
-        for col, spec in cfg["columns"].items():
-            origin = "manual" if col in manual_cols else "inferred"
-            logger.debug(
-                "entity %s (source %s): column %r -> db_type=%s [%s]",
-                ename, src.name, col, spec.get("db_type"), origin,
-            )
-        cfg.pop("source", None)
-        cfg.pop("csv_columns", None)
-        cfg.pop("auto_map", None)
-        cache_key = _binding_cache_key(ecfg, ename)
-        if cache_key not in cast_cache:
-            cast_cache[cache_key] = cast_frame(src.df, src.kinds)
-        out[ename] = BoundEntity(
-            name=ename, cfg=cfg, df=cast_cache[cache_key], kinds=src.kinds
-        )
-    return out

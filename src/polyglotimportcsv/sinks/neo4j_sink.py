@@ -5,18 +5,17 @@ are written by a second pass driven by ``stream_runner`` calling ``write_relatio
 Relationships need every node set to exist before edge insertion, which requires
 two streaming passes over the entity/relationship sources.
 
-Reuses the same props-shaping (``props_from_row``) and batched-write helper
-(``_merge_nodes_batched`` -> UNWIND) as the materialize importer
-(``importers.neo4j_importer.run_neo4j_import``), but dedupe is tracked
-*across* ``write_batch`` calls (one seen-set per partition, kept for the
-sink's lifetime) instead of once per call, so first-wins holds for the whole
-streaming pass rather than just within one flush.
+Shapes node properties with ``props_from_row`` and writes them with the batched
+helper ``_merge_nodes_batched`` (UNWIND). Dedupe is tracked *across*
+``write_batch`` calls (one seen-set per partition, kept for the sink's
+lifetime), so first-wins holds for the whole streaming pass rather than just
+within one flush.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Set
+from typing import Any, Dict, List, NamedTuple, Sequence, Set, Tuple
 
 import pandas as pd
 
@@ -36,13 +35,54 @@ from polyglotimportcsv.stream_binding import EntityBinding
 logger = logging.getLogger(__name__)
 
 
+def _key_leaves(cfg: Dict[str, Any]) -> List[Tuple[str, Dict[str, Any]]]:
+    return [(fk, sp) for fk, _, sp in flat_leaf_columns(cfg) if sp.get("is_key")]
+
+
 def _single_key(cfg: Dict[str, Any], partition_name: str):
-    key_cols = [(fk, sp) for fk, _, sp in flat_leaf_columns(cfg) if sp.get("is_key")]
+    key_cols = _key_leaves(cfg)
     if len(key_cols) != 1:
         raise ImportExecutionError(
             f"Neo4j entity '{partition_name}' must have exactly one is_key column."
         )
     return target_field_name(*key_cols[0])
+
+
+def node_key_column(cfg: Dict[str, Any], columns: Sequence[str]) -> str:
+    """The column of a chunk with ``columns`` that holds the node's key."""
+    return resolve_csv_column(*_key_leaves(cfg)[0], columns)
+
+
+class RelationshipColumns(NamedTuple):
+    """Where a chunk of a relationship's ``from`` entity holds what an edge needs."""
+
+    from_src: str           # column of the ``from`` node's key
+    to_src: str             # column of the ``to`` node's key
+    from_key: str           # key property of the ``from`` nodes
+    to_key: str             # key property of the ``to`` nodes
+    merge_keys: List[str]   # properties the edge is merged on (its is_key columns)
+    merge_src: List[str]    # and their columns
+
+
+def relationship_columns(
+    rspec: Dict[str, Any],
+    from_binding: EntityBinding,
+    to_binding: EntityBinding,
+    columns: Sequence[str],
+) -> RelationshipColumns:
+    """Resolve an edge's columns in a chunk of its ``from`` entity, which carries both
+    endpoint keys (the ``to`` key under the ``to`` entity's column name) and the edge's
+    own columns. ``validate_headers`` makes sure all of them are there."""
+    from_leaf, to_leaf = _key_leaves(from_binding.cfg)[0], _key_leaves(to_binding.cfg)[0]
+    merge = [(fk, spec) for fk, spec in (rspec.get("columns") or {}).items() if spec.get("is_key")]
+    return RelationshipColumns(
+        from_src=resolve_csv_column(*from_leaf, columns),
+        to_src=resolve_csv_column(*to_leaf, columns),
+        from_key=target_field_name(*from_leaf),
+        to_key=target_field_name(*to_leaf),
+        merge_keys=[target_field_name(fk, spec) for fk, spec in merge],
+        merge_src=[resolve_csv_column(fk, spec, columns) for fk, spec in merge],
+    )
 
 
 class Neo4jSink:
@@ -85,7 +125,10 @@ class Neo4jSink:
         if not props_list:
             return 0
         label = _sanitize_label(partition_name)
-        return _merge_nodes_batched(self._session, label, key_name, props_list, lambda n: None)
+        # One UNWIND for the whole batch: one round trip per batch.
+        return _merge_nodes_batched(
+            self._session, label, key_name, props_list, lambda n: None, batch=len(props_list)
+        )
 
     def write_relationships(
         self,
@@ -100,27 +143,20 @@ class Neo4jSink:
         ``batch`` is the ``from`` entity's cast chunk, which carries both
         foreign keys plus edge props. Rows with a missing endpoint key are
         dropped (by ``_rel_rows_for_batch``) and, if a node is nonetheless
-        absent, Cypher ``MATCH`` silently creates no edge -- matching the
-        materialize path.
+        absent, Cypher ``MATCH`` silently creates no edge.
         """
         from_label = _sanitize_label(rspec["from"])
         to_label = _sanitize_label(rspec["to"])
         rel_type = _sanitize_label(rspec.get("type") or rname)
-        from_key_col = [(fk, sp) for fk, _, sp in flat_leaf_columns(from_binding.cfg) if sp.get("is_key")][0]
-        to_key_col = [(fk, sp) for fk, _, sp in flat_leaf_columns(to_binding.cfg) if sp.get("is_key")][0]
-        from_key = target_field_name(*from_key_col)
-        to_key = target_field_name(*to_key_col)
-        cols = list(batch.columns)
-        from_src = resolve_csv_column(from_key_col[0], from_key_col[1], cols)
-        to_src = resolve_csv_column(to_key_col[0], to_key_col[1], cols)
-        rel_cols = rspec.get("columns") or {}
-        mk_names = [target_field_name(fk, spec) for fk, spec in rel_cols.items() if spec.get("is_key")]
-        rows = _rel_rows_for_batch(batch, from_src, to_src, rel_cols, mk_names)
+        cols = relationship_columns(rspec, from_binding, to_binding, list(batch.columns))
+        rows = _rel_rows_for_batch(
+            batch, cols.from_src, cols.to_src, rspec.get("columns") or {}, cols.merge_keys
+        )
         if not rows:
             return 0
         return _merge_rels_batched(
-            self._session, from_label, from_key, to_label, to_key,
-            rel_type, mk_names, rows, advance=lambda n: None,
+            self._session, from_label, cols.from_key, to_label, cols.to_key,
+            rel_type, cols.merge_keys, rows, advance=lambda n: None,
         )
 
     def close(self) -> None:

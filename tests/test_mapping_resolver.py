@@ -4,11 +4,7 @@ import pandas as pd
 import pytest
 
 from polyglotimportcsv.business_exception import MappingError
-from polyglotimportcsv.mapping_resolver import (
-    bind_entity_source,
-    expand_entity_columns,
-    resolve_backend_entities,
-)
+from polyglotimportcsv.mapping_resolver import bind_entity_source, expand_entity_columns
 from polyglotimportcsv.sources import SOURCE_COLUMN, SourceData
 
 
@@ -86,38 +82,6 @@ def test_csv_columns_with_manual_only_raises(sources):
         expand_entity_columns("stock", ecfg, sources["stock"])
 
 
-def test_resolve_backend_entities_casts_and_strips_keys(sources):
-    bcfg = {"entities": {"inventory": {"source": "stock", "auto_map": True,
-                                       "columns": {"product_id": {"is_key": True}}}}}
-    bound = resolve_backend_entities(bcfg, sources)
-    be = bound["inventory"]
-    assert be.name == "inventory"
-    assert "source" not in be.cfg and "auto_map" not in be.cfg
-    assert be.cfg["columns"]["product_id"] == {"is_key": True}
-    assert list(be.df["product_id"]) == [1, 2]  # cast to int
-
-
-def test_union_binding_cache_key_no_collision():
-    # "+".join(["a+b", "c"]) == "+".join(["a", "b+c"]) == "a+b+c": a
-    # string-joined cache key collides two distinct union bindings (and
-    # would also collide with a real source literally named "a+b+c").
-    sources = {
-        "a+b": _source("a+b", {"val": ["AB1", "AB2"]}),
-        "a": _source("a", {"val": ["A1"]}),
-        "b+c": _source("b+c", {"val": ["BC1"]}),
-        "c": _source("c", {"val": ["C1"]}),
-    }
-    bcfg = {
-        "entities": {
-            "e1": {"source": ["a+b", "c"]},
-            "e2": {"source": ["a", "b+c"]},
-        }
-    }
-    bound = resolve_backend_entities(bcfg, sources)
-    assert list(bound["e1"].df["val"]) == ["AB1", "AB2", "C1"]
-    assert list(bound["e2"].df["val"]) == ["A1", "BC1"]
-
-
 def test_binding_empty_source_list_raises(sources):
     with pytest.raises(MappingError, match="empty"):
         bind_entity_source("x", {"source": []}, sources)
@@ -133,21 +97,3 @@ def test_manual_only_columns_returns_copy_not_original(sources):
     cols = expand_entity_columns("stock", ecfg, sources["stock"])
     cols["product_id"] = "mutated"
     assert ecfg["columns"]["product_id"] == {"is_key": True}
-
-
-def test_resolve_reuses_the_cached_cast_for_the_same_binding():
-    import pandas as pd
-    from polyglotimportcsv.sources import SOURCE_COLUMN, SourceData
-    from polyglotimportcsv.mapping_resolver import resolve_backend_entities
-
-    df = pd.DataFrame({"n": ["1", "2"], SOURCE_COLUMN: ["s", "s"]})
-    sd = SourceData(name="s", df=df,
-                    kinds={"n": "integer", SOURCE_COLUMN: "string"},
-                    file_header=["n"])
-    bcfg = {"entities": {"E": {"source": "s", "columns": {"n": {}}}}}
-    cache: dict = {}
-    first = resolve_backend_entities(bcfg, {"s": sd}, cache)
-    second = resolve_backend_entities(bcfg, {"s": sd}, cache)
-    assert len(cache) == 1
-    assert first["E"].df is second["E"].df
-    assert list(first["E"].df["n"]) == [1, 2]

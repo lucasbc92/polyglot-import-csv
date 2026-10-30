@@ -1,11 +1,9 @@
 """CassandraSink: DbmsSink adapter for Apache Cassandra (spec: streaming import, Task 5).
 
-Reuses the same column-plan/DDL builders (``_cassandra_column_plan``,
-``_cassandra_table_ddl``, ``_cassandra_insert_cql``, ``_cassandra_keyspace_ddl``),
-row-shaping (``_row_values``), and batched-write helper (``_write_batched`` ->
-``execute_concurrent_with_args``, concurrency 64) as the materialize importer
-(``importers.cassandra_importer.run_cassandra_import``), so both paths issue
-byte-identical DDL/CQL for the same entity config.
+Builds the column plan and DDL/CQL with ``_cassandra_column_plan``,
+``_cassandra_table_ddl``, ``_cassandra_insert_cql`` and ``_cassandra_keyspace_ddl``,
+shapes rows with ``_row_values``, and writes them with ``_write_batched``
+(``execute_concurrent_with_args``, concurrency 64).
 """
 
 from __future__ import annotations
