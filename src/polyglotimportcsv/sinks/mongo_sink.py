@@ -1,7 +1,6 @@
 """MongoSink: DbmsSink adapter for MongoDB (spec: streaming import, Task 4).
 
-Reuses the same document-shaping helper (``mongo_document_from_row``) as the
-materialize importer (``importers.mongodb_importer.run_mongodb_import``).
+Shapes each row into a document with ``mongo_document_from_row``.
 """
 
 from __future__ import annotations
@@ -12,7 +11,7 @@ import pandas as pd
 from pymongo import MongoClient
 
 from polyglotimportcsv.business_exception import ImportExecutionError
-from polyglotimportcsv.materialize import mongo_document_from_row
+from polyglotimportcsv.row_shaping import mongo_document_from_row
 from polyglotimportcsv.row_view import iter_rows
 from polyglotimportcsv.stream_binding import EntityBinding
 

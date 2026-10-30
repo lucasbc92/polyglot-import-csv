@@ -5,12 +5,11 @@ are written by a second pass driven by ``stream_runner`` calling ``write_relatio
 Relationships need every node set to exist before edge insertion, which requires
 two streaming passes over the entity/relationship sources.
 
-Reuses the same props-shaping (``props_from_row``) and batched-write helper
-(``_merge_nodes_batched`` -> UNWIND) as the materialize importer
-(``importers.neo4j_importer.run_neo4j_import``), but dedupe is tracked
-*across* ``write_batch`` calls (one seen-set per partition, kept for the
-sink's lifetime) instead of once per call, so first-wins holds for the whole
-streaming pass rather than just within one flush.
+Shapes node properties with ``props_from_row`` and writes them with the batched
+helper ``_merge_nodes_batched`` (UNWIND). Dedupe is tracked *across*
+``write_batch`` calls (one seen-set per partition, kept for the sink's
+lifetime), so first-wins holds for the whole streaming pass rather than just
+within one flush.
 """
 
 from __future__ import annotations
@@ -144,8 +143,7 @@ class Neo4jSink:
         ``batch`` is the ``from`` entity's cast chunk, which carries both
         foreign keys plus edge props. Rows with a missing endpoint key are
         dropped (by ``_rel_rows_for_batch``) and, if a node is nonetheless
-        absent, Cypher ``MATCH`` silently creates no edge -- matching the
-        materialize path.
+        absent, Cypher ``MATCH`` silently creates no edge.
         """
         from_label = _sanitize_label(rspec["from"])
         to_label = _sanitize_label(rspec["to"])

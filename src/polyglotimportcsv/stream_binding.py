@@ -1,10 +1,8 @@
 """Bind a streamed entity from the profiles of its sources (spec: streaming import).
 
-Reuses the existing binding pieces from ``mapping_resolver`` so the streaming path
-binds each entity exactly the way ``resolve_backend_entities`` does for the
-materialize path, just without a pre-loaded ``SourceData`` registry: a header-only
-registry built from the source profiles stands in for it, and the kinds are those of
-the whole file.
+Binds each entity with the pieces of ``mapping_resolver`` (``bind_entity_source``,
+``expand_entity_columns``), over a header-only ``SourceData`` registry built from the
+source profiles; the kinds are those of the whole file.
 """
 
 from __future__ import annotations
@@ -68,7 +66,7 @@ def bind_entity(
     The source is resolved by ``mapping_resolver.bind_entity_source`` over a registry
     holding each profile's header, so that rule lives in one place. A union's kinds
     are then those of its sources' stats merged (``union_kinds``) over the superset
-    columns, which the resolver ordered as the materialize path does.
+    columns, in the order the resolver gave them.
     """
     names = entity_source_names(ename, ecfg)
     registry = {n: _header_only(profiles[n]) for n in names if n in profiles}

@@ -1,8 +1,8 @@
-"""Chunked reading of declared data sources (bounded-memory streaming counterpart to sources.py).
+"""Chunked reading of declared data sources (per-entity CSVs; combined CSVs routed by an
+origin column).
 
-Mirrors sources.load_sources' semantics (multi per-entity CSVs; combined CSVs routed by an
-origin column) but reads each file in fixed-size chunks via pandas ``chunksize`` instead of
-materializing the whole file, so peak memory stays ~constant in file size.
+Each file is read in fixed-size chunks via pandas ``chunksize`` rather than whole, so peak
+memory stays ~constant in file size.
 """
 
 from __future__ import annotations

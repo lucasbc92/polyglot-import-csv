@@ -80,6 +80,19 @@ def test_read_source_headers_honors_an_override(tmp_path):
     assert got == {"s": ["k"]}
 
 
+def test_a_relative_override_resolves_from_the_cwd_not_the_config_dir(tmp_path, monkeypatch):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    _write_csv(config_dir / "stock.csv", ["a"], [(1,)])
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    _write_csv(work_dir / "big.csv", ["b"], [(1,), (2,)])
+
+    monkeypatch.chdir(work_dir)
+    got = ss.read_source_headers({"stock": "stock.csv"}, config_dir, {"stock": "big.csv"})
+    assert got == {"stock": ["b"]}
+
+
 def test_read_source_headers_reports_a_missing_file(tmp_path):
     with pytest.raises(SourceError, match="Source 's': CSV file not found"):
         ss.read_source_headers({"s": "nope.csv"}, tmp_path, {})

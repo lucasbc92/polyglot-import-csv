@@ -5,8 +5,7 @@
 adapter (``PostgresSink``, ``MongoSink``, ``CassandraSink``, ``RedisSink``,
 ``Neo4jSink``). The orchestrator never speaks SQL/Cypher and never
 deduplicates rows: both are the sink's responsibility. Row-shaping for the
-target DBMS happens inside ``write_batch``, reusing the same helpers the
-materialize importers use.
+target DBMS happens inside ``write_batch``.
 """
 
 from __future__ import annotations

@@ -1,9 +1,7 @@
 """PostgresSink: DbmsSink adapter for PostgreSQL (spec: streaming import, Task 4).
 
-Reuses the same row-shaping (``flatten_entity_dataframe``) and batched-write
-(``build_insert_sql`` + ``execute_values``) helpers as the materialize
-importer (``importers.postgres_importer.run_postgres_import``), so both
-paths issue byte-identical SQL for the same entity config.
+Shapes each batch with ``flatten_entity_dataframe`` and writes it with one
+``execute_values`` INSERT built by ``importers.postgres_importer.build_insert_sql``.
 """
 
 from __future__ import annotations
@@ -19,7 +17,7 @@ from polyglotimportcsv.entity_utils import (
     target_field_name,
 )
 from polyglotimportcsv.importers.postgres_importer import _connect, build_insert_sql
-from polyglotimportcsv.materialize import flatten_entity_dataframe
+from polyglotimportcsv.row_shaping import flatten_entity_dataframe
 from polyglotimportcsv.schema_generator import (
     build_postgres_create_tables,
     build_postgres_drop_foreign_keys,
@@ -87,7 +85,7 @@ class PostgresSink:
         # (it calls stmt.as_string(cur) internally), which keeps this call
         # DB-free-testable (a fake cursor never needs to satisfy psycopg2's
         # C-level "must be a real connection/cursor" check for Identifier
-        # quoting) while producing byte-identical SQL against a real cursor.
+        # quoting) while producing the same SQL against a real cursor.
         # page_size is the whole batch: one INSERT, one round trip per batch.
         execute_values(self._cur, stmt, tuples, page_size=len(tuples))
         return len(tuples)

@@ -73,7 +73,7 @@
     },
     "filter": {
       "type": "object",
-      "description": "Row predicate applied to the full CSV before materialization.",
+      "description": "Row predicate applied to the rows of the CSV before they are written.",
       "required": ["column", "operator"],
       "properties": {
         "column": { "type": "string", "minLength": 1 },

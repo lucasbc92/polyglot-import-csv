@@ -1,8 +1,7 @@
-"""Per-entity data display for the streaming path (--sample, --show-data, --no-data).
+"""Per-entity data display (--sample, --show-data, --no-data).
 
-The materialize path dumps each bound entity from a frame it already holds.
-The stream path never holds a whole entity, so it watches the batches as they
-are written instead: the sample keeps at most N rows per partition, and
+The import never holds a whole entity, so the display watches the batches as
+they are written: the sample keeps at most N rows per partition, and
 --show-data prints each batch as it goes. Either way the memory added is
 bounded by N rows or one batch, not by the size of the file.
 """

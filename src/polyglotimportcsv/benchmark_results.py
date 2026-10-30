@@ -7,9 +7,6 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 from polyglotimportcsv.benchmark_io import check_csv_header, write_json_and_csv
-# Re-exported: the consolidated report and the terminal table exclude the same
-# phases, and callers already import the name from here.
-from polyglotimportcsv.metrics import EXCLUDED_PHASES
 
 _RESULT_FIELDS = (
     "timestamp", "size", "mode", "chunk_mb", "backend", "entity",
@@ -26,15 +23,11 @@ def median_results(labeled_runs: List[Dict[str, object]]) -> List[Dict[str, obje
     process) measurement carried on the labeled run, so each repetition
     contributes one value to the group; the median across repetitions is
     reported (``None`` if no run supplied a peak).
-
-    Records whose phase is in ``EXCLUDED_PHASES`` are dropped before grouping.
     """
     groups: Dict[Tuple, Dict[str, object]] = {}
     order: List[Tuple] = []
     for run in labeled_runs:
         for rec in run["records"]:
-            if rec["phase"] in EXCLUDED_PHASES:
-                continue
             key = (run["size"], run["mode"], run["chunk_mb"],
                    rec["backend"], rec["entity"], rec["phase"])
             if key not in groups:

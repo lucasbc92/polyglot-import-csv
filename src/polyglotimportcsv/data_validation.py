@@ -41,8 +41,8 @@ from polyglotimportcsv.entity_utils import (
 from polyglotimportcsv.import_plan import ImportPlan
 from polyglotimportcsv.importers.cassandra_importer import _cassandra_column_plan
 from polyglotimportcsv.importers.neo4j_importer import _rel_rows_for_batch
-from polyglotimportcsv.materialize import cell_scalar
 from polyglotimportcsv.reporting import print_rich
+from polyglotimportcsv.row_shaping import cell_scalar
 from polyglotimportcsv.schema_generator import postgres_column_type
 from polyglotimportcsv.sinks.neo4j_sink import (
     RelationshipColumns,

@@ -14,7 +14,7 @@ sinks keep their per-row logic unchanged. The column list is built once per fram
 instead of once per row.
 
 Values come back as NumPy scalars rather than the Python objects the object-matrix
-detour produced. Every consumer funnels them through ``materialize.cell_scalar``
+detour produced. Every consumer funnels them through ``row_shaping.cell_scalar``
 (``.item()``) or ``pd.isna``, both of which treat the two identically; the
 equivalence tests in ``tests/test_row_view.py`` pin that down against the real
 reference dataset.

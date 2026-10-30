@@ -29,15 +29,6 @@ def test_reported_seconds_sums_the_reported_phases():
     assert ab.reported_seconds(run) == 6.0
 
 
-def test_reported_seconds_ignores_excluded_phases():
-    # `filter` is out of the report, so it must be out of the comparison too.
-    run = {"records": [
-        {"phase": "filter", "seconds": 5.0},
-        {"phase": "write", "seconds": 3.0},
-    ]}
-    assert ab.reported_seconds(run) == 3.0
-
-
 def test_summarize_reports_overhead_per_chunk_size():
     traced = [_run(8, 1.2), _run(64, 2.0)]
     untraced = [_run(8, 1.0), _run(64, 1.0)]

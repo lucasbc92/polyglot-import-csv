@@ -1,4 +1,4 @@
-"""MetricsCollector: per-phase records, module-level current, runner integration."""
+"""MetricsCollector: per-phase records and runner integration."""
 
 from io import StringIO
 from pathlib import Path
@@ -36,26 +36,6 @@ def test_zero_seconds_has_no_rate():
     assert c.entries()[0].rows_per_second is None
 
 
-def test_timed_phase_is_noop_without_current():
-    metrics.set_current(None)
-    with metrics.timed_phase("postgres", "items", "filter") as t:
-        t.rows = 3  # must not raise
-    assert metrics.current() is None  # nothing was implicitly created
-
-
-def test_timed_phase_records_into_current():
-    c = MetricsCollector()
-    metrics.set_current(c)
-    try:
-        with metrics.timed_phase("postgres", "items", "filter") as t:
-            t.rows = 7
-    finally:
-        metrics.set_current(None)
-    [m] = c.entries()
-    assert (m.backend, m.entity, m.phase, m.rows) == ("postgres", "items", "filter", 7)
-    assert m.seconds >= 0
-
-
 def test_the_phases_are_the_three_reads():
     assert metrics.PHASES == ("infer", "validate", "write")
 
@@ -86,15 +66,3 @@ def test_metrics_table_renders_rows():
     buf.print(metrics_table(c.to_records()))
     text = buf.file.getvalue()
     assert "rows/s" in text and "postgres" in text and "50" in text
-
-
-def test_metrics_table_omits_filter_phase():
-    # The consolidated report already drops `filter`; the terminal table must match.
-    c = MetricsCollector()
-    c.record("postgres", "items", "filter", rows=100, seconds=1.0)
-    c.record("postgres", "items", "write", rows=100, seconds=2.0)
-    buf = Console(file=StringIO(), width=120)
-    buf.print(metrics_table(c.to_records()))
-    text = buf.file.getvalue()
-    assert "filter" not in text
-    assert "write" in text

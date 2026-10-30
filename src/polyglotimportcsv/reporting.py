@@ -12,37 +12,22 @@ from __future__ import annotations
 import logging
 import os
 import re
-from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import IO, Any, Callable, Dict, Iterator, Mapping, Optional, Sequence
+from typing import IO, Any, Dict, Mapping, Optional, Sequence
 
 from rich import box
 from rich.console import Console
 from rich.json import JSON
 from rich.logging import RichHandler
-from rich.progress import (
-    BarColumn,
-    MofNCompleteColumn,
-    Progress,
-    ProgressColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
 from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
-
-from polyglotimportcsv.metrics import EXCLUDED_PHASES
 
 logger = logging.getLogger(__name__)
 
 #: Rows shown per entity by the default data display (CLI --sample).
 DEFAULT_SAMPLE_SIZE = 50
-#: Entities above this many rows get a live progress bar (spec §4.4). Kept
-#: apart from the sample size so choosing a bigger sample does not change when
-#: the bars appear.
-PROGRESS_THRESHOLD = 50
 
 _FILE_FORMAT = "%(asctime)s %(levelname)-8s %(name)s: %(message)s"
 
@@ -259,37 +244,8 @@ def dump_rows_page(rows: Sequence[Dict[str, Any]], start: int) -> None:
         print_rich(line)
 
 
-def dump_entity_frame(
-    backend: str,
-    entity: str,
-    df: Any,
-    *,
-    force: Optional[bool] = None,
-    sample_size: int = DEFAULT_SAMPLE_SIZE,
-) -> None:
-    """Dump an entity's records.
-
-    ``force=True`` shows every row (--show-data), ``force=False`` none
-    (--no-data), and the default shows the first ``sample_size`` rows plus
-    the total (--sample N).
-    """
-    n = len(df)
-    if force is False:
-        note(f"{backend} · {entity}: {n} row(s) (data dump suppressed; --show-data forces it)")
-        logger.debug("%s · %s: data dump suppressed for %d row(s)", backend, entity, n)
-        return
-    label = f"{backend} · {entity}"
-    if force is True or n <= sample_size:
-        dump_rows(label, df.to_dict(orient="records"))
-        return
-    dump_rows(label, df.head(sample_size).to_dict(orient="records"), total=n)
-
-
 def metrics_table(records: Sequence[Dict[str, Any]]) -> Table:
     """Summary table for the end of a run (spec §4.4).
-
-    Phases in ``metrics.EXCLUDED_PHASES`` are left out, matching the consolidated
-    benchmark report.
 
     ``box=box.SQUARE`` is explicit: rich's default ``HEAVY_HEAD`` box only
     gets swapped for a light one (``box.Box.substitute``'s
@@ -310,8 +266,6 @@ def metrics_table(records: Sequence[Dict[str, Any]]) -> Table:
     table.add_column("seconds", justify="right")
     table.add_column("rows/s", justify="right")
     for rec in records:
-        if rec.get("phase") in EXCLUDED_PHASES:
-            continue
         rate = rec.get("rows_per_second")
         table.add_row(
             str(rec.get("backend", "")),
@@ -341,37 +295,3 @@ def backend_text(line: str) -> Text:
     else:
         out.append(f" {rest}")
     return out
-
-
-class _RowRateColumn(ProgressColumn):
-    def render(self, task) -> Text:
-        speed = task.finished_speed or task.speed
-        if speed is None:
-            return Text("- rows/s", style="progress.data.speed")
-        return Text(f"{speed:.0f} rows/s", style="progress.data.speed")
-
-
-@contextmanager
-def entity_progress(description: str, total: int) -> Iterator[Callable[[int], None]]:
-    """Live progress for entities above ``PROGRESS_THRESHOLD`` (spec §4.4).
-
-    An entity at or below the threshold gets no bar: it is small enough that
-    reporting its count once, when it is written, already says enough.
-    No-op (yields a do-nothing advance) then, and also when stdout is not a
-    terminal, since a live bar has nothing to draw itself against.
-    """
-    if total <= PROGRESS_THRESHOLD or not _console.is_terminal:
-        yield lambda n=1: None
-        return
-    progress = Progress(
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        MofNCompleteColumn(),
-        _RowRateColumn(),
-        TimeElapsedColumn(),
-        console=_console,
-        transient=True,
-    )
-    with progress:
-        task_id = progress.add_task(description, total=total)
-        yield lambda n=1: progress.advance(task_id, n)

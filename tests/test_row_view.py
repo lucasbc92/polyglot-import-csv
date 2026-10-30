@@ -11,14 +11,18 @@ of every backend, in both multi and combined mode.
 import json
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
+from polyglotimportcsv.casting import cast_frame
+from polyglotimportcsv.import_plan import plan_import
 from polyglotimportcsv.importers.cassandra_importer import _row_values
 from polyglotimportcsv.importers.neo4j_importer import props_from_row
-from polyglotimportcsv.mapping_resolver import resolve_backend_entities
-from polyglotimportcsv.materialize import mongo_document_from_row, redis_payload_from_row
+from polyglotimportcsv.mapping_resolver import BoundEntity
+from polyglotimportcsv.row_shaping import mongo_document_from_row, redis_payload_from_row
 from polyglotimportcsv.row_view import iter_rows
-from polyglotimportcsv.sources import load_sources
+from polyglotimportcsv.sources import SOURCE_COLUMN
+from polyglotimportcsv.stream_binding import entity_source_names
 
 _REF = Path("data/benchmark")
 _CFG_DIR = Path("data/ecommerce")
@@ -33,6 +37,15 @@ def _typed(obj):
     return type(obj).__name__, obj
 
 
+def _read(profile):
+    """The rows of one source (a plain file, or one origin of a combined file), as strings."""
+    raw = pd.read_csv(profile.path, dtype=str, keep_default_na=False, encoding="utf-8-sig")
+    if profile.declared != profile.name:  # an origin value: the first column says which
+        origin = raw.columns[0]
+        raw = raw[raw[origin] == profile.name].drop(columns=[origin])
+    return raw.assign(**{SOURCE_COLUMN: profile.name})
+
+
 def _bound(mode):
     cfg = json.loads((_CFG_DIR / (
         "import_config_combined.json" if mode == "combined" else "import_config.json"
@@ -42,11 +55,22 @@ def _bound(mode):
     else:
         ov = {s: str(_REF / f"ecommerce_{s}.csv")
               for s in ("stock", "purchase", "select_product", "add_to_cart")}
-    sources = load_sources(cfg.get("sources") or {}, ".", ov)
+    backends = [b for b in ("postgres", "mongodb", "cassandra", "redis", "neo4j") if b in cfg]
+    plan = plan_import(cfg, ".", dbms_names=backends, overrides=ov)
     out = {}
-    for backend in ("postgres", "mongodb", "cassandra", "redis", "neo4j"):
-        if backend in cfg:
-            out[backend] = resolve_backend_entities(cfg[backend], sources)
+    for backend in backends:
+        out[backend] = {}
+        for ename, binding in plan.bindings[backend].items():
+            names = entity_source_names(ename, cfg[backend]["entities"][ename])
+            columns = list(binding.kinds)  # the data columns of the union, then _source
+            frame = pd.concat(
+                [_read(plan.profiles[n]).reindex(columns=columns, fill_value="") for n in names],
+                ignore_index=True,
+            )
+            out[backend][ename] = BoundEntity(
+                name=ename, cfg=binding.cfg, df=cast_frame(frame, binding.kinds),
+                kinds=binding.kinds,
+            )
     return out
 
 

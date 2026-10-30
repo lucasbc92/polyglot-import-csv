@@ -647,8 +647,7 @@ def test_cassandra_close_shuts_down_cluster():
 
 
 # ---------------------------------------------------------------------------
-# Neo4jSink: fake driver/session/tx (mirrors _FakeDriver in
-# test_importer_write_batching). Nodes only; relationships are out of scope.
+# Neo4jSink: fake driver/session/tx. Nodes only; relationships are out of scope.
 # ---------------------------------------------------------------------------
 
 
@@ -801,6 +800,25 @@ def test_neo4j_dedupe_first_wins_holds_across_write_batch_calls():
     assert keys == ["u0", "u1", "u2"]
 
 
+def test_neo4j_write_batch_warns_about_the_duplicate_keys_it_skips(caplog):
+    rec = {"run": [], "tx_run": []}
+    driver = _FakeNeoDriver(rec)
+    sink = Neo4jSink({"connection": {}}, driver_factory=lambda c: driver)
+    binding = _bind_sample(
+        "User", NEO4J_USER_CFG, _user_sample(["u0", "u1"]), "purchase"
+    )
+
+    with caplog.at_level(logging.WARNING, logger="polyglotimportcsv.sinks.neo4j_sink"):
+        written = sink.write_batch("User", binding, _user_sample(["u0", "u1", "u0", "u2", "u1"]))
+
+    assert written == 3
+    assert any(
+        r.levelno == logging.WARNING
+        and "User: 2 duplicate key value(s) skipped" in r.message
+        for r in caplog.records
+    )
+
+
 def test_neo4j_no_nodes_only_warning_when_relationships_declared(caplog):
     rec = {"run": [], "tx_run": []}
     driver = _FakeNeoDriver(rec)
@@ -898,7 +916,7 @@ def test_neo4j_write_relationships_skips_null_endpoints():
     # A genuinely null endpoint key (None, as an all-NaN cast column would yield)
     # is dropped by _rel_rows_for_batch. An empty string, by contrast, survives
     # here and is skipped later by Cypher MATCH (not exercised by the fake
-    # driver) -- both match the materialize path, which uses the same helper.
+    # driver).
     chunk = pd.DataFrame(
         {"user_id": ["u1", None], "product_id": ["p1", "p2"], "order_number": ["o1", "o2"],
          "quantity": ["1", "2"], "price": ["10", "20"], "rating": ["5", "4"],

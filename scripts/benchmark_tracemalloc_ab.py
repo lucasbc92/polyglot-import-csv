@@ -31,7 +31,6 @@ from inspect_persisted_data import CLEANERS
 
 from polyglotimportcsv.benchmark_runner import run_matrix
 from polyglotimportcsv.config_parser import load_config
-from polyglotimportcsv.metrics import EXCLUDED_PHASES
 from polyglotimportcsv.reporting import print_rich, setup_reporting
 from polyglotimportcsv.runner import run_import
 from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB
@@ -55,13 +54,10 @@ def _parse_int_list(raw: str) -> List[int]:
 def reported_seconds(run: Dict[str, Any]) -> float:
     """Total seconds a labeled run contributes to the report.
 
-    Sums the phases the consolidated report keeps, so the number compared here is
+    Sums every phase the consolidated report keeps, so the number compared here is
     the one that ends up in the results, not some separate wall-clock measure.
     """
-    return sum(
-        rec["seconds"] for rec in run["records"]
-        if rec["phase"] not in EXCLUDED_PHASES
-    )
+    return sum(rec["seconds"] for rec in run["records"])
 
 
 def summarize(

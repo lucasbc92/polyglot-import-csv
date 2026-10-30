@@ -1,8 +1,8 @@
-"""Tests for row materialization from entity config."""
+"""Tests for row shaping from entity config."""
 
 import pandas as pd
 
-from polyglotimportcsv.materialize import flatten_entity_dataframe, mongo_document_from_row
+from polyglotimportcsv.row_shaping import flatten_entity_dataframe, mongo_document_from_row
 
 
 def test_mongo_document_nested_columns():

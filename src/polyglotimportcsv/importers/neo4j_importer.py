@@ -1,28 +1,20 @@
-"""Import nodes and relationships into Neo4j."""
+"""Neo4j helpers shared by ``Neo4jSink``: driver, node/edge shaping and UNWIND writes."""
 
 from __future__ import annotations
 
-import logging
 import re
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import pandas as pd
 from neo4j import GraphDatabase
 
-from polyglotimportcsv import metrics
-from polyglotimportcsv.business_exception import ImportExecutionError
 from polyglotimportcsv.entity_utils import (
     flat_leaf_columns,
     resolve_csv_column,
     target_field_name,
 )
-from polyglotimportcsv.filter_engine import apply_filters, expand_each
-from polyglotimportcsv.mapping_resolver import BoundEntity
-from polyglotimportcsv.materialize import cell_scalar
-from polyglotimportcsv.reporting import entity_progress
+from polyglotimportcsv.row_shaping import cell_scalar
 from polyglotimportcsv.row_view import iter_rows
-
-logger = logging.getLogger(__name__)
 
 
 def _sanitize_label(label: str) -> str:
@@ -52,10 +44,10 @@ def props_from_row(row: pd.Series, ecfg: Dict[str, Any]) -> Dict[str, Any]:
 def _dedupe_props(part_df, ecfg, key_name, props_from_row, seen: Optional[Set[Any]] = None):
     """First-wins dedupe by key; returns (list-of-props, skipped_count).
 
-    ``seen`` defaults to a fresh set (one call = one dedupe scope, as used by
-    the materialize importer). Pass a set kept across calls (as
-    ``Neo4jSink.write_batch`` does, keyed per partition) to make first-wins
-    hold across a whole streaming pass instead of just within one batch.
+    ``seen`` defaults to a fresh set (one call = one dedupe scope). Pass a set
+    kept across calls (as ``Neo4jSink.write_batch`` does, keyed per partition)
+    to make first-wins hold across a whole streaming pass instead of just
+    within one batch.
     """
     if seen is None:
         seen = set()
@@ -131,114 +123,3 @@ def _merge_rels_batched(
         count += len(chunk)
         advance(len(chunk))
     return count
-
-
-def run_neo4j_import(
-    backend_cfg: Dict[str, Any],
-    entities: Dict[str, "BoundEntity"],
-    *,
-    dry_run: bool,
-    create_schema: bool,
-    driver_factory: Callable[[Dict[str, Any]], Any] = _default_neo4j_driver,
-) -> List[str]:
-    lines: List[str] = []
-    conn = backend_cfg.get("connection") or {}
-    relationships = backend_cfg.get("relationships") or {}
-
-    if dry_run:
-        lines.append("[neo4j] dry-run: would MERGE nodes and relationships.")
-        for ename, be in entities.items():
-            non_each = [f for f in (be.cfg.get("filters") or []) if f.get("operator") != "each"]
-            with metrics.timed_phase("neo4j", ename, "filter") as t:
-                dff = apply_filters(be.df, non_each, be.kinds)
-                t.rows = len(dff)
-            for part_name, part_df in expand_each(dff, be.cfg.get("filters") or [], ename):
-                lines.append(f"  label {part_name}: {len(part_df)} row(s)")
-        for rname, rspec in (relationships or {}).items():
-            lines.append(f"  relationship type {rspec.get('type', rname)}")
-        return lines
-
-    database = conn.get("database") or None
-
-    try:
-        driver = driver_factory(conn)
-    except ImportExecutionError:
-        raise
-    except Exception as e:
-        raise ImportExecutionError(f"Neo4j connection failed: {e}") from e
-
-    with driver.session(database=database) as session:
-        if create_schema:
-            for ename, be in entities.items():
-                key_cols = [(fk, sp) for fk, _, sp in flat_leaf_columns(be.cfg) if sp.get("is_key")]
-                if len(key_cols) == 1:
-                    kn = target_field_name(*key_cols[0])
-                    lbl = _sanitize_label(ename)
-                    session.run(
-                        f"CREATE CONSTRAINT IF NOT EXISTS "
-                        f"FOR (n:{lbl}) REQUIRE n.{kn} IS UNIQUE"
-                    )
-
-        for ename, be in entities.items():
-            key_cols = [
-                (fk, sp) for fk, _, sp in flat_leaf_columns(be.cfg) if sp.get("is_key")
-            ]
-            if len(key_cols) != 1:
-                raise ImportExecutionError(f"Neo4j entity '{ename}' must have exactly one is_key column.")
-            key_field, key_spec = key_cols[0]
-            key_name = target_field_name(key_field, key_spec)
-            key_src = resolve_csv_column(key_field, key_spec, list(be.df.columns))
-            label = _sanitize_label(ename)
-            non_each = [f for f in (be.cfg.get("filters") or []) if f.get("operator") != "each"]
-            with metrics.timed_phase("neo4j", ename, "filter") as t:
-                dff = apply_filters(be.df, non_each, be.kinds)
-                t.rows = len(dff)
-            for part_name, part_df in expand_each(dff, be.cfg.get("filters") or [], ename):
-                plabel = _sanitize_label(part_name)
-                logger.debug("[neo4j] MERGE label %s (%d row(s))", plabel, len(part_df))
-                if part_df.empty:
-                    logger.warning("[neo4j] label %s has 0 row(s) after filters", part_name)
-                with metrics.timed_phase("neo4j", part_name, "write") as tw:
-                    props_list, skipped = _dedupe_props(part_df, be.cfg, key_name, props_from_row)
-                    with entity_progress(f"neo4j · {part_name}", len(props_list)) as advance:
-                        merged = _merge_nodes_batched(session, plabel, key_name, props_list, advance)
-                    tw.rows = merged
-                if skipped:
-                    logger.warning(
-                        "[neo4j] %s: %d duplicate key value(s) skipped (first MERGE wins)",
-                        part_name, skipped,
-                    )
-                lines.append(f"[neo4j] merged {merged} node(s) :{plabel}")
-
-        for rname, rspec in (relationships or {}).items():
-            from_label = _sanitize_label(rspec["from"])
-            to_label = _sanitize_label(rspec["to"])
-            rel_type = _sanitize_label(rspec.get("type") or rname)
-            from_be = entities[rspec["from"]]
-            to_be = entities[rspec["to"]]
-            fk_from = [(fk, sp) for fk, _, sp in flat_leaf_columns(from_be.cfg) if sp.get("is_key")][0]
-            fk_to = [(fk, sp) for fk, _, sp in flat_leaf_columns(to_be.cfg) if sp.get("is_key")][0]
-            from_key = target_field_name(fk_from[0], fk_from[1])
-            to_key = target_field_name(fk_to[0], fk_to[1])
-            from_src = resolve_csv_column(fk_from[0], fk_from[1], list(from_be.df.columns))
-            to_src = resolve_csv_column(fk_to[0], fk_to[1], list(from_be.df.columns))
-            rel_cols = rspec.get("columns") or {}
-            mk_names = [
-                target_field_name(fk, spec)
-                for fk, spec in rel_cols.items()
-                if spec.get("is_key")
-            ]
-            f1 = [x for x in (from_be.cfg.get("filters") or []) if x.get("operator") != "each"]
-            dff = apply_filters(from_be.df, f1, from_be.kinds)
-            with metrics.timed_phase("neo4j", f"rel:{rel_type}", "write") as tw:
-                rows = _rel_rows_for_batch(dff, from_src, to_src, rel_cols, mk_names)
-                with entity_progress(f"neo4j · :{rel_type}", len(rows)) as advance:
-                    count = _merge_rels_batched(
-                        session, from_label, from_key, to_label, to_key, rel_type,
-                        mk_names, rows, advance,
-                    )
-                tw.rows = count
-            lines.append(f"[neo4j] merged {count} relationship(s) :{rel_type}")
-
-    driver.close()
-    return lines

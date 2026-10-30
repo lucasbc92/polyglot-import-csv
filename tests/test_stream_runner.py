@@ -130,8 +130,8 @@ def test_stream_import_batches_flushes_and_partitions(tmp_path):
 
 def test_stream_import_unions_heterogeneous_multi_sources(tmp_path):
     # Two sources with disjoint extra columns: the streamed union must widen
-    # every chunk to the superset (missing cells filled ""), exactly as
-    # mapping_resolver._union_source does for the materialize path.
+    # every chunk to the superset (missing cells filled ""), as
+    # mapping_resolver._union_source does.
     _write_csv(tmp_path / "a.csv", ["id", "a_col"], [(i, f"a{i}") for i in range(3)])
     _write_csv(tmp_path / "b.csv", ["id", "b_col"], [(i, f"b{i}") for i in range(2)])
     config = {
