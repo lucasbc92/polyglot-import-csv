@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from polyglotimportcsv import validation
-from polyglotimportcsv.business_exception import MappingError
+from polyglotimportcsv import stream_source, validation
+from polyglotimportcsv.business_exception import MappingError, SourceError
 from polyglotimportcsv.gui import preflight
 from polyglotimportcsv.gui.state import RunOptions
 
@@ -291,6 +291,33 @@ def test_preflight_runs_the_shared_header_validation(ecommerce, monkeypatch):
 
     monkeypatch.setattr(validation, "validate_headers", failing)
     assert _check(ecommerce).errors == {"config_path": "x"}
+
+
+def test_preflight_resolves_every_source_path_with_the_cli_function(ecommerce, monkeypatch):
+    """The GUI owns no path rule: a declared file and an override resolve as the CLI's."""
+    seen = []
+    real = stream_source.source_file
+
+    def spy(name, decl, base_dir, overrides):
+        seen.append((name, dict(overrides)))
+        return real(name, decl, base_dir, overrides)
+
+    monkeypatch.setattr(stream_source, "source_file", spy)
+    stock = ecommerce / "ecommerce_stock.csv"
+    assert _check(ecommerce, sources=(("stock", stock),)).errors == {}
+    assert {name for name, _ in seen} == {"stock", "purchase", "select_product", "add_to_cart"}
+    assert all(overrides == {"stock": stock} for _, overrides in seen)
+
+
+def test_preflight_applies_the_combined_header_rule_of_the_cli(ecommerce, monkeypatch):
+    """The GUI owns no source-shape rule: what the shared helper raises is shown as is."""
+
+    def refusing(name, header, path):
+        raise SourceError("the shared rule said no")
+
+    monkeypatch.setattr(stream_source, "combined_data_columns", refusing)
+    result = _check(ecommerce, "import_config_combined.json")
+    assert result.errors == {"config_path": "the shared rule said no"}
 
 
 def test_a_cached_exception_does_not_accumulate_traceback_frames(ecommerce):

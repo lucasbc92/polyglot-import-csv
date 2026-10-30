@@ -10,6 +10,7 @@ from neo4j import GraphDatabase
 
 from polyglotimportcsv.entity_utils import (
     flat_leaf_columns,
+    is_empty_reference,
     resolve_csv_column,
     target_field_name,
 )
@@ -81,12 +82,15 @@ def _merge_nodes_batched(session, plabel, key_name, props_list, advance, batch: 
 
 
 def _rel_rows_for_batch(dff, from_src, to_src, rel_cols, mk_names):
-    """Shape rows for UNWIND batching: (a_id, b_id, rest_props, mk_params)."""
+    """Shape rows for UNWIND batching: (a_id, b_id, rest_props, mk_params).
+
+    A row with an empty endpoint (``is_empty_reference``) makes no edge and is left out.
+    """
     rows: List[Tuple[Any, Any, Dict[str, Any], Dict[str, Any]]] = []
     for row in iter_rows(dff):
         a_id = cell_scalar(row[from_src] if from_src in row.index else None)
         b_id = cell_scalar(row[to_src] if to_src in row.index else None)
-        if a_id is None or b_id is None:
+        if is_empty_reference(a_id) or is_empty_reference(b_id):
             continue
         rel_props: Dict[str, Any] = {}
         csv_columns = row.index

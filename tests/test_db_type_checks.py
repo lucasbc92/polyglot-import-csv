@@ -10,6 +10,7 @@ from decimal import Decimal
 
 from polyglotimportcsv.db_type_checks import (
     cassandra_value_problem,
+    int64_value_problem,
     postgres_stored_value,
     postgres_value_problem,
 )
@@ -460,3 +461,16 @@ _PG_STORED = [
 def test_postgres_stored_value(db_type, value, stored):
     out = postgres_stored_value(db_type, value)
     assert out == stored and type(out) is type(stored)
+
+
+@pytest.mark.parametrize("value,ok", [
+    (2**63 - 1, True), (-(2**63), True), (0, True),
+    (2**63, False), (-(2**63) - 1, False), (12345678901234567890, False),
+    (np.int64(5), True), (np.uint64(2**63 - 1), True), (np.uint64(2**63), False),
+    # only an integer is out of range: any other value is left to its own rules
+    (None, True), (True, True), (1e30, True), ("12345678901234567890", True),
+])
+def test_int64_value_problem(value, ok):
+    reason = int64_value_problem(value)
+    assert (reason is None) == ok
+    assert ok or reason == "out of 64-bit integer range"

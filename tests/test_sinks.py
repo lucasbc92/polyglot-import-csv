@@ -914,9 +914,7 @@ def test_neo4j_write_relationships_skips_null_endpoints():
         "stock",
     )
     # A genuinely null endpoint key (None, as an all-NaN cast column would yield)
-    # is dropped by _rel_rows_for_batch. An empty string, by contrast, survives
-    # here and is skipped later by Cypher MATCH (not exercised by the fake
-    # driver).
+    # is dropped by _rel_rows_for_batch.
     chunk = pd.DataFrame(
         {"user_id": ["u1", None], "product_id": ["p1", "p2"], "order_number": ["o1", "o2"],
          "quantity": ["1", "2"], "price": ["10", "20"], "rating": ["5", "4"],
@@ -927,3 +925,31 @@ def test_neo4j_write_relationships_skips_null_endpoints():
 
     # The row with a null user_id (a_id None) is dropped; only 1 edge shaped.
     assert count == 1
+
+
+def test_neo4j_write_relationships_skips_empty_text_endpoints():
+    # An empty endpoint means no relationship: such a row is neither sent nor counted,
+    # for either end.
+    rec = {"run": [], "tx_run": []}
+    driver = _FakeNeoDriver(rec)
+    sink = Neo4jSink({"connection": {}}, driver_factory=lambda c: driver)
+
+    from_binding = _bind_sample("User", NEO4J_USER_CFG, _user_sample(["u1"]), "purchase")
+    to_binding = _bind_sample(
+        "Product", NEO4J_PRODUCT_CFG,
+        pd.DataFrame({"product_id": ["p1"], "product_name": ["a"],
+                      "product_brand": ["x"], SOURCE_COLUMN: ["stock"]}),
+        "stock",
+    )
+    chunk = pd.DataFrame(
+        {"user_id": ["u1", "", "u3", None], "product_id": ["p1", "p2", "", "p4"],
+         "order_number": ["o1", "o2", "o3", "o4"], "quantity": ["1", "2", "3", "4"],
+         "price": ["10", "20", "30", "40"], "rating": ["5", "4", "3", "2"],
+         SOURCE_COLUMN: ["purchase"] * 4}
+    )
+
+    count = sink.write_relationships("PURCHASED", PURCHASED_RSPEC, from_binding, to_binding, chunk)
+
+    assert count == 1
+    (payload,) = [p["batch"] for q, p in rec["tx_run"] if "UNWIND" in q and "MERGE (a)" in q]
+    assert [(r["a_id"], r["b_id"]) for r in payload] == [("u1", "p1")]

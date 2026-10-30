@@ -18,18 +18,22 @@ from polyglotimportcsv.business_exception import (
     ConfigError,
     DataValidationError,
     DbmsUnavailableError,
+    ImportExecutionError,
     MappingError,
 )
 from polyglotimportcsv.metrics import MetricsCollector
 from polyglotimportcsv.runner import run_check, run_import
 from polyglotimportcsv.stream_runner import StreamCounts
+from polyglotimportcsv.stream_source import chunk_rows
 
 ROOT = Path(__file__).resolve().parents[1]
 CFG = ROOT / "data" / "ecommerce" / "import_config.json"
 
 _CONNECTIONS = {
     "postgres": {"connection": {"host": "127.0.0.1"}},
+    "mongodb": {"connection": {"uri": "mongodb://127.0.0.1:27017", "database": "t"}},
     "redis": {"connection": {"host": "127.0.0.1"}},
+    "neo4j": {"connection": {"uri": "bolt://127.0.0.1:7687", "user": "u", "password": "p"}},
 }
 
 
@@ -135,6 +139,80 @@ def test_a_validation_error_stops_before_any_sink_is_built(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "Data validation problems" in out
     assert "not_convertible" in out and "2023-02-30" in out
+
+
+def test_a_foreign_key_to_a_column_that_is_not_the_key_stops_before_any_sink_is_built(tmp_path):
+    _write_csv(tmp_path / "u.csv", ["uid", "email"], [(1, "a@x"), (2, "b@x")])
+    _write_csv(tmp_path / "o.csv", ["oid", "email"], [(1, "a@x"), (2, "b@x")])
+    cfg = _config_file(tmp_path, {
+        "sources": {"u": "u.csv", "o": "o.csv"},
+        "postgres": {
+            "entities": {
+                "users": {"source": "u", "columns": {"uid": {"is_key": True}, "email": {}}},
+                "orders": {"source": "o", "columns": {"oid": {"is_key": True}, "email": {}}},
+            },
+            "relationships": {"r": {"from": "orders", "to": "users", "foreign_key": "email"}},
+        },
+    })
+    built = []
+    with pytest.raises(MappingError, match="not the key of entity 'users'"):
+        run_import(cfg, sink_factories=_factories(built=built))
+    assert built == []
+
+
+@pytest.mark.parametrize("dbms", ["mongodb", "neo4j"])
+def test_an_integer_beyond_64_bits_stops_before_any_sink_is_built(tmp_path, dbms):
+    _write_csv(tmp_path / "ev.csv", ["id", "n"], [(1, 5), (2, 12345678901234567890)])
+    cfg = _config_file(tmp_path, {
+        "sources": {"ev": "ev.csv"},
+        "postgres": {"entities": {"events": {
+            "source": "ev", "columns": {"id": {"is_key": True}, "n": {}},
+        }}},
+        dbms: {"entities": {"events": {
+            "source": "ev", "columns": {"id": {"is_key": True}, "n": {}},
+        }}},
+    })
+    built = []
+    with pytest.raises(DataValidationError, match="nothing was written"):
+        run_import(cfg, sink_factories=_factories(built=built))
+    assert built == []
+
+
+class _FailingSink(_FakeSink):
+    def write_batch(self, partition_name, binding, batch):
+        raise RuntimeError("the DBMS went away")
+
+
+def test_a_write_failure_names_the_failed_dbms_and_those_already_written(tmp_path):
+    cfg = _events(tmp_path)
+    written = []
+    factories = {**_factories(written), "redis": lambda cfg: _FailingSink("redis", written)}
+    with pytest.raises(ImportExecutionError) as exc:
+        run_import(cfg, sink_factories=factories)
+    assert str(exc.value) == (
+        "Write to redis failed (RuntimeError: the DBMS went away); already written: postgres; "
+        "redis may be partly written."
+    )
+    assert isinstance(exc.value.__cause__, RuntimeError)
+    assert written == [("postgres", "events", 10)]
+
+
+def test_a_write_failure_of_the_first_dbms_says_nothing_was_written_before(tmp_path):
+    cfg = _events(tmp_path)
+    factories = {**_factories(), "postgres": lambda cfg: _FailingSink("postgres", [])}
+    with pytest.raises(ImportExecutionError, match=r"already written: none;"):
+        run_import(cfg, sink_factories=factories)
+
+
+def test_a_business_error_of_a_sink_is_not_wrapped(tmp_path):
+    cfg = _events(tmp_path)
+
+    def refusing(backend_cfg):
+        raise ImportExecutionError("Redis connection failed: refused")
+
+    with pytest.raises(ImportExecutionError) as exc:
+        run_import(cfg, sink_factories={**_factories(), "redis": refusing})
+    assert str(exc.value) == "Redis connection failed: refused"
 
 
 def test_steps_run_in_order(tmp_path, monkeypatch, capsys):
@@ -325,15 +403,16 @@ def test_the_default_display_is_a_sample_of_fifty_rows(tmp_path, capsys, dry_run
 
 
 _CAST_LOGGER = logging.getLogger("polyglotimportcsv.casting")
-_QTY_WARNING = "column 'qty': 1 value(s) could not be cast to integer and stayed text"
+_WHEN_WARNING = "column 'when': 1 value(s) could not be cast to datetime and became None"
 
 
 def _unmapped_cast_fallback(tmp_path):
-    """ev.csv with an unmapped qty column holding one value the integer cast leaves as
-    text: a cast warning in each read that casts it, not a validation error."""
-    qty = [str(i) for i in range(10)]
-    qty[4] = "3.0"  # integral, so the column is integer; int("3.0") fails and the text stays
-    _write_csv(tmp_path / "ev.csv", ["id", "qty"], list(zip(range(10), qty)))
+    """ev.csv with an unmapped ``when`` column holding one impossible date the datetime
+    cast turns into None: a cast warning in each read that casts it, not a validation
+    error."""
+    when = [f"2023-01-{1 + i % 28:02d}" for i in range(10)]
+    when[4] = "2023-02-30"
+    _write_csv(tmp_path / "ev.csv", ["id", "when"], list(zip(range(10), when)))
     return _config_file(tmp_path, {
         "sources": {"ev": "ev.csv"},
         "postgres": {"entities": {"events": {"source": "ev", "columns": {"id": {"is_key": True}}}}},
@@ -350,8 +429,40 @@ def test_the_write_does_not_repeat_the_cast_warnings_of_the_validation_read(tmp_
     with caplog.at_level(logging.WARNING, logger=_CAST_LOGGER.name):
         run_import(cfg, sink_factories=_factories())
 
-    assert _cast_messages(caplog) == [_QTY_WARNING]
+    assert _cast_messages(caplog) == [_WHEN_WARNING]
     assert _CAST_LOGGER.filters == []
+
+
+def test_a_cast_warning_is_logged_once_per_source_and_column(tmp_path, monkeypatch, caplog):
+    # Two DBMS read ev.csv in several blocks; the impossible dates fall in two of them (one
+    # value, then two, so the warnings of the blocks differ in their text). The validation
+    # read logs that column of that source once, and the write read none of it again.
+    when = [f"2023-01-{1 + i % 28:02d}" for i in range(40)]
+    when[2] = "2023-02-30"
+    when[23] = when[24] = "2023-02-31"
+    _write_csv(tmp_path / "ev.csv", ["id", "when"], list(zip(range(40), when)))
+    cfg = _config_file(tmp_path, {
+        "sources": {"ev": "ev.csv"},
+        "postgres": {"entities": {"events": {"source": "ev", "columns": {"id": {"is_key": True}}}}},
+        "redis": {"entities": {"sessions": {"source": "ev", "columns": {"id": {"is_key": True}}}}},
+    })
+    chunk_mb = 0.0003
+    assert chunk_rows("ev", tmp_path / "ev.csv", chunk_mb) <= 5  # blocks of a few rows
+    logged = []
+    real = runner.run_stream_import
+
+    def spy(*args, **kwargs):
+        logged.append(len(_cast_messages(caplog)))  # what the validation read logged
+        result = real(*args, **kwargs)
+        logged.append(len(_cast_messages(caplog)))  # and after the write read
+        return result
+
+    monkeypatch.setattr(runner, "run_stream_import", spy)
+    with caplog.at_level(logging.WARNING, logger=_CAST_LOGGER.name):
+        run_import(cfg, sink_factories=_factories(), chunk_size_mb=chunk_mb)
+
+    assert logged == [1, 1]
+    assert "'when'" in _cast_messages(caplog)[0]
 
 
 def test_a_cast_warning_only_the_write_emits_still_prints(tmp_path, monkeypatch, caplog):
@@ -361,13 +472,13 @@ def test_a_cast_warning_only_the_write_emits_still_prints(tmp_path, monkeypatch,
 
     def write_with_a_new_warning(*args, **kwargs):
         _CAST_LOGGER.warning(new)
-        return real(*args, **kwargs)  # casts qty again: the repeat is dropped
+        return real(*args, **kwargs)  # casts when again: the repeat is dropped
 
     monkeypatch.setattr(runner, "run_stream_import", write_with_a_new_warning)
     with caplog.at_level(logging.WARNING, logger=_CAST_LOGGER.name):
         run_import(cfg, sink_factories=_factories())
 
-    assert _cast_messages(caplog) == [_QTY_WARNING, new]
+    assert _cast_messages(caplog) == [_WHEN_WARNING, new]
 
 
 def test_no_cast_filter_or_handler_is_left_when_a_read_fails(tmp_path, monkeypatch):
@@ -438,6 +549,14 @@ def test_run_check_raises_when_only_matches_no_declared_dbms(monkeypatch):
     monkeypatch.setattr("polyglotimportcsv.dbms_check.probe", _must_not_run)
     with pytest.raises(ConfigError, match=r"No target DBMS to check"):
         run_check(CFG, only=["postgre"])
+
+
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_run_import_raises_when_only_matches_no_declared_dbms(monkeypatch, dry_run):
+    monkeypatch.setattr(runner, "read_source_headers", _must_not_run)
+    monkeypatch.setattr(runner, "plan_import", _must_not_run)
+    with pytest.raises(ConfigError, match=r"No target DBMS to check.*--only selected postgre\."):
+        run_import(CFG, only=["postgre"], dry_run=dry_run, sink_factories=_factories())
 
 
 def test_start_commands_are_never_wrapped(monkeypatch, capsys):

@@ -1,4 +1,4 @@
-"""Neo4jSink: DbmsSink adapter for Neo4j (spec: streaming import, Task 5).
+"""Neo4jSink: DbmsSink adapter for Neo4j.
 
 Writes both nodes (pass 1) and relationships (pass 2, if declared). Relationships
 are written by a second pass driven by ``stream_runner`` calling ``write_relationships``.

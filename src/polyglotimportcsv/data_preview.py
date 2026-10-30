@@ -28,7 +28,7 @@ def _label(key: _Key) -> str:
 
 
 class StreamDataPreview:
-    """Collect what the stream path writes, for the per-entity data display.
+    """Collect the batches the engine hands to the sinks, for the per-entity data display.
 
     ``show_data`` follows the CLI tri-state: ``None`` samples the first
     ``sample_size`` rows of each partition, ``True`` prints every row, and

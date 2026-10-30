@@ -31,18 +31,17 @@ def check_name_is_free(taken: Container[str], name: str) -> None:
         )
 
 
-def _resolve_path(
+def resolve_path(
     name: str, declared: str, base_dir: Path, overrides: Dict[str, str]
 ) -> Path:
+    """The CSV path source ``name`` reads: its override, else the declared file.
+
+    The file need not exist.
+    """
     override = overrides.get(name)
     if override is not None:
         # Overrides are supplied at run time (--source NAME=PATH), so relative
         # paths follow the current working directory, not the config's folder.
-        path = Path(override)
-    else:
-        path = Path(declared)
-        if not path.is_absolute():
-            path = base_dir / path
-    if not path.is_file():
-        raise SourceError(f"Source '{name}': CSV file not found: {path}")
-    return path
+        return Path(override)
+    path = Path(declared)
+    return path if path.is_absolute() else base_dir / path

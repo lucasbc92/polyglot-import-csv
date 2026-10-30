@@ -352,6 +352,15 @@ def test_cli_check_dbms_exits_one_when_only_matches_no_declared_dbms(monkeypatch
     assert "No target DBMS to check" in result.output
 
 
+def test_cli_import_exits_one_when_only_matches_no_declared_dbms():
+    result = CliRunner().invoke(main, [
+        "--config", str(ECOMMERCE / "import_config.json"), "--dry-run", "--only", "postgre",
+    ])
+    assert result.exit_code == 1
+    assert "No target DBMS to check" in result.output
+    assert "--only selected postgre" in result.output
+
+
 def test_cli_check_dbms_end_to_end_shows_the_start_command(monkeypatch):
     monkeypatch.setattr("polyglotimportcsv.dbms_check.probe", lambda ep, timeout=2.0: False)
     result = CliRunner().invoke(main, [

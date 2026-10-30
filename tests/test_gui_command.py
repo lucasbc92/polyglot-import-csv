@@ -11,10 +11,10 @@ CFG = Path("/proj/import_config.json")
 def test_the_default_state_spells_every_option_out():
     """Q1: a control at its default value must still appear in the command.
 
-    The first version emitted only what differed from the CLI defaults, so
-    clicking "Criar esquema" produced no visible change and the control looked
-    dead. Verbosity is the point here: the shown command is a teaching aid,
-    not the shortest line a person could type.
+    The command spells out every option, not only those that differ from the
+    CLI defaults: otherwise clicking "Criar esquema" would change nothing
+    visible and the control would look dead. Verbosity is the point here: the
+    shown command is a teaching aid, not the shortest line a person could type.
     """
     assert build_argv(RunOptions(config_path=CFG)) == [
         "--config", str(CFG),

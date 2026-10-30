@@ -43,10 +43,15 @@ def _dates(n):
     return [f"2023-01-{1 + i % 28:02d}" for i in range(n)]
 
 
-def _validate(tmp_path, config, dbms_names=None):
+def _validate(tmp_path, config, dbms_names=None, kinds=None):
+    """Validate ``config`` over the CSVs in ``tmp_path``. ``kinds`` forces the kind of
+    columns the inference would not give that kind, to reach the casts that can fail."""
     plan = plan_import(config, tmp_path, dbms_names=dbms_names or [
         b for b in BACKENDS if b in config
     ])
+    for entities in plan.bindings.values():
+        for binding in entities.values():
+            binding.kinds.update({c: k for c, k in (kinds or {}).items() if c in binding.kinds})
     return validate_data(plan)
 
 
@@ -86,27 +91,43 @@ def test_the_same_bad_date_in_an_unmapped_column_is_not(tmp_path):
 
 def test_integer_text_fallback_is_an_error(tmp_path):
     qty = [str(i) for i in range(10)]
-    qty[4] = "3.0"  # integral, so the column is integer; int("3.0") fails, the text stays
+    qty[4] = "n/a"  # the inference calls the column text: forced to integer, the text stays
     _write_csv(tmp_path / "ev.csv", ["id", "qty"], list(zip(range(10), qty)))
-    report, _ = _validate(tmp_path, _events_config({"id": {"is_key": True}, "qty": {}}))
+    report, _ = _validate(tmp_path, _events_config({"id": {"is_key": True}, "qty": {}}),
+                          kinds={"qty": "integer"})
     group = _only_group(report)
     assert (group.rule, group.where) == ("not_convertible", "postgres · events")
     assert "qty" in group.detail and "integer" in group.detail
-    assert [(e.line, e.value) for e in group.examples] == [(6, "3.0")]
+    assert [(e.line, e.value) for e in group.examples] == [(6, "n/a")]
+
+
+def test_integral_numbers_in_an_integer_column_are_valid_and_cast_exactly(tmp_path):
+    # pandas writes an integer column with a missing value as 1.0, 2.0; spreadsheets write
+    # 10.0. The inference counts them as integers and the cast converts them.
+    qty = ["1.0", "", "3.0", "1e3", "9007199254740993.0"]
+    _write_csv(tmp_path / "ev.csv", ["id", "qty"], list(zip(range(5), qty)))
+    config = _events_config({"id": {"is_key": True}, "qty": {}}, dbms="mongodb")
+    plan = plan_import(config, tmp_path, dbms_names=["mongodb"])
+    assert plan.bindings["mongodb"]["events"].kinds["qty"] == "integer"
+    cast = []
+    report, _ = validate_data(plan, on_batch=lambda dbms, part, frame: cast.extend(frame["qty"]))
+    assert report.ok(), _report_text(report)
+    assert cast == [1, None, 3, 1000, 9007199254740993]  # exact: a float gives ...992
+    assert all(v is None or type(v) is int for v in cast)
 
 
 def test_an_each_split_entity_is_one_place_and_its_each_column_is_checked(tmp_path):
     when = _dates(20)
     when[1] = when[12] = "2023-02-30"
     region = ["1" if i % 2 else "2" for i in range(20)]
-    region[5] = "3.0"
+    region[5] = "n/a"  # forced to integer below, so that it is the one that does not convert
     _write_csv(tmp_path / "ev.csv", ["id", "when", "region"], list(zip(range(20), when, region)))
     config = _events_config(
         {"id": {"is_key": True}, "when": {}},
         filters=[{"column": "region", "operator": "each"}],
     )
-    report, counts = _validate(tmp_path, config)
-    assert set(counts.written["postgres"]) == {"events_1", "events_2", "events_3_0"}
+    report, counts = _validate(tmp_path, config, kinds={"region": "integer"})
+    assert set(counts.written["postgres"]) == {"events_1", "events_2", "events_n_a"}
     by_rule = {g.rule + ":" + g.detail.split("'")[1]: g for g in report.groups()}
     assert set(by_rule) == {"not_convertible:when", "not_convertible:region"}
     dates = by_rule["not_convertible:when"]
@@ -185,6 +206,50 @@ def test_a_value_out_of_the_cassandra_bigint_range_is_an_error(tmp_path):
     assert [(e.line, e.value, e.reason) for e in group.examples] == [
         (7, str(2**64), "out of bigint range")
     ]
+
+
+def _int64_config():
+    entity = {"source": "ev", "columns": {"id": {"is_key": True}, "n": {}}}
+    return {"sources": {"ev": "ev.csv"},
+            "mongodb": {"entities": {"events": dict(entity)}},
+            "neo4j": {"entities": {"events": dict(entity)}},
+            "redis": {"entities": {"events": dict(entity)}}}
+
+
+def test_an_integer_beyond_64_bits_is_an_error_for_mongodb_and_neo4j(tmp_path):
+    # BSON and the Neo4j packer refuse it in the middle of the write; Redis (JSON) takes it.
+    n = ["5", "9223372036854775807", "12345678901234567890", "-9223372036854775808",
+         "-9223372036854775809"]
+    _write_csv(tmp_path / "ev.csv", ["id", "n"], list(zip(range(5), n)))
+    report, _ = _validate(tmp_path, _int64_config())
+    assert [(g.rule, g.where, g.count) for g in report.groups()] == [
+        ("db_type", "mongodb · events", 2), ("db_type", "neo4j · events", 2),
+    ]
+    for group in report.groups():
+        assert "n" in group.detail and "64-bit" in group.detail
+        assert [(e.file, e.line, e.column, e.value, e.reason) for e in group.examples] == [
+            ("ev.csv", 4, "n", "12345678901234567890", "out of 64-bit integer range"),
+            ("ev.csv", 6, "n", "-9223372036854775809", "out of 64-bit integer range"),
+        ]
+
+
+def test_the_64_bit_limits_themselves_are_valid(tmp_path):
+    n = ["5", "9223372036854775807", "-9223372036854775808"]
+    _write_csv(tmp_path / "ev.csv", ["id", "n"], list(zip(range(3), n)))
+    report, _ = _validate(tmp_path, _int64_config())
+    assert report.ok(), _report_text(report)
+
+
+def test_the_64_bit_rule_covers_mapped_columns_and_neo4j_relationship_properties(tmp_path):
+    big = "12345678901234567890"
+    # `other` is not mapped: nothing sends it. `quantity` is an edge property.
+    _write_csv(tmp_path / "stock.csv", ["product_id"], [(1,), (2,)])
+    _write_csv(tmp_path / "purchase.csv", ["user_id", "product_id", "order_number", "quantity", "other"],
+               [("u1", 1, "o1", 1, big), ("u2", 2, "o2", big, big), ("u3", "", "o3", big, 1)])
+    report, _ = _validate(tmp_path, _graph_config())
+    group = _only_group(report)  # no edge for u3: its property is not sent
+    assert (group.rule, group.where, group.count) == ("db_type", "neo4j · PURCHASED", 1)
+    assert [(e.line, e.column, e.value) for e in group.examples] == [(3, "quantity", big)]
 
 
 def _shop_config(customer_filters=None):
@@ -310,8 +375,9 @@ def test_an_empty_text_endpoint_is_not_an_error(tmp_path):
     _write_csv(tmp_path / "stock.csv", ["product_id"], [("p1",), ("p2",)])
     _write_csv(tmp_path / "purchase.csv", ["user_id", "product_id", "order_number", "quantity"],
                [("u1", "p1", "o1", 1), ("u2", "", "o2", 1)])
-    report, _ = _validate(tmp_path, _graph_config())
+    report, counts = _validate(tmp_path, _graph_config())
     assert report.ok()
+    assert counts.written["neo4j"][":PURCHASED"] == 1  # only the edges that get created
 
 
 @pytest.mark.parametrize("numbers", [("o1", "o4"), (1, 4)])  # text "", or cast None
@@ -330,20 +396,20 @@ def test_an_empty_relationship_merge_key_is_an_error(tmp_path, numbers):
 
 
 def test_a_bad_property_on_a_row_that_makes_no_edge_is_not_an_error(tmp_path):
-    _write_graph(tmp_path, [("u1", 1, "o1", "1"), ("u2", "", "o2", "2.0"), ("u3", 2, "o3", "3")])
-    report, _ = _validate(tmp_path, _graph_config())
+    _write_graph(tmp_path, [("u1", 1, "o1", "1"), ("u2", "", "o2", "n/a"), ("u3", 2, "o3", "3")])
+    report, _ = _validate(tmp_path, _graph_config(), kinds={"quantity": "integer"})
     assert report.ok()
 
 
 def test_an_unconvertible_relationship_property_is_an_error(tmp_path):
     quantity = [str(i) for i in range(10)]
-    quantity[6] = "2.0"
+    quantity[6] = "n/a"
     _write_graph(tmp_path, [(f"u{i}", 1 + i % 3, f"o{i}", q) for i, q in enumerate(quantity)])
-    report, _ = _validate(tmp_path, _graph_config())
+    report, _ = _validate(tmp_path, _graph_config(), kinds={"quantity": "integer"})
     group = _only_group(report)
     assert (group.rule, group.where) == ("not_convertible", "neo4j · PURCHASED")
     assert "quantity" in group.detail
-    assert [(e.line, e.column, e.value) for e in group.examples] == [(8, "quantity", "2.0")]
+    assert [(e.line, e.column, e.value) for e in group.examples] == [(8, "quantity", "n/a")]
 
 
 def test_at_most_five_examples_but_every_occurrence_counted(tmp_path):
@@ -396,6 +462,43 @@ def test_print_validation_report_lists_each_group_with_its_examples(capsys, monk
                  "orders.csv:5 amount=n/a (not an integer)", 'cart.csv:9 id=""'):
         assert text in out
     assert "┌" in out and "┏" not in out  # box.SQUARE
+
+
+_DATE_DETAIL = "column 'order_date' does not convert to datetime"
+
+
+def _narrow_report(capsys, monkeypatch, name, wheres):
+    """The report of one date problem per place in ``wheres``, printed at 80 columns."""
+    monkeypatch.setattr(reporting, "_console", Console(width=80, soft_wrap=True))
+    report = ValidationReport()
+    for where in wheres:
+        report.add("not_convertible", where, _DATE_DETAIL,
+                   Example(name, 1234, "order_date", "2023-11-31T14:30:00-05:00"))
+    print_validation_report(report)
+    return capsys.readouterr().out.splitlines()
+
+
+def test_a_narrow_report_keeps_file_and_line_in_one_piece_for_a_usual_file_name(
+    capsys, monkeypatch
+):
+    lines = _narrow_report(capsys, monkeypatch, "ecommerce_purchase.csv", ["postgres · orders"])
+    assert max(len(line) for line in lines) <= 80
+    assert any("ecommerce_purchase.csv:1234" in line for line in lines)
+
+
+def test_a_narrow_report_folds_the_examples_instead_of_cutting_them(capsys, monkeypatch):
+    # A file name longer than the Examples column must wrap inside the cell, never end in an
+    # ellipsis, so file, line, column and value stay in the report.
+    name = "ecommerce_purchase_with_a_very_long_file_name.csv"
+    lines = _narrow_report(capsys, monkeypatch, name, ["postgres · orders", "cassandra · orders"])
+    assert max(len(line) for line in lines) <= 80
+    assert "…" not in "".join(lines)
+    # The Examples cell of every row, line by line (header row left out), with the breaks
+    # the wrapping added taken out: nothing is missing from the text.
+    cells = [line.split("│")[-2] for line in lines if line.startswith("│")][1:]
+    shown = "".join("".join(cells).split())
+    full = f"{_DATE_DETAIL} {name}:1234 order_date=2023-11-31T14:30:00-05:00"
+    assert shown == 2 * "".join(full.split())
 
 
 class _RecordingSink:

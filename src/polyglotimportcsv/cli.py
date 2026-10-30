@@ -83,7 +83,7 @@ def _parse_source_overrides(pairs: Tuple[str, ...]) -> Dict[str, str]:
 @click.option(
     "--only",
     default="",
-    help="Comma-separated backends to run (postgres,redis,mongodb,cassandra,neo4j). Empty = all configured.",
+    help="Comma-separated DBMS to run (postgres,redis,mongodb,cassandra,neo4j). Empty = all configured.",
 )
 @click.option(
     "--chunk-size",

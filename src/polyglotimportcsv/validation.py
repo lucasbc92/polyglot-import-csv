@@ -134,6 +134,14 @@ def validate_backend_entities(
                 raise MappingError(
                     f"Relationship '{rname}': references_key '{refk}' not mapped in entity '{to}'."
                 )
+            # The foreign key is added over the `to` table's primary key (is_key columns).
+            to_key = [target_field_name(k, spec) for k, spec in _key_leaves(bound[to].cfg)]
+            if to_key != [refk]:
+                raise MappingError(
+                    f"Relationship '{rname}': references_key '{refk}' is not the key of entity "
+                    f"'{to}' (key: {', '.join(to_key) or 'none'}); a PostgreSQL foreign key "
+                    f"must reference the primary key of the 'to' entity."
+                )
 
     if backend == "neo4j":
         for rname, rspec in (backend_cfg.get("relationships") or {}).items():

@@ -8,7 +8,7 @@ occurrence and keeps a few examples of each problem, each with file, line, colum
 value; the counts the engine returns are those the write will produce.
 
 The rules: a value that does not convert to its column's inferred kind
-(``not_convertible``), a value its DBMS type would refuse (``db_type``), an empty key
+(``not_convertible``), a value its DBMS would refuse (``db_type``), an empty key
 (``empty_key``), and a reference to a row or node the import will not hold
 (``dangling_reference``).
 """
@@ -27,6 +27,7 @@ from rich.text import Text
 
 from polyglotimportcsv.db_type_checks import (
     cassandra_value_problem,
+    int64_value_problem,
     postgres_stored_value,
     postgres_value_problem,
 )
@@ -57,6 +58,9 @@ MAX_EXAMPLES = 5
 
 #: The DBMS whose ``is_key`` columns must hold a value. MongoDB ignores ``is_key``.
 _KEY_DBMS = frozenset({"postgres", "redis", "neo4j"})
+
+#: The DBMS that take no integer beyond 64 bits and have no declared type to say so.
+_INT64_DBMS = frozenset({"mongodb", "neo4j"})
 
 #: Kinds whose cast can fail; boolean and string casts always succeed.
 _CONVERTED_KINDS = frozenset({"integer", "float", "datetime"})
@@ -209,6 +213,23 @@ def _check_values(
                        Example(file_label, _line(idx), col, raw.at[idx, col], reason))
 
 
+def _check_int64(
+    report: ValidationReport,
+    where: str,
+    file_label: str,
+    kinds: Dict[str, str],
+    raw: pd.DataFrame,
+    cast: pd.DataFrame,
+    columns: Sequence[str],
+) -> None:
+    """``db_type`` problems of the integer columns among ``columns``: a cell beyond 64
+    bits, which MongoDB and Neo4j refuse. Only an integer kind casts to integers."""
+    for col in dict.fromkeys(columns):
+        if kinds.get(col) == "integer":
+            _check_values(report, where, f"column '{col}' does not fit a 64-bit integer",
+                          file_label, raw, cast, col, int64_value_problem)
+
+
 def check_rows(
     report: ValidationReport,
     dbms: str,
@@ -230,7 +251,7 @@ def check_rows(
     - ``empty_key``: an empty ``is_key`` column (PostgreSQL, Redis, Neo4j), or an empty
       partition or cluster column (Cassandra);
     - ``db_type``: a value its column's declared PostgreSQL type, or its Cassandra CQL
-      type, would refuse.
+      type, would refuse; an integer beyond 64 bits, for MongoDB and Neo4j.
     """
     if cast.empty:
         return
@@ -261,6 +282,9 @@ def check_rows(
             _check_values(report, where, f"column '{col}' does not fit CQL {cql}",
                           file_label, raw, cast, col,
                           lambda v, t=cql: cassandra_value_problem(t, v))
+    elif dbms in _INT64_DBMS:
+        _check_int64(report, where, file_label, binding.kinds, raw, cast,
+                     [col for _, col in leaves])
 
 
 def _target_column(binding: EntityBinding, target: str, columns: List[str]) -> Tuple[str, str]:
@@ -408,9 +432,11 @@ class Neo4jCheckingSink(CheckingSink):
                 edges = _edge_rows(cast, relationship_columns(rspec, binding, to_binding, columns))
                 props = [resolve_csv_column(fk, spec, columns)
                          for fk, spec in (rspec.get("columns") or {}).items()]
-                _check_convertible(self.report, f"{self.dbms} · {rname}",
-                                   self._file_label(source), binding.kinds,
+                where, file_label = f"{self.dbms} · {rname}", self._file_label(source)
+                _check_convertible(self.report, where, file_label, binding.kinds,
                                    raw[edges], cast[edges], props)
+                _check_int64(self.report, where, file_label, binding.kinds,
+                             raw[edges], cast[edges], props)
 
     def inspect_relationship_rows(
         self, source: str, rname: str, rspec: Dict[str, Any],
@@ -483,14 +509,13 @@ def print_validation_report(report: ValidationReport) -> None:
     table.add_column("Rule")
     table.add_column("Where")
     table.add_column("Count", justify="right")
-    table.add_column("Examples")
+    # Folded, not cut with an ellipsis: file, line, column and value always get printed.
+    table.add_column("Examples", overflow="fold")
     for group in report.groups():
-        rule = Text(group.rule)
-        rule.append(f"\n{group.detail}", style="dim")
-        table.add_row(
-            rule,
-            Text(group.where),
-            str(group.count),
-            Text("\n".join(_example_text(e) for e in group.examples)),
-        )
+        # The detail leads the Examples cell and not the Rule cell: the rule is a short
+        # name, so the width of a narrow console goes to the examples, which keeps
+        # ``file:line`` in one piece for all but very long file names.
+        examples = Text(group.detail, style="dim")
+        examples.append("\n" + "\n".join(_example_text(e) for e in group.examples))
+        table.add_row(Text(group.rule), Text(group.where), str(group.count), examples)
     print_rich(table, level=logging.ERROR)

@@ -1,4 +1,4 @@
-"""Per-entity data display for the streaming path."""
+"""Per-entity data display."""
 
 import logging
 

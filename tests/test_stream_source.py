@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -161,6 +162,43 @@ def test_source_path_resolves_plain_combined_and_overridden_sources(tmp_path):
     assert ss.source_path("a", "a.csv", tmp_path, override) == tmp_path / "other.csv"
     with pytest.raises(SourceError, match="CSV file not found"):
         ss.source_path("a", "nope.csv", tmp_path, {})
+
+
+def test_source_file_resolves_a_source_without_needing_the_file(tmp_path):
+    assert ss.source_file("a", "a.csv", tmp_path, {}) == tmp_path / "a.csv"
+    assert ss.source_file("e", {"file": "j.csv"}, tmp_path, {}) == tmp_path / "j.csv"
+    assert ss.source_file("a", "a.csv", tmp_path, {"a": "o.csv"}) == Path("o.csv")  # from the cwd
+    absolute = tmp_path / "abs.csv"
+    assert ss.source_file("a", str(absolute), Path("elsewhere"), {}) == absolute
+
+
+def test_combined_data_columns_drop_the_origin_column_and_need_a_data_column():
+    path = Path("j.csv")
+    assert ss.combined_data_columns("e", ["action", "id", "v"], path) == ["id", "v"]
+    with pytest.raises(SourceError) as exc:
+        ss.combined_data_columns("e", ["action"], path)
+    assert str(exc.value) == (
+        "Source 'e': combined CSV needs an origin column plus data columns: j.csv"
+    )
+
+
+def test_a_combined_chunk_without_data_columns_is_the_same_error(tmp_path):
+    _write_csv(tmp_path / "j.csv", ["action"], [("stock",)])
+    with pytest.raises(SourceError, match="combined CSV needs an origin column plus data columns"):
+        list(ss.iter_entity_chunks({"e": {"file": "j.csv"}}, tmp_path, rows_per_chunk={"e": 10}))
+
+
+def test_an_empty_origin_value_is_reported_with_its_file_and_first_line(tmp_path):
+    # Data row 3 is on line 4 (the header is line 1); it is in the second chunk, whose
+    # rows are numbered on from the first. A later empty origin does not move the report.
+    rows = [("stock", 1), ("stock", 2), ("", 3), ("cart", 4), ("  ", 5)]
+    _write_csv(tmp_path / "j.csv", ["action", "id"], rows)
+    with pytest.raises(SourceError) as exc:
+        list(ss.iter_entity_chunks({"e": {"file": "j.csv"}}, tmp_path, rows_per_chunk={"e": 2}))
+    assert str(exc.value) == (
+        "Source 'e': combined CSV has row(s) with empty origin value (column 'action'); "
+        f"the first is at {tmp_path / 'j.csv'}:4."
+    )
 
 
 def test_rows_per_chunk_sets_the_chunk_size_of_each_declared_source(tmp_path):

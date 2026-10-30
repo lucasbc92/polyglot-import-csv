@@ -1,4 +1,4 @@
-"""Write port for the streaming import path (spec: streaming import, Task 3).
+"""Write port of the import: one adapter per DBMS.
 
 ``DbmsSink`` is the boundary between the DBMS-agnostic orchestrator
 (``stream_runner.run_stream_import``) and each DBMS's product-specific

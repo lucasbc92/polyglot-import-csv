@@ -32,6 +32,22 @@ def test_cast_value_scalars():
     assert cast_value("abc", "integer") == "abc"
 
 
+def test_the_integer_cast_accepts_every_integral_number_exactly():
+    # Whatever the inference counts as integral (infer_column_kinds), the cast converts,
+    # and exactly: through Decimal, never through a float.
+    for text, value in [
+        ("3.0", 3), ("10.00", 10), ("1e3", 1000), ("-2.0", -2), ("+7", 7), (" 4.0 ", 4),
+        ("1E+2", 100), ("12345678901234567890.0", 12345678901234567890),
+    ]:
+        got = cast_value(text, "integer")
+        assert got == value and type(got) is int, text
+
+
+def test_the_integer_cast_leaves_what_is_not_integral_as_text():
+    for text in ("2.5", "abc", "inf", "-Infinity", "nan", "1e-3"):
+        assert cast_value(text, "integer") == text, text
+
+
 def test_infer_kinds_prefers_integer_over_year_like_dates():
     # pandas parses a bare 4-digit integer as a year ("1000" -> 1000-01-01), so an
     # ID column running past 999 crosses the datetime threshold and would be cast

@@ -13,7 +13,7 @@ from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence, Tuple
 import pandas as pd
 
 from polyglotimportcsv.business_exception import SourceError
-from polyglotimportcsv.sources import SOURCE_COLUMN, _resolve_path
+from polyglotimportcsv.sources import SOURCE_COLUMN, resolve_path
 
 #: Size of a read block, in MB: the default and the bounds a user may choose within.
 DEFAULT_CHUNK_MB = 8
@@ -68,17 +68,37 @@ def chunk_rows(name: str, path: Path, chunk_mb: float) -> int:
     return max(1, int(chunk_mb * 2**20 // bytes_per_row))
 
 
+def source_file(
+    name: str, decl: "str | Dict[str, Any]", base_dir: "str | Path", overrides: Dict[str, str]
+) -> Path:
+    """The CSV file a declared source reads (a ``--source`` override wins); it need not
+    exist.
+
+    ``decl`` is the source's declaration in the config: the file name of a plain
+    source, or the ``{"file": ...}`` entry of a combined one.
+    """
+    file = decl if isinstance(decl, str) else decl["file"]
+    return resolve_path(name, file, Path(base_dir), overrides)
+
+
 def source_path(
     name: str, decl: "str | Dict[str, Any]", base_dir: "str | Path", overrides: Dict[str, str]
 ) -> Path:
-    """The CSV file a declared source reads (a ``--source`` override wins).
+    """``source_file``, for a file that must exist: ``SourceError`` when it does not."""
+    path = source_file(name, decl, base_dir, overrides)
+    if not path.is_file():
+        raise SourceError(f"Source '{name}': CSV file not found: {path}")
+    return path
 
-    ``decl`` is the source's declaration in the config: the file name of a plain
-    source, or the ``{"file": ...}`` entry of a combined one. Raises ``SourceError``
-    when the file does not exist.
-    """
-    file = decl if isinstance(decl, str) else decl["file"]
-    return _resolve_path(name, file, Path(base_dir), overrides)
+
+def combined_data_columns(name: str, header: List[str], path: Path) -> List[str]:
+    """The data columns of a combined source whose file has ``header``: every column but
+    the origin column, which comes first. ``SourceError`` when no data column is left."""
+    if len(header) < 2:
+        raise SourceError(
+            f"Source '{name}': combined CSV needs an origin column plus data columns: {path}"
+        )
+    return header[1:]
 
 
 def check_source_overrides(
@@ -111,16 +131,9 @@ def read_source_headers(
     overrides = overrides or {}
     headers: Dict[str, List[str]] = {}
     for name, decl in (sources_cfg or {}).items():
-        combined = not isinstance(decl, str)
         path = source_path(name, decl, base_dir, overrides)
         header = _read_header(name, path)
-        if combined:
-            if len(header) < 2:
-                raise SourceError(
-                    f"Source '{name}': combined CSV needs an origin column plus data columns: {path}"
-                )
-            header = header[1:]
-        headers[name] = header
+        headers[name] = header if isinstance(decl, str) else combined_data_columns(name, header, path)
     return headers
 
 
@@ -154,7 +167,7 @@ def iter_entity_chunks(
         size = rows_per_chunk[name]
         columns = (only_columns or {}).get(name)
         if isinstance(decl, str):
-            path = _resolve_path(name, decl, base_dir, overrides)
+            path = source_path(name, decl, base_dir, overrides)
             for chunk in _read_chunks(name, path, size, None if columns is None else list(columns)):
                 chunk = chunk.copy()
                 chunk[SOURCE_COLUMN] = name
@@ -162,21 +175,20 @@ def iter_entity_chunks(
             continue
 
         # Combined file: column 0 is the origin column (spec §2.2).
-        path = _resolve_path(name, decl["file"], base_dir, overrides)
+        path = source_path(name, decl, base_dir, overrides)
         usecols = None if columns is None else [_read_header(name, path)[0], *columns]
         for chunk in _read_chunks(name, path, size, usecols):
-            if len(chunk.columns) < 2:
-                raise SourceError(
-                    f"Source '{name}': combined CSV needs an origin column plus data columns: {path}"
-                )
+            data_columns = combined_data_columns(name, list(chunk.columns), path)
             origin_col = chunk.columns[0]
             origins = chunk[origin_col].astype(str)
-            if (origins.str.strip() == "").any():
+            empty = (origins.str.strip() == "").to_numpy()
+            if empty.any():
+                first = int(chunk.index[empty][0]) + 2  # the header is line 1
                 raise SourceError(
                     f"Source '{name}': combined CSV has row(s) with empty origin value "
-                    f"(column '{origin_col}')."
+                    f"(column '{origin_col}'); the first is at {path}:{first}."
                 )
-            data = chunk.drop(columns=[origin_col])
+            data = chunk[data_columns]
             for value, group in data.groupby(origins, sort=True):
                 sub = group.copy()
                 sub[SOURCE_COLUMN] = str(value)

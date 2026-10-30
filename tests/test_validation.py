@@ -58,7 +58,58 @@ def test_postgres_relationship_targets_checked():
         validate_backend_entities("postgres", bad, {"orders": frm, "products": to})
 
 
+def _fk_to_email(users_columns):
+    """``orders.email -> users.email`` where ``users`` maps ``users_columns``."""
+    frm = _be("orders", {"columns": {"email": {}}}, ["email", "_source"])
+    to = _be("users", {"columns": users_columns}, ["uid", "email", "_source"])
+    rel = {"from": "orders", "to": "users", "foreign_key": "email"}
+    return {"relationships": {"r": rel}}, {"orders": frm, "users": to}
+
+
+@pytest.mark.parametrize("users_columns,actual_key", [
+    ({"uid": {"is_key": True}, "email": {}}, "uid"),
+    ({"uid": {"is_key": True}, "email": {"is_key": True}}, "uid, email"),  # composite
+    ({"uid": {}, "email": {}}, "none"),
+])
+def test_a_postgres_foreign_key_must_reference_the_key_of_the_to_entity(users_columns, actual_key):
+    bcfg, bound = _fk_to_email(users_columns)
+    with pytest.raises(MappingError) as exc:
+        validate_backend_entities("postgres", bcfg, bound)
+    message = str(exc.value)
+    for part in ("Relationship 'r'", "references_key 'email'", "entity 'users'",
+                 f"(key: {actual_key})"):
+        assert part in message
+
+
+def test_a_postgres_foreign_key_to_the_key_of_the_to_entity_is_valid():
+    bcfg, bound = _fk_to_email({"email": {"is_key": True}, "uid": {}})
+    validate_backend_entities("postgres", bcfg, bound)
+    # references_key names the target column, which schema_column may rename
+    frm = _be("orders", {"columns": {"user": {}}}, ["user", "_source"])
+    to = _be("users", {"columns": {"id": {"is_key": True, "schema_column": "uid"}}}, ["id", "_source"])
+    rel = {"from": "orders", "to": "users", "foreign_key": "user", "references_key": "uid"}
+    validate_backend_entities("postgres", {"relationships": {"r": rel}}, {"orders": frm, "users": to})
+
+
 # -- header-level validation shared by the CLI and the GUI ---------------------
+
+
+def test_validate_headers_rejects_a_foreign_key_to_a_column_that_is_not_the_key():
+    cfg = {
+        "sources": {"u": "u.csv", "o": "o.csv"},
+        "postgres": {
+            "entities": {
+                "users": {"source": "u", "columns": {"uid": {"is_key": True}, "email": {}}},
+                "orders": {"source": "o", "columns": {"oid": {"is_key": True}, "email": {}}},
+            },
+            "relationships": {
+                "r": {"from": "orders", "to": "users", "foreign_key": "email"},
+            },
+        },
+    }
+    headers = {"u": ["uid", "email"], "o": ["oid", "email"]}
+    with pytest.raises(MappingError, match="not the key of entity 'users'"):
+        validate_headers(cfg, headers, (), ["postgres"])
 
 
 def test_validate_headers_reports_unknown_mapped_column():

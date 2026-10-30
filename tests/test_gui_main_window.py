@@ -54,9 +54,9 @@ def window(qtbot, tmp_path):
 def test_window_opens_showing_the_defaults_it_would_run_with(window):
     """Q1: no configuration chosen yet, but the options still have values.
 
-    Before, the command was the bare program name until something was changed,
-    which hid the fact that a run already had a chunk size and a log level
-    picked out for it.
+    The command shows the options at their defaults instead of the bare
+    program name, so it is clear that a run already has a chunk size and a log
+    level picked out for it.
     """
     assert window.console_panel.command_text() == (
         "polyglotimportcsv --chunk-size 8 --batch-size 1024 "
