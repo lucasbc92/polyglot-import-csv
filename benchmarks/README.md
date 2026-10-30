@@ -12,12 +12,13 @@ written twice therefore holds two runs' rows under one filename. Every current
 campaign below was verified to hold exactly one run.
 
 The four campaigns below were measured when the tool could still import in two
-ways: loading each source whole in memory (the *whole-file load*) or streaming it
-in chunks (`stream`). The `execution` column of their CSVs tells them apart:
-`stream` for the second and the other value for the first. Version 3.0.0 removed
-that choice: every import streams, in three reads (inference, validation and
-write). New campaigns therefore vary the read chunk size instead (see "Campaigns of
-the current version"), and their phases are `infer`, `validate` and `write`.
+ways: loading each source whole in memory (the *whole-file load*, `execution=materialize`
+in the old CSVs) or streaming it in chunks (`stream`). The `execution` column of their
+CSVs tells them apart: `stream` for the second and the other value for the first. The
+tool now imports one way only: every import streams, in three reads (inference,
+validation and write). New campaigns therefore vary the read chunk size instead (see
+"Campaigns of the current version"), and their phases are `infer`, `validate` and
+`write`.
 
 ### Current data
 
@@ -179,13 +180,13 @@ arquivo. Cada campanha atual abaixo foi verificada e contém exatamente uma
 execução.
 
 As quatro campanhas abaixo foram medidas quando a ferramenta ainda importava de
-duas formas: carregando cada origem inteira na memória (a *carga integral*) ou
-transmitindo-a em blocos (`stream`). A coluna `execution` dos CSVs distingue as
-duas: `stream` para a segunda e o outro valor para a primeira. A versão 3.0.0
-removeu essa escolha: toda importação transmite, em três leituras (inferência,
-validação e gravação). As campanhas novas, portanto, variam o tamanho do bloco de
-leitura (veja "Campanhas da versão atual"), e suas fases são `infer`, `validate` e
-`write`.
+duas formas: carregando cada origem inteira na memória (a *carga integral*,
+`execution=materialize` nos CSVs antigos) ou transmitindo-a em blocos (`stream`). A
+coluna `execution` dos CSVs distingue as duas: `stream` para a segunda e o outro valor
+para a primeira. A ferramenta agora importa de uma só forma: toda importação
+transmite, em três leituras (inferência, validação e gravação). As campanhas novas,
+portanto, variam o tamanho do bloco de leitura (veja "Campanhas da versão atual"), e
+suas fases são `infer`, `validate` e `write`.
 
 ### Dados atuais
 

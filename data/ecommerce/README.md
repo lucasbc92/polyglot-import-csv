@@ -56,8 +56,9 @@ python -m polyglotimportcsv --config data/ecommerce/import_config.json \
 
 The command exits with code 1 and prints a table with the rule (`not_convertible`),
 where it happened (`postgres · orders`), how many times, and an example with the
-file, the line, the column and the value. Without `--dry-run` the result is the same,
-and nothing is written in any DBMS.
+file, the line, the column and the value. Without `--dry-run` the result is the same
+when the DBMS are up (the DBMS check comes first, and a DBMS that is down stops the
+run before any data is read), and nothing is written in any DBMS.
 
 ## Português (BR)
 
@@ -114,5 +115,6 @@ python -m polyglotimportcsv --config data/ecommerce/import_config.json \
 
 O comando termina com código 1 e mostra uma tabela com a regra (`not_convertible`),
 onde aconteceu (`postgres · orders`), quantas vezes e um exemplo com o arquivo, a
-linha, a coluna e o valor. Sem `--dry-run` o resultado é o mesmo, e nada é gravado em
-nenhum SGBD.
+linha, a coluna e o valor. Sem `--dry-run` o resultado é o mesmo quando os SGBDs estão
+no ar (a verificação dos SGBDs vem primeiro, e um SGBD fora do ar interrompe a execução
+antes de ler qualquer dado), e nada é gravado em nenhum SGBD.

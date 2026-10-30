@@ -115,10 +115,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--no-trace-memory", dest="trace_memory", action="store_false",
                         help="Do not run imports under tracemalloc. peak_memory_mb is then "
                              "not reported, but the timings stop carrying the tracer's cost "
-                             "(measured at 8.6x on the read phase and ~6.5x on map, against "
-                             "roughly nothing on the database writes -- so it distorts the "
-                             "phases against each other, not by one factor). Use a traced run "
-                             "for memory and an untraced one for time.")
+                             "(it inflates the allocation-heavy phases, infer and validate, "
+                             "far more than write, which waits on the databases -- so it "
+                             "distorts the phases against each other, not by one factor). Use "
+                             "a traced run for memory and an untraced one for time.")
     parser.add_argument("--dbms-config", type=Path, default=Path("data/ecommerce/dbms_config.json"))
     parser.add_argument("--config-dir", type=Path, default=Path("data/ecommerce"),
                         help="Directory holding import_config.json / import_config_combined.json.")

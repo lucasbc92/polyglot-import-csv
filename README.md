@@ -7,10 +7,10 @@
 
 Python CLI that imports CSV data into **PostgreSQL, Redis, MongoDB, Apache Cassandra, and Neo4j** using **two JSON files** validated with **JSON Schema**:
 
-- `import_config.json` — a required `sources` block declaring where to read CSV data from, plus the entity/relationship/column mapping from each source to each backend.
-- `dbms_config.json` — the connection settings for each backend (which DBMSs are available).
+- `import_config.json` — a required `sources` block declaring where to read CSV data from, plus the entity/relationship/column mapping from each source to each DBMS.
+- `dbms_config.json` — the connection settings for each DBMS (which DBMS are available).
 
-The import configuration may only target backends declared in the DBMS configuration; otherwise the run aborts before touching any CSV or database.
+The import configuration may only target DBMS declared in the DBMS configuration; otherwise the run aborts before touching any CSV or database.
 
 ### Sources
 
@@ -49,7 +49,7 @@ polyglotimportcsv-gui
 The window builds the command for you, shows it before running, and streams the
 CLI's output into an integrated console. The command shown is the command that
 runs — you can switch the panel to edit mode and type it yourself. The options
-panel has one control per CLI option, among them two spin boxes, "Bloco em MB
+panel has one control for each option it offers, among them two spin boxes, "Bloco em MB
 (`--chunk-size`)" and "Lote (`--batch-size`)", with the CLI's limits.
 
 The integrated console shows the CLI's colours: with `FORCE_COLOR` set, the CLI
@@ -84,8 +84,8 @@ Requires Docker for import/clean/inspect. Use `--fresh-start` for a true first-t
 
 Options:
 
-- `--only postgres,redis` — run only listed backends.
-- `--dry-run` — run every check, on the headers and on the data rows, and print the row counts per entity, connecting to no DBMS and writing nothing. It reads the files (the inference and validation reads) in chunks, so it also works on large files.
+- `--only postgres,redis` — run only the listed DBMS. If none of them is configured, the run stops with an error.
+- `--dry-run` — run every check, on the headers and on the data rows, and print the row counts per entity or partition and per relationship, connecting to no DBMS and writing nothing. It reads the files (the inference and validation reads) in chunks, so it also works on large files.
 - `--chunk-size MB` — memory budget of each read chunk, in MB (default 8, minimum 8, maximum 256). The rows per chunk of each source are computed from the width of its rows, measured on its first 1000 rows, so a chunk takes about this much memory. A value out of range is a usage error.
 - `--batch-size N` — rows per write batch (default 1024, minimum 1024, maximum 8192). The batch of an entity is the smaller of N and the rows of one read chunk of its sources.
 - `--log-level DEBUG|INFO|WARNING|ERROR` — terminal verbosity (default `INFO`); the session log file under `logs/` always records `DEBUG`.
@@ -107,7 +107,7 @@ If any layer fails, nothing is written in any DBMS and the command exits with co
 
 An import runs in this order:
 
-1. Layers 1 and 2, then the headers of every source. The header check finds a mapped column, a filter column, or a Cassandra partition or clustering column that does not exist; a PostgreSQL or Neo4j relationship that names an unknown entity, key or property; and nested columns in a DBMS that takes only flat ones.
+1. Layers 1 and 2, then the headers of every source. The header check finds a mapped column, a filter column, or a Cassandra partition or clustering column that does not exist; a PostgreSQL or Neo4j relationship that names an unknown entity, key or property; a PostgreSQL foreign key whose `references_key` is not the key of its `to` entity, since a foreign key must reference a primary key; and nested columns in a DBMS that takes only flat ones. An `--only` that names no DBMS the configuration declares is an error too.
 2. The DBMS check (see "Checking the DBMS"), which `--dry-run` skips.
 3. The **inference read**: every source the selected DBMS use is read in chunks, and the type of each column is inferred over the whole file, not over a sample. It connects to no DBMS and keeps only per-column aggregates in memory.
 4. The **validation read**: every source is read again, with those types, and each chunk goes through the same code the write uses (filters, type conversion, `each`, row shaping per DBMS), with the writes replaced by checks. Each kind of problem is reported with a count and up to 5 examples, with file, line, column and value.
@@ -117,6 +117,7 @@ The validation read reports these problems:
 
 - a value that does not convert to the type inferred for its column, such as a malformed date in a column of dates;
 - a value that the declared `db_type` (PostgreSQL) or the CQL type (Cassandra) would refuse, such as text in a `BIGINT`, an integer out of range, an invalid `TIMESTAMP` or `DATE`, or a non-boolean in a `BOOLEAN`;
+- an integer beyond 64 bits in a column written to MongoDB or Neo4j, which refuse it;
 - an empty key: an empty `is_key` column (PostgreSQL, Redis, Neo4j) or an empty Cassandra partition or clustering column;
 - a dangling reference: in PostgreSQL, a `foreign_key` value with no equal `references_key` among the rows written to the `to` entity; in Neo4j, a relationship endpoint with no node in its entity.
 
@@ -125,6 +126,7 @@ A combined CSV adds two errors: an empty origin value, and a source named in the
 These are not errors:
 
 - an empty `foreign_key` or relationship endpoint, which means no relationship;
+- an integral number such as `3.0` or `1e3` in an integer column, which is converted exactly to the integer;
 - repeated keys, which the sinks deduplicate or upsert;
 - rows excluded by filters;
 - origin values of a combined CSV that no entity uses, which are only noted, with their row counts.
@@ -322,7 +324,7 @@ polyglotimportcsv-gui
 A janela monta o comando, mostra-o antes de executar e transmite a saída da CLI
 para um console integrado. O comando exibido é o comando executado — o painel
 pode ser colocado em modo de edição para digitá-lo à mão. O painel de opções
-tem um controle por opção da CLI, entre eles dois campos numéricos, "Bloco em MB
+tem um controle para cada opção que oferece, entre eles dois campos numéricos, "Bloco em MB
 (`--chunk-size`)" e "Lote (`--batch-size`)", com os limites da CLI.
 
 O console integrado mostra as cores da CLI: com `FORCE_COLOR` definido, a CLI
@@ -347,7 +349,7 @@ O `--dbms-config` é opcional; quando omitido, usa-se `dbms_config.json` ao lado
 
 ```bash
 ./run_example.sh                  # Docker (se necessário) + clean + dry-run + importação + inspect
-./run_example.sh --dry-run        # só validação (sem Docker)
+./run_example.sh --dry-run        # só validação da configuração e dos dados dos CSVs (sem Docker)
 ./run_example.sh --fresh-start      # primeiro uso: apaga volumes/imagens, baixa de novo, fluxo padrão
 ./run_example.sh --clean --dry-run --import --inspect   # equivalente explícito ao padrão
 ./run_example.sh --config data/ecommerce/import_config_combined.json   # modo CSV combinado
@@ -357,8 +359,8 @@ Requer Docker para importar/limpar/inspecionar. Use `--fresh-start` para simular
 
 Opções úteis:
 
-- `--only postgres,redis` — executa só os SGBDs listados.
-- `--dry-run` — faz todas as verificações, nos cabeçalhos e nas linhas de dados, e mostra a contagem de linhas por entidade, sem conectar a nenhum SGBD e sem gravar nada. Lê os arquivos (as leituras de inferência e de validação) em blocos, então também funciona em arquivos grandes.
+- `--only postgres,redis` — executa só os SGBDs listados. Se nenhum deles estiver configurado, a execução termina com erro.
+- `--dry-run` — faz todas as verificações, nos cabeçalhos e nas linhas de dados, e mostra a contagem de linhas por entidade ou partição e por relacionamento, sem conectar a nenhum SGBD e sem gravar nada. Lê os arquivos (as leituras de inferência e de validação) em blocos, então também funciona em arquivos grandes.
 - `--chunk-size MB` — memória reservada a cada bloco de leitura, em MB (padrão 8, mínimo 8, máximo 256). As linhas por bloco de cada fonte são calculadas pela largura das suas linhas, medida nas primeiras 1000, de modo que um bloco ocupa cerca desse tanto de memória. Um valor fora da faixa é erro de uso.
 - `--batch-size N` — linhas por lote de gravação (padrão 1024, mínimo 1024, máximo 8192). O lote de uma entidade é o menor entre N e as linhas de um bloco de leitura das suas fontes.
 - `--log-level DEBUG|INFO|WARNING|ERROR` — verbosidade do terminal (padrão `INFO`); o arquivo de log de sessão em `logs/` sempre grava `DEBUG`.
@@ -380,7 +382,7 @@ Se qualquer camada falhar, nada é gravado em nenhum SGBD e o comando termina co
 
 Uma importação segue esta ordem:
 
-1. As camadas 1 e 2, e então os cabeçalhos de cada fonte. A conferência dos cabeçalhos encontra coluna mapeada, coluna de filtro ou coluna de partição ou agrupamento do Cassandra que não existe; relacionamento do PostgreSQL ou do Neo4j que cita entidade, chave ou propriedade desconhecida; e colunas aninhadas em um SGBD que aceita só colunas planas.
+1. As camadas 1 e 2, e então os cabeçalhos de cada fonte. A conferência dos cabeçalhos encontra coluna mapeada, coluna de filtro ou coluna de partição ou agrupamento do Cassandra que não existe; relacionamento do PostgreSQL ou do Neo4j que cita entidade, chave ou propriedade desconhecida; chave estrangeira do PostgreSQL cuja `references_key` não é a chave da sua entidade `to`, pois uma chave estrangeira deve referenciar uma chave primária; e colunas aninhadas em um SGBD que aceita só colunas planas. Um `--only` que não cita nenhum SGBD declarado na configuração também é um erro.
 2. A verificação dos SGBDs (veja "Verificação dos SGBDs"), que o `--dry-run` pula.
 3. A **leitura de inferência**: cada fonte usada pelos SGBDs selecionados é lida em blocos, e o tipo de cada coluna é inferido sobre o arquivo inteiro, não sobre uma amostra. Ela não conecta a nenhum SGBD e guarda na memória só agregados por coluna.
 4. A **leitura de validação**: cada fonte é lida de novo, com esses tipos, e cada bloco passa pelo mesmo código que a gravação usa (filtros, conversão de tipos, `each`, montagem das linhas de cada SGBD), com a escrita trocada por conferências. Cada tipo de problema é reportado com a contagem e até 5 exemplos, com arquivo, linha, coluna e valor.
@@ -390,6 +392,7 @@ A leitura de validação reporta estes problemas:
 
 - valor que não converte para o tipo inferido da coluna, como uma data malformada em uma coluna de datas;
 - valor que o `db_type` declarado (PostgreSQL) ou o tipo CQL (Cassandra) recusaria, como texto em `BIGINT`, inteiro fora da faixa, `TIMESTAMP` ou `DATE` inválido ou valor não booleano em `BOOLEAN`;
+- inteiro além de 64 bits em coluna gravada no MongoDB ou no Neo4j, que os recusam;
 - chave vazia: coluna `is_key` vazia (PostgreSQL, Redis, Neo4j) ou coluna de partição ou agrupamento do Cassandra vazia;
 - referência pendente: no PostgreSQL, valor de `foreign_key` sem valor igual de `references_key` entre as linhas gravadas na entidade `to`; no Neo4j, extremidade de relacionamento sem nó na sua entidade.
 
@@ -398,6 +401,7 @@ Um CSV combinado soma dois erros: valor de origem vazio e fonte citada no mapeam
 Não são erros:
 
 - `foreign_key` ou extremidade de relacionamento vazia, que significa ausência de relacionamento;
+- número inteiro escrito como `3.0` ou `1e3` em uma coluna de inteiros, que é convertido exatamente para o inteiro;
 - chaves repetidas, que os *sinks* deduplicam ou gravam como *upsert*;
 - linhas excluídas por filtros;
 - valores de origem do CSV combinado que nenhuma entidade usa, que só aparecem em uma nota, com a contagem de linhas.
