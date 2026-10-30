@@ -12,13 +12,14 @@ def test_the_default_state_spells_every_option_out():
     """Q1: a control at its default value must still appear in the command.
 
     The first version emitted only what differed from the CLI defaults, so
-    clicking "optimized", "stream" or "Criar esquema" produced no visible
-    change and the control looked dead. Verbosity is the point here: the shown
-    command is a teaching aid, not the shortest line a person could type.
+    clicking "Criar esquema" produced no visible change and the control looked
+    dead. Verbosity is the point here: the shown command is a teaching aid,
+    not the shortest line a person could type.
     """
     assert build_argv(RunOptions(config_path=CFG)) == [
         "--config", str(CFG),
-        "--execution", "stream",
+        "--chunk-size", "8",
+        "--batch-size", "1024",
         "--create-schema",
         "--log-level", "INFO",
         "--sample", "50",
@@ -37,16 +38,25 @@ def test_only_is_comma_joined():
     assert argv[argv.index("--only") + 1] == "postgres,redis"
 
 
-def test_execution_follows_the_form_and_no_strategy_is_written():
-    argv = build_argv(RunOptions(config_path=CFG, execution="materialize"))
-    assert argv[argv.index("--execution") + 1] == "materialize"
-    assert "--strategy" not in argv
+def test_argv_always_carries_chunk_and_batch():
+    argv = build_argv(RunOptions(config_path=CFG))
+    assert argv[argv.index("--chunk-size") + 1] == "8"
+    assert argv[argv.index("--batch-size") + 1] == "1024"
+
+
+def test_chunk_and_batch_follow_the_form_right_after_only():
+    argv = build_argv(
+        RunOptions(config_path=CFG, only=("redis",), chunk_size_mb=64, batch_size=4096)
+    )
+    assert argv[argv.index("--only") + 2:argv.index("--only") + 6] == [
+        "--chunk-size", "64", "--batch-size", "4096",
+    ]
 
 
 def test_no_combination_of_options_writes_strategy():
     for options in (
         RunOptions(config_path=CFG),
-        RunOptions(config_path=CFG, execution="materialize", dry_run=True),
+        RunOptions(config_path=CFG, chunk_size_mb=64, dry_run=True),
         RunOptions(config_path=CFG, show_data=True, only=("redis",)),
         RunOptions(config_path=CFG, show_data=False, create_schema=False),
     ):
@@ -111,7 +121,8 @@ def test_argv_follows_the_order_of_the_spec_table():
         config_path=CFG,
         dbms_config_path=dbms,
         only=("postgres", "redis"),
-        execution="materialize",
+        chunk_size_mb=64,
+        batch_size=2048,
         dry_run=True,
         create_schema=False,
         log_level="DEBUG",
@@ -122,7 +133,8 @@ def test_argv_follows_the_order_of_the_spec_table():
         "--config", str(CFG),
         "--dbms-config", str(dbms),
         "--only", "postgres,redis",
-        "--execution", "materialize",
+        "--chunk-size", "64",
+        "--batch-size", "2048",
         "--dry-run",
         "--no-create-schema",
         "--log-level", "DEBUG",
@@ -140,7 +152,8 @@ def test_every_option_changes_the_command_when_toggled():
     """
     base = RunOptions(config_path=CFG)
     flipped = (
-        RunOptions(config_path=CFG, execution="materialize"),
+        RunOptions(config_path=CFG, chunk_size_mb=64),
+        RunOptions(config_path=CFG, batch_size=2048),
         RunOptions(config_path=CFG, dry_run=True),
         RunOptions(config_path=CFG, create_schema=False),
         RunOptions(config_path=CFG, log_level="DEBUG"),
@@ -159,7 +172,8 @@ def test_argv_order_is_stable_when_options_are_at_their_defaults():
     assert argv == [
         "--config", str(CFG),
         "--only", "postgres",
-        "--execution", "stream",
+        "--chunk-size", "8",
+        "--batch-size", "1024",
         "--create-schema",
         "--log-level", "INFO",
         "--sample", "50",
@@ -252,7 +266,7 @@ def test_build_check_argv_keeps_only_what_the_check_uses():
     dbms = Path("/proj/dbms.json")
     options = RunOptions(
         config_path=CFG, dbms_config_path=dbms, only=("redis", "neo4j"),
-        dry_run=True, execution="materialize", log_level="DEBUG", show_data=True,
+        dry_run=True, chunk_size_mb=64, batch_size=2048, log_level="DEBUG", show_data=True,
         sources=(("stock", Path("/x.csv")),),
     )
     assert build_check_argv(options) == [

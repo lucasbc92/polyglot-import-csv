@@ -11,7 +11,8 @@ from polyglotimportcsv.gui.state import (
 
 def test_defaults_mirror_the_cli_defaults():
     options = RunOptions()
-    assert options.execution == "stream"
+    assert options.chunk_size_mb == 8
+    assert options.batch_size == 1024
     assert options.create_schema is True
     assert options.log_level == "INFO"
     assert options.show_data is None
@@ -36,6 +37,52 @@ def test_sample_size_out_of_range_is_reported(tmp_path, size):
     cfg.write_text("{}", encoding="utf-8")
     errors = validate(RunOptions(config_path=cfg, sample_size=size))
     assert errors["sample_size"] == "O tamanho da amostra deve estar entre 1 e 1000000."
+
+
+def test_the_exports_cover_the_form_state_only():
+    from polyglotimportcsv.gui import state
+    assert set(state.__all__) == {
+        "DBMS_NAMES", "LOG_LEVELS", "DEFAULT_SAMPLE_SIZE", "MAX_SAMPLE_SIZE",
+        "RunOptions", "validate",
+    }
+
+
+@pytest.mark.parametrize("size", [8, 64, 256])
+def test_chunk_sizes_inside_the_range_pass(tmp_path, size):
+    cfg = tmp_path / "import_config.json"
+    cfg.write_text("{}", encoding="utf-8")
+    assert validate(RunOptions(config_path=cfg, chunk_size_mb=size)) == {}
+
+
+@pytest.mark.parametrize("size", [7, 257, 0, -8])
+def test_chunk_size_out_of_range_is_reported(tmp_path, size):
+    cfg = tmp_path / "import_config.json"
+    cfg.write_text("{}", encoding="utf-8")
+    errors = validate(RunOptions(config_path=cfg, chunk_size_mb=size))
+    assert errors == {"chunk_size_mb": "O bloco deve ter entre 8 e 256 MB."}
+
+
+@pytest.mark.parametrize("size", [1024, 4096, 8192])
+def test_batch_sizes_inside_the_range_pass(tmp_path, size):
+    cfg = tmp_path / "import_config.json"
+    cfg.write_text("{}", encoding="utf-8")
+    assert validate(RunOptions(config_path=cfg, batch_size=size)) == {}
+
+
+@pytest.mark.parametrize("size", [1023, 8193, 0, -1024])
+def test_batch_size_out_of_range_is_reported(tmp_path, size):
+    cfg = tmp_path / "import_config.json"
+    cfg.write_text("{}", encoding="utf-8")
+    errors = validate(RunOptions(config_path=cfg, batch_size=size))
+    assert errors == {"batch_size": "O lote deve ter entre 1024 e 8192 linhas."}
+
+
+def test_validate_rejects_sizes_out_of_range(tmp_path):
+    cfg = tmp_path / "import_config.json"
+    cfg.write_text("{}", encoding="utf-8")
+    errors = validate(RunOptions(config_path=cfg, chunk_size_mb=7, batch_size=8193))
+    assert errors["chunk_size_mb"] == "O bloco deve ter entre 8 e 256 MB."
+    assert errors["batch_size"] == "O lote deve ter entre 1024 e 8192 linhas."
 
 
 def test_sample_size_is_ignored_when_not_sampling(tmp_path):

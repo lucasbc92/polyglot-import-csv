@@ -2,11 +2,11 @@
 
 Every option the form can set is written out in full, including the ones left
 at the CLI's own default. Emitting only the differences made the command
-shorter but made two controls look broken: selecting "stream" or "Criar
-esquema" — each already the default — changed nothing on screen, so the click
-seemed to have been ignored. A visible, complete command is worth more here
-than a short one, because the panel doubles as documentation of what will
-actually run.
+shorter but made two controls look broken: ticking "Criar esquema" or setting
+a size spin box back to its initial value — each already the default — changed
+nothing on screen, so the click seemed to have been ignored. A visible,
+complete command is worth more here than a short one, because the panel
+doubles as documentation of what will actually run.
 
 ``--dry-run`` is a switch with no negative form in the CLI, so its absence is
 its default. The data display is always spelled out: ``--sample N``,
@@ -34,7 +34,8 @@ def build_argv(options: RunOptions) -> List[str]:
         argv += ["--dbms-config", str(options.dbms_config_path)]
     if options.only:
         argv += ["--only", ",".join(options.only)]
-    argv += ["--execution", options.execution]
+    argv += ["--chunk-size", str(options.chunk_size_mb)]
+    argv += ["--batch-size", str(options.batch_size)]
     if options.dry_run:
         argv.append("--dry-run")
     argv.append("--create-schema" if options.create_schema else "--no-create-schema")

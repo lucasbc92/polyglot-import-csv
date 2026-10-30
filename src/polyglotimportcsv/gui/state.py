@@ -12,15 +12,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
+from polyglotimportcsv.import_plan import DEFAULT_BATCH_SIZE, MAX_BATCH_SIZE, MIN_BATCH_SIZE
 from polyglotimportcsv.reporting import DEFAULT_SAMPLE_SIZE
+from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB
 
 DBMS_NAMES = ("postgres", "redis", "mongodb", "cassandra", "neo4j")
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
-EXECUTIONS = ("stream", "materialize")
 MAX_SAMPLE_SIZE = 1000000
 
 __all__ = [
-    "DBMS_NAMES", "LOG_LEVELS", "EXECUTIONS", "DEFAULT_SAMPLE_SIZE",
+    "DBMS_NAMES", "LOG_LEVELS", "DEFAULT_SAMPLE_SIZE",
     "MAX_SAMPLE_SIZE", "RunOptions", "validate",
 ]
 
@@ -36,7 +37,8 @@ class RunOptions:
     config_path: Optional[Path] = None
     dbms_config_path: Optional[Path] = None
     only: Tuple[str, ...] = ()
-    execution: str = "stream"
+    chunk_size_mb: int = DEFAULT_CHUNK_MB
+    batch_size: int = DEFAULT_BATCH_SIZE
     dry_run: bool = False
     create_schema: bool = True
     log_level: str = "INFO"
@@ -65,6 +67,12 @@ def validate(options: RunOptions) -> Dict[str, str]:
         if name not in DBMS_NAMES:
             errors["only"] = "SGBD desconhecido: {0}".format(name)
             break
+
+    if not MIN_CHUNK_MB <= options.chunk_size_mb <= MAX_CHUNK_MB:
+        errors["chunk_size_mb"] = "O bloco deve ter entre 8 e 256 MB."
+
+    if not MIN_BATCH_SIZE <= options.batch_size <= MAX_BATCH_SIZE:
+        errors["batch_size"] = "O lote deve ter entre 1024 e 8192 linhas."
 
     if options.show_data is None and not 1 <= options.sample_size <= MAX_SAMPLE_SIZE:
         errors["sample_size"] = "O tamanho da amostra deve estar entre 1 e {0}.".format(
