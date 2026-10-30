@@ -25,6 +25,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple
 
 import pandas as pd
 
+from polyglotimportcsv.business_exception import BusinessException, ImportExecutionError
 from polyglotimportcsv.casting import cast_frame
 from polyglotimportcsv.dbms_sink import DbmsSink, SinkFactory
 from polyglotimportcsv.filter_engine import apply_filters, expand_each
@@ -108,8 +109,9 @@ def _process_chunk(
     chunk: pd.DataFrame,
     ecfg: Dict[str, Any],
     binding: EntityBinding,
+    source: str,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, List[Dict[str, Any]]]:
-    """Run one chunk through the shared per-entity pipeline.
+    """Run one chunk of ``source`` through the shared per-entity pipeline.
 
     Union entities are widened to the binding's superset (data_cols + _source,
     missing filled ""); then non-`each` filters and the vectorized cast are
@@ -124,7 +126,7 @@ def _process_chunk(
     filters = binding.cfg.get("filters") or []
     non_each = [f for f in filters if f.get("operator") != "each"]
     filtered = apply_filters(working, non_each, binding.kinds)
-    casted = cast_frame(filtered, binding.kinds)
+    casted = cast_frame(filtered, binding.kinds, source)
     return filtered, casted, filters
 
 
@@ -192,7 +194,7 @@ class DbmsStream:
             if not _matches(ename, ecfg, source):
                 continue
             binding = self._bindings[ename]
-            raw, casted, filters = _process_chunk(chunk, ecfg, binding)
+            raw, casted, filters = _process_chunk(chunk, ecfg, binding, source)
             parts = expand_each(casted, filters, ename)
             if self._inspect_unpartitioned is not None:
                 dropped = _dropped_by_split(casted, parts)
@@ -237,7 +239,7 @@ class DbmsStream:
             if not _matches(from_e, ecfg, source):
                 continue
             from_binding = self._bindings[from_e]
-            _, casted, _ = _process_chunk(chunk, ecfg, from_binding)
+            _, casted, _ = _process_chunk(chunk, ecfg, from_binding, source)
             for rname, rspec in rlist:
                 to_binding = self._bindings[rspec["to"]]
                 if self._inspect_rels is not None:
@@ -308,19 +310,30 @@ def run_stream_import(
     ``collector``, records one ``(dbms, "*", "write")`` metric per DBMS, with every
     row it wrote.
 
+    A failure of a DBMS that is not already a ``BusinessException`` (a driver error, say)
+    becomes an ``ImportExecutionError`` naming that DBMS and those written before it.
+
     The plan's config must have passed ``validation.validate_headers``. Sinks are
     closed only on success; on an exception the caller owns cleanup.
     """
     counts = StreamCounts()
     for dbms in plan.dbms_names:
         start = time.perf_counter()
-        sink = sink_factories[dbms](plan.config[dbms])
-        if create_schema:
-            sink.create_schema()
-        own = replace(
-            plan, dbms_names=[dbms], sources_cfg=dbms_sources(plan.config, [dbms])
-        )
-        one = run_single_pass(own, {dbms: sink}, on_batch=on_batch)
+        try:
+            sink = sink_factories[dbms](plan.config[dbms])
+            if create_schema:
+                sink.create_schema()
+            own = replace(
+                plan, dbms_names=[dbms], sources_cfg=dbms_sources(plan.config, [dbms])
+            )
+            one = run_single_pass(own, {dbms: sink}, on_batch=on_batch)
+        except BusinessException:
+            raise
+        except Exception as exc:
+            raise ImportExecutionError(
+                f"Write to {dbms} failed ({type(exc).__name__}: {exc}); already written: "
+                f"{', '.join(counts.written) or 'none'}; {dbms} may be partly written."
+            ) from exc
         counts.written.update(one.written)
         counts.entity_rows.update(one.entity_rows)
         if collector is not None:

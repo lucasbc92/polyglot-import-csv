@@ -3,7 +3,8 @@
 Checked without any live database: peak memory stays roughly constant as total
 row count grows (bounded by one read chunk plus the still-open partition
 buffers), by streaming two hand-written CSVs of very different sizes through a
-discard sink under ``tracemalloc``.
+discard sink under ``tracemalloc``. The inference read (``plan_import``) is held to
+the same bound.
 """
 
 from __future__ import annotations
@@ -14,8 +15,12 @@ import tracemalloc
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+import pandas as pd
+
+from polyglotimportcsv import csv_reader
 from polyglotimportcsv import stream_runner as sr
 from polyglotimportcsv.import_plan import plan_import
+from polyglotimportcsv.stream_source import chunk_rows
 
 
 def _write_csv(path: Path, header: List[str], rows: List[Tuple[Any, ...]]) -> None:
@@ -148,3 +153,47 @@ def test_stream_union_peak_does_not_scale_with_rows(tmp_path):
         f"union peak memory scaled with row count: peak_small={peak_small} "
         f"peak_large={peak_large} (ratio={peak_large / peak_small:.2f})"
     )
+
+
+#: Memory budget of one read block in the inference test: about 700 rows of its file.
+_INFERENCE_CHUNK_MB = 0.2
+
+
+def _inference_peak(base_dir: Path, n_rows: int, reads: List[Tuple[str, Any]]) -> int:
+    """Peak traced memory of ``plan_import`` over a file of ``n_rows`` rows.
+
+    ``when`` is dates after a block of junk, 90% dates in all: the blocks disagree on
+    it, so its kind is settled by the exact re-read of that column as well. The two wide
+    numeric columns make the file big enough for the CSV parser to fill its own buffer.
+    """
+    junk = n_rows // 10
+    minutes = pd.date_range("2023-01-01", periods=100, freq="min").strftime("%Y-%m-%dT%H:%M:%SZ")
+    when = ["n/a"] * junk + [minutes[i % 100] for i in range(n_rows - junk)]
+    _write_csv(base_dir / "ev.csv", ["id", "when", "a", "b"],
+               [(i, w, "1" * 40, "2" * 40) for i, w in enumerate(when)])
+    config = {
+        "sources": {"ev": "ev.csv"},
+        "redis": {"entities": {"ev": {"source": "ev", "columns": {"id": {"is_key": True}}}}},
+    }
+    assert chunk_rows("ev", base_dir / "ev.csv", _INFERENCE_CHUNK_MB) < n_rows // 4
+    reads.clear()
+    gc.collect()
+    tracemalloc.start()
+    tracemalloc.reset_peak()
+    plan = plan_import(config, base_dir, dbms_names=["redis"], chunk_mb=_INFERENCE_CHUNK_MB)
+    peak = tracemalloc.get_traced_memory()[1]
+    tracemalloc.stop()
+    assert plan.profiles["ev"].kinds["when"] == "datetime"
+    assert ("ev.csv", ["when"]) in reads, "the exact re-read did not run"
+    return peak
+
+
+def test_inference_peak_does_not_scale_with_rows(tmp_path, monkeypatch, reads):
+    # Probe rounds of 10 distinct values, so that the early stop bites on blocks this small.
+    monkeypatch.setattr(csv_reader, "_DATETIME_PROBE_CHUNK", 10)
+    (tmp_path / "small").mkdir()
+    (tmp_path / "large").mkdir()
+    small = _inference_peak(tmp_path / "small", 4_000, reads)
+    gc.collect()
+    large = _inference_peak(tmp_path / "large", 16_000, reads)
+    assert large < 1.5 * small, f"peak {small} -> {large} ({large / small:.2f}x)"

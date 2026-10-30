@@ -28,8 +28,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from polyglotimportcsv import validation
-from polyglotimportcsv.business_exception import BusinessException
+from polyglotimportcsv import stream_source, validation
+from polyglotimportcsv.business_exception import BusinessException, SourceError
 from polyglotimportcsv.config_parser import (
     BACKENDS,
     DEFAULT_DBMS_CONFIG_NAME,
@@ -179,7 +179,7 @@ def _check_headers(
     key = "sources" if options.sources else "config_path"
     overrides = {name: path for name, path in options.sources}
     csv_paths = {
-        name: _resolve_source_csv(name, decl, base_dir, overrides)
+        name: stream_source.source_file(name, decl, base_dir, overrides)
         for name, decl in sources_cfg.items()
     }  # type: Dict[str, Path]
 
@@ -194,24 +194,10 @@ def _check_headers(
         if cached is not None:
             return cached
 
-    result = _bind_and_validate_headers(key, options, import_cfg, sources_cfg, csv_paths)
+    result = _read_and_validate_headers(key, options, import_cfg, sources_cfg, csv_paths)
     if cache_key is not None:
         _headers_cache[cache_key] = result
     return result
-
-
-def _resolve_source_csv(
-    name: str, decl: Any, base_dir: Path, overrides: Dict[str, Path]
-) -> Path:
-    """Same resolution as ``sources._resolve_path``: an override follows the
-    working directory, a declared path the configuration's folder."""
-    if name in overrides:
-        return Path(overrides[name])
-    file_name = decl if isinstance(decl, str) else decl.get("file", "")
-    csv_path = Path(file_name)
-    if not csv_path.is_absolute():
-        csv_path = base_dir / csv_path
-    return csv_path
 
 
 def _headers_cache_key(
@@ -239,7 +225,7 @@ def _file_stamp(path: Path) -> Tuple[str, int, int]:
     return (str(path.resolve()), stat.st_mtime_ns, stat.st_size)
 
 
-def _bind_and_validate_headers(
+def _read_and_validate_headers(
     key: str,
     options: RunOptions,
     import_cfg: Dict[str, Any],
@@ -259,12 +245,10 @@ def _bind_and_validate_headers(
                 name, csv_path, exc
             )
         if not isinstance(decl, str):
-            if len(header) < 2:
-                return key, (
-                    "Source '{0}': combined CSV needs an origin column plus data "
-                    "columns: {1}".format(name, csv_path)
-                )
-            header = header[1:]
+            try:
+                header = stream_source.combined_data_columns(name, header, csv_path)
+            except SourceError as exc:
+                return key, str(exc)
             combined_names.append(name)
         headers[name] = header
 

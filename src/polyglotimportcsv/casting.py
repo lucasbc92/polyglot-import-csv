@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+from decimal import Decimal, InvalidOperation
+from typing import Any, Dict, Optional
 
 import pandas as pd
 
@@ -37,6 +38,22 @@ def is_boolean_series(non_empty: pd.Series) -> bool:
     return seen
 
 
+def _integral_value(val: Any) -> Optional[int]:
+    """The int a text stands for when it is a finite number with no fractional part
+    ("12", "3.0", "1e3"), else ``None``.
+
+    Whatever ``csv_reader.ColumnStats`` counts as an integer column, this converts. The
+    conversion goes through ``Decimal`` so that a value beyond 2**53 stays exact.
+    """
+    try:
+        number = Decimal(str(val).strip())
+    except InvalidOperation:
+        return None
+    if not number.is_finite() or number != number.to_integral_value():
+        return None
+    return int(number)
+
+
 def cast_value(val: Any, kind: str) -> Any:
     """Convert one CSV string to a native Python value; '' and None become None.
 
@@ -50,10 +67,8 @@ def cast_value(val: Any, kind: str) -> Any:
     if val is None or val == "":
         return None
     if kind == "integer":
-        try:
-            return int(val)
-        except (TypeError, ValueError):
-            return val
+        number = _integral_value(val)
+        return val if number is None else number
     if kind == "float":
         try:
             return float(val)
@@ -96,17 +111,16 @@ def _cast_column_vectorized(series: pd.Series, kind: str) -> "tuple[pd.Series, i
         return pd.Series(list(out), index=series.index, dtype=object), 0
 
     if kind == "integer":
-        # pd.to_numeric().isna() is a poor success oracle for int(): it is
-        # MORE permissive than Python (accepts "3.0" and "1e3", which
-        # int() rejects with ValueError). Use a vectorized regex mask that
-        # mirrors int()'s exact grammar (optional surrounding whitespace,
-        # optional sign, digits only) to identify the disagreeing minority,
-        # then fall back to text for those, matching cast_value's contract.
+        # Plain digits ("12", "-3") are the common case and take a vectorized regex
+        # mask; the few integral values written otherwise ("3.0", "1e3") are parsed one
+        # by one (``_integral_value``), and what does not parse is the fallback, kept
+        # as its original text.
         s = series.where(~empty)
         int_like = s.astype(str).str.strip().str.fullmatch(r"[+-]?\d+").fillna(False)
         good = int_like & ~empty
-        bad = ~empty & ~good
-        fallbacks = int(bad.sum())
+        other = ~empty & ~good
+        other_values = [_integral_value(v) for v in original[other]]
+        fallbacks = sum(v is None for v in other_values)
 
         # pd.to_numeric silently promotes the ENTIRE column to float64 once
         # a single value overflows int64: it neither raises nor returns
@@ -143,7 +157,11 @@ def _cast_column_vectorized(series: pd.Series, kind: str) -> "tuple[pd.Series, i
         )
 
         result = pd.Series([None] * len(series.index), index=series.index, dtype=object)
-        result[bad] = original[bad]
+        result[other] = pd.Series(
+            [o if v is None else v for o, v in zip(original[other], other_values)],
+            index=original[other].index,
+            dtype=object,
+        )
         result[good] = good_vals
         return result, fallbacks
 
@@ -195,13 +213,20 @@ def _cast_column_vectorized(series: pd.Series, kind: str) -> "tuple[pd.Series, i
     return original, 0
 
 
-def cast_frame(df: pd.DataFrame, kinds: Dict[str, str]) -> pd.DataFrame:
+def cast_frame(
+    df: pd.DataFrame, kinds: Dict[str, str], source: Optional[str] = None
+) -> pd.DataFrame:
     """Return a copy with typed columns converted to native values.
 
     Casts per column with pandas; the values and element types equal those of
     ``cast_value`` applied cell by cell. Only integer/float/boolean/datetime
     columns are converted (empty cells become None); string columns keep raw
     values.
+
+    A column with values that did not convert logs one warning, whose record carries
+    ``cast_source`` (``source``, the name of what the rows came from) and
+    ``cast_column``, so that a caller can tell the warnings of one column of one source
+    from those of another whatever the count in their text.
     """
     out = df.copy()
     for col in out.columns:
@@ -217,6 +242,7 @@ def cast_frame(df: pd.DataFrame, kinds: Dict[str, str]) -> pd.DataFrame:
             logger.warning(
                 "column %r: %d value(s) could not be cast to %s and %s",
                 col, fallbacks, kind, outcome,
+                extra={"cast_source": source, "cast_column": col},
             )
         logger.debug("column %r cast to %s (%d value(s))", col, kind, len(out[col]))
     return out

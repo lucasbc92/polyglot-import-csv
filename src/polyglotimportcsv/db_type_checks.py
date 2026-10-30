@@ -1,8 +1,9 @@
 """Check one value against the DBMS type a column is declared with.
 
-``postgres_value_problem`` and ``cassandra_value_problem`` are pure and return ``None``
-when the DBMS would accept the value, otherwise a short reason. The value is what a
-sink would send: ``None``, ``int``, ``float``, ``bool``, ``datetime`` or ``str``.
+``postgres_value_problem``, ``cassandra_value_problem`` and ``int64_value_problem`` are
+pure and return ``None`` when the DBMS would accept the value, otherwise a short reason.
+The value is what a sink would send: ``None``, ``int``, ``float``, ``bool``, ``datetime``
+or ``str``.
 ``None`` is always accepted here (an empty key has its own rule); types outside the
 tables below are not checked. NumPy scalars are judged like the Python type they stand
 for. ``postgres_stored_value`` gives the value a PostgreSQL column keeps, so that two
@@ -193,6 +194,16 @@ def postgres_stored_value(db_type: str, value: Any) -> Any:
     if base in _PG_NUMERIC:
         return float(value)
     return value
+
+
+def int64_value_problem(value: Any) -> Optional[str]:
+    """Why a store of 64-bit integers would reject ``value``, or ``None``.
+
+    MongoDB (BSON) and Neo4j take no integer beyond 64 bits; they have no declared type
+    to say so, and any other value is left to its own rules.
+    """
+    value = _plain(value)
+    return _out_of_range(value, 64, "64-bit integer") if _is_int(value) else None
 
 
 def cassandra_value_problem(cql_type: str, value: Any) -> Optional[str]:

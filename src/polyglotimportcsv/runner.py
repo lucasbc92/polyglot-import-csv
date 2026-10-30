@@ -179,24 +179,38 @@ def _unused_origins(plan: ImportPlan) -> List[Tuple[str, int]]:
 
 
 class _CastWarnings:
-    """The cast warnings (``casting.cast_frame``) the validation read has shown.
+    """Shows each cast warning (``casting.cast_frame``) once per column of a source.
 
-    The write casts the same rows as the validation read, so it would log the same
-    warnings again: ``without_repeats`` drops those, and only those. A warning the
-    validation read did not log still prints. Each filter stays on ``casting.logger``
-    only for its block.
+    Every DBMS, entity and chunk casts the same rows again, so the validation read would
+    log the same warning many times, with a different count in its text each time.
+    ``once_per_column`` lets through the first warning of each ``(source, column)`` and
+    drops the rest. The write casts the same rows as the validation read:
+    ``without_repeats`` drops, there, the warnings of the pairs already shown, and only
+    those. A warning with no source and column on its record always prints. Each filter
+    stays on ``casting.logger`` only for its block.
     """
 
     def __init__(self) -> None:
-        self._shown: Set[str] = set()
+        self._shown: Set[Tuple[Optional[str], str]] = set()
 
-    def _remember(self, record: logging.LogRecord) -> bool:
-        if record.levelno >= logging.WARNING:
-            self._shown.add(record.getMessage())
+    @staticmethod
+    def _key(record: logging.LogRecord) -> Optional[Tuple[Optional[str], str]]:
+        column = getattr(record, "cast_column", None)
+        if record.levelno < logging.WARNING or column is None:
+            return None
+        return getattr(record, "cast_source", None), column
+
+    def _first(self, record: logging.LogRecord) -> bool:
+        key = self._key(record)
+        if key is None:
+            return True
+        if key in self._shown:
+            return False
+        self._shown.add(key)
         return True
 
     def _unseen(self, record: logging.LogRecord) -> bool:
-        return record.levelno < logging.WARNING or record.getMessage() not in self._shown
+        return self._key(record) not in self._shown
 
     @contextmanager
     def _filtered(self, check: Callable[[logging.LogRecord], bool]) -> Iterator[None]:
@@ -206,12 +220,12 @@ class _CastWarnings:
         finally:
             casting.logger.removeFilter(check)
 
-    def recording(self) -> ContextManager[None]:
-        """Remember every cast warning logged inside the block."""
-        return self._filtered(self._remember)
+    def once_per_column(self) -> ContextManager[None]:
+        """Log, inside the block, the first cast warning of each source column only."""
+        return self._filtered(self._first)
 
     def without_repeats(self) -> ContextManager[None]:
-        """Drop, inside the block, the cast warnings ``recording`` remembered."""
+        """Drop, inside the block, the cast warnings of the columns already shown."""
         return self._filtered(self._unseen)
 
 
@@ -279,6 +293,8 @@ def run_import(
     declared = [b for b in BACKENDS if b in config]
     note(f"{len(declared)} DBMS configured: {', '.join(declared)}")
     dbms_names = _dbms_targets(config, only)
+    if not dbms_names:
+        raise ConfigError(_no_target_dbms_message(config, only))
 
     step("Check sources")
     sources_cfg = config.get("sources") or {}
@@ -305,7 +321,7 @@ def run_import(
     preview = StreamDataPreview(False if benchmark else show_data, sample_size)
     cast_warnings = _CastWarnings()
     start = time.perf_counter()
-    with cast_warnings.recording():
+    with cast_warnings.once_per_column():
         report, expected = validate_data(plan, on_batch=preview.observe if dry_run else None)
     collector.record("(all)", "*", "validate", rows=rows, seconds=time.perf_counter() - start)
     if not report.ok():

@@ -21,11 +21,12 @@ def _frame():
             "d": ["2023-11-02 03:30:00Z", "", "2024-01-01T00:00:00Z", "notadate", "", ""],
             "s": ["a", "", "c", "d", "", ""],
             "bad": ["1", "", "notanumber", "4", "", ""],
-            # pd.to_numeric() is MORE permissive than int(): it accepts
-            # decimal ("3.0") and scientific ("1e3") notation, which int()
-            # rejects with ValueError. These must stay as text and count as
-            # fallbacks, exactly like cast_value's int() does.
-            "i_edge": ["3.0", "1e3", "7", "", "", ""],
+            # Integral numbers written with a fraction or an exponent ("3.0", "1e3")
+            # are integers too, as the inference counts them: both casts convert
+            # them, exactly, however big.
+            "i_edge": ["3.0", "1e3", "7", "-2.00", "12345678901234567890.0", ""],
+            # What is not integral stays text and counts as a fallback in both casts.
+            "i_frac": ["2.5", "inf", "nan", "4", "", ""],
             # pd.to_numeric() is AMBIGUOUS for "nan": float("nan") succeeds
             # and returns a real NaN, indistinguishable from a coerce
             # failure once it comes back as NaN. "inf" must also come back
@@ -71,7 +72,7 @@ def _frame():
 
 _KINDS = {"i": "integer", "f": "float", "b": "boolean",
           "d": "datetime", "s": "string", "bad": "integer",
-          "i_edge": "integer", "f_edge": "float", "i_big": "integer",
+          "i_edge": "integer", "i_frac": "integer", "f_edge": "float", "i_big": "integer",
           "i_int64": "integer"}
 
 
@@ -107,6 +108,21 @@ def test_vectorized_equals_cast_value_cell_by_cell():
         for a, b in zip(e, g):
             assert type(a) is type(b), f"{col!r}: {type(a)} vs {type(b)}"
             assert _values_match(a, b), f"column {col!r}: expected={e} got={g}"
+
+
+def test_integral_numbers_cast_to_exact_ints_and_the_rest_stays_text():
+    out = cast_frame(_frame(), _KINDS)
+    assert list(out["i_edge"]) == [3, 1000, 7, -2, 12345678901234567890, None]
+    assert list(out["i_frac"]) == ["2.5", "inf", "nan", 4, None, None]
+
+
+def test_the_cast_warning_record_names_its_source_and_column(caplog):
+    with caplog.at_level(logging.WARNING):
+        cast_frame(_frame(), _KINDS, source="purchase")
+    keys = {(r.cast_source, r.cast_column) for r in caplog.records
+            if "could not be cast" in r.getMessage()}
+    assert keys == {("purchase", "bad"), ("purchase", "d"), ("purchase", "i_frac"),
+                    ("purchase", "i_big")}
 
 
 def test_cast_frame_has_no_strategy_parameter():
