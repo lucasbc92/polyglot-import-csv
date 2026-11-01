@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 # Polyglot Import CSV — Docker example runner (Git Bash / macOS / Linux).
 #
-# Default: start Docker (if needed), clean, dry-run, import with schema creation, inspect data.
+# Default: start Docker (if needed), clean, dry-run, import, inspect data.
 #
 # Examples:
 #   ./run_example.sh
 #   ./run_example.sh --dry-run
 #   ./run_example.sh --clean --import
 #   ./run_example.sh --config data/ecommerce/import_config_combined.json  # combined CSV mode
-#   ./run_example.sh --no-create-schema --import
 #   ./run_example.sh --fresh-start   # first-time: wipe volumes/images, re-pull, full default flow
 #
 # Options:
@@ -18,8 +17,6 @@
 #   --import                Real import (skip dry-run unless also passed)
 #   --clean                 Empty all configured backends
 #   --inspect               Log persisted data after other steps
-#   --create-schema         Create DDL on import (default when importing)
-#   --no-create-schema      Import without creating tables/keyspace
 #   --no-docker             Do not start/wait for Docker (assume DBs already reachable)
 #   --fresh-start           First-time run: down -v, remove images, pull, up --wait, then default flow
 #   --only BACKENDS         Comma-separated backends (postgres,redis,...)
@@ -49,7 +46,6 @@ DO_DRY_RUN=false
 DO_IMPORT=false
 DO_CLEAN=false
 DO_INSPECT=false
-CREATE_SCHEMA=true
 ONLY=""
 USE_DEFAULT_FLOW=true
 DO_LOG=true
@@ -57,7 +53,7 @@ LOG_FILE=""
 DO_FRESH_START=false
 
 usage() {
-  sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -92,14 +88,6 @@ while [[ $# -gt 0 ]]; do
     --inspect)
       USE_DEFAULT_FLOW=false
       DO_INSPECT=true
-      shift
-      ;;
-    --create-schema)
-      CREATE_SCHEMA=true
-      shift
-      ;;
-    --no-create-schema)
-      CREATE_SCHEMA=false
       shift
       ;;
     --no-docker)
@@ -427,10 +415,6 @@ run_polyglot() {
   fi
   if [[ "${dry_run}" == true ]]; then
     args+=(--dry-run)
-  elif [[ "${CREATE_SCHEMA}" == true ]]; then
-    args+=(--create-schema)
-  else
-    args+=(--no-create-schema)
   fi
   run_logged "${PY}" "${args[@]}"
 }

@@ -296,14 +296,13 @@ def run_stream_import(
     plan: ImportPlan,
     *,
     sink_factories: Dict[str, SinkFactory],
-    create_schema: bool = True,
     on_batch: Optional[Callable[[str, str, pd.DataFrame], None]] = None,
     collector: Optional[MetricsCollector] = None,
 ) -> StreamCounts:
     """Write every DBMS of the plan through its sink, one DBMS at a time.
 
     Each DBMS, in ``plan.dbms_names`` order, gets its sink from ``sink_factories``,
-    then ``create_schema()`` (when asked), then a ``run_single_pass`` of its own over
+    then ``create_schema()``, then a ``run_single_pass`` of its own over
     the sources its entities and relationships read (``dbms_sources``), which writes
     and closes the sink. ``on_batch(dbms, partition, frame)`` is called after every
     node batch is written; the data display (``data_preview``) hangs off it. With
@@ -321,8 +320,7 @@ def run_stream_import(
         start = time.perf_counter()
         try:
             sink = sink_factories[dbms](plan.config[dbms])
-            if create_schema:
-                sink.create_schema()
+            sink.create_schema()
             own = replace(
                 plan, dbms_names=[dbms], sources_cfg=dbms_sources(plan.config, [dbms])
             )

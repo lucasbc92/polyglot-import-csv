@@ -28,7 +28,7 @@ def _labeled(size, mode, chunk_mb, repetition, *, seconds=1.0):
 
 def _matrix(tmp_path, seen, **kwargs):
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides, chunk_size_mb):
+                      only, source_overrides, chunk_size_mb):
         seen.append(config_path)
         collector.record("postgres", "products", "write", rows=10, seconds=0.1)
         return []

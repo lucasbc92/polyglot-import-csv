@@ -56,9 +56,6 @@ HELP = {
         "Faz todas as verificações, inclusive a leitura dos dados, e mostra quantos "
         "registros iriam para cada destino, sem conectar a nenhum SGBD."
     ),
-    "create_schema": (
-        "Cria tabelas, coleções, keyspace e índices que ainda não existirem antes de gravar."
-    ),
     "log_level": (
         "Quanto detalhe aparece no console. O arquivo de log da sessão sempre registra "
         "tudo (DEBUG)."
@@ -102,14 +99,10 @@ class OptionsPanel(QGroupBox):
         layout.addLayout(self._build_spin_row(self.batch_spin, "batch_size"), 2, 1)
 
         self.dry_run_box = QCheckBox("Simulação (--dry-run)", self)
-        self.create_schema_box = QCheckBox("Criar esquema (--create-schema)", self)
-        self.create_schema_box.setChecked(True)
+        self.dry_run_box.toggled.connect(self.changed)
         modifiers = QHBoxLayout()
-        for key, box in (("dry_run", self.dry_run_box), ("create_schema", self.create_schema_box)):
-            box.toggled.connect(self.changed)
-            modifiers.addWidget(box)
-            modifiers.addWidget(self._badge(key))
-            modifiers.addSpacing(12)
+        modifiers.addWidget(self.dry_run_box)
+        modifiers.addWidget(self._badge("dry_run"))
         modifiers.addStretch(1)
         layout.addWidget(QLabel("Modificadores", self), 3, 0)
         layout.addLayout(modifiers, 3, 1)
@@ -146,9 +139,6 @@ class OptionsPanel(QGroupBox):
 
     def dry_run(self) -> bool:
         return self.dry_run_box.isChecked()
-
-    def create_schema(self) -> bool:
-        return self.create_schema_box.isChecked()
 
     def log_level(self) -> str:
         return self.log_combo.currentText()

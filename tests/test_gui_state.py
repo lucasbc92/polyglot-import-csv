@@ -13,7 +13,7 @@ def test_defaults_mirror_the_cli_defaults():
     options = RunOptions()
     assert options.chunk_size_mb == 8
     assert options.batch_size == 1024
-    assert options.create_schema is True
+    assert not hasattr(options, "create_schema")
     assert options.log_level == "INFO"
     assert options.show_data is None
     assert options.sample_size == 50

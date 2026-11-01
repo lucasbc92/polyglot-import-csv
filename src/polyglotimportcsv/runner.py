@@ -253,7 +253,6 @@ def run_import(
     *,
     dbms_config_path: Optional[str | Path] = None,
     dry_run: bool = False,
-    create_schema: bool = True,
     only: Optional[Iterable[str]] = None,
     source_overrides: Optional[Dict[str, str]] = None,
     show_data: Optional[bool] = None,
@@ -345,15 +344,10 @@ def run_import(
         return lines
 
     step("Write")
-    if create_schema:
-        note("DDL will be created lazily per partition (--create-schema)")
-    else:
-        note("existing schema only (--no-create-schema)")
     with cast_warnings.without_repeats():
         counts = run_stream_import(
             plan,
             sink_factories=sink_factories or default_sink_factories(),
-            create_schema=create_schema,
             on_batch=preview.observe,
             collector=collector,
         )

@@ -75,12 +75,6 @@ def _parse_source_overrides(pairs: Tuple[str, ...]) -> Dict[str, str]:
     "that do not, and exit (0 when all are up). Imports nothing.",
 )
 @click.option(
-    "--create-schema/--no-create-schema",
-    default=True,
-    show_default=True,
-    help="Create keyspace/tables/collections where applicable.",
-)
-@click.option(
     "--only",
     default="",
     help="Comma-separated DBMS to run (postgres,redis,mongodb,cassandra,neo4j). Empty = all configured.",
@@ -144,7 +138,6 @@ def main(
     dbms_config_path: Path,
     dry_run: bool,
     check_dbms_only: bool,
-    create_schema: bool,
     only: str,
     chunk_size_mb: int,
     batch_size: int,
@@ -179,7 +172,6 @@ def main(
             config_path,
             dbms_config_path=dbms_config_path,
             dry_run=dry_run,
-            create_schema=create_schema,
             only=only_list,
             source_overrides=overrides or None,
             show_data=show_data,

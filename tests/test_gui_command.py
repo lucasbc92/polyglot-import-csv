@@ -12,15 +12,14 @@ def test_the_default_state_spells_every_option_out():
     """Q1: a control at its default value must still appear in the command.
 
     The command spells out every option, not only those that differ from the
-    CLI defaults: otherwise clicking "Criar esquema" would change nothing
-    visible and the control would look dead. Verbosity is the point here: the
+    CLI defaults: otherwise setting a size spin box back to its initial value
+    would change nothing visible and the control would look dead. Verbosity is the point here: the
     shown command is a teaching aid, not the shortest line a person could type.
     """
     assert build_argv(RunOptions(config_path=CFG)) == [
         "--config", str(CFG),
         "--chunk-size", "8",
         "--batch-size", "1024",
-        "--create-schema",
         "--log-level", "INFO",
         "--sample", "50",
     ]
@@ -58,7 +57,7 @@ def test_no_combination_of_options_writes_strategy():
         RunOptions(config_path=CFG),
         RunOptions(config_path=CFG, chunk_size_mb=64, dry_run=True),
         RunOptions(config_path=CFG, show_data=True, only=("redis",)),
-        RunOptions(config_path=CFG, show_data=False, create_schema=False),
+        RunOptions(config_path=CFG, show_data=False),
     ):
         assert "--strategy" not in build_argv(options)
         assert "--strategy" not in build_check_argv(options)
@@ -69,15 +68,8 @@ def test_benchmark_is_never_emitted():
 
 
 def test_boolean_flags():
-    argv = build_argv(RunOptions(config_path=CFG, dry_run=True, create_schema=False))
+    argv = build_argv(RunOptions(config_path=CFG, dry_run=True))
     assert "--dry-run" in argv
-    assert "--no-create-schema" in argv
-
-
-def test_create_schema_emits_one_of_its_two_forms():
-    on = build_argv(RunOptions(config_path=CFG, create_schema=True))
-    assert "--create-schema" in on
-    assert "--no-create-schema" not in on
 
 
 def test_log_level_is_always_emitted():
@@ -124,7 +116,6 @@ def test_argv_follows_the_order_of_the_spec_table():
         chunk_size_mb=64,
         batch_size=2048,
         dry_run=True,
-        create_schema=False,
         log_level="DEBUG",
         show_data=True,
         sources=(("clientes", source),),
@@ -136,7 +127,6 @@ def test_argv_follows_the_order_of_the_spec_table():
         "--chunk-size", "64",
         "--batch-size", "2048",
         "--dry-run",
-        "--no-create-schema",
         "--log-level", "DEBUG",
         "--show-data",
         "--source", "clientes={0}".format(source),
@@ -155,7 +145,6 @@ def test_every_option_changes_the_command_when_toggled():
         RunOptions(config_path=CFG, chunk_size_mb=64),
         RunOptions(config_path=CFG, batch_size=2048),
         RunOptions(config_path=CFG, dry_run=True),
-        RunOptions(config_path=CFG, create_schema=False),
         RunOptions(config_path=CFG, log_level="DEBUG"),
         RunOptions(config_path=CFG, show_data=True),
         RunOptions(config_path=CFG, show_data=False),
@@ -174,7 +163,6 @@ def test_argv_order_is_stable_when_options_are_at_their_defaults():
         "--only", "postgres",
         "--chunk-size", "8",
         "--batch-size", "1024",
-        "--create-schema",
         "--log-level", "INFO",
         "--sample", "50",
     ]

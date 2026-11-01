@@ -198,7 +198,6 @@ def run_matrix(
                     collector=collector,
                     show_data=False,
                     only=selected,
-                    create_schema=True,
                     source_overrides=cell["overrides"],
                     chunk_size_mb=chunk_mb,
                 )

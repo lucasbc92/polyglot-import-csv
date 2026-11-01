@@ -12,7 +12,7 @@ CFG = ROOT / "data" / "ecommerce" / "import_config.json"
 
 
 def test_dry_run_smoke():
-    lines = run_import(CFG, dry_run=True, create_schema=False, only=["postgres"])
+    lines = run_import(CFG, dry_run=True, only=["postgres"])
     assert lines and all(line.startswith("[postgres] ") for line in lines)
 
 

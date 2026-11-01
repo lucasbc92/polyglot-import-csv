@@ -92,7 +92,6 @@ Options:
 - `--show-data` — force the per-entity record dump to show every row; `--no-data` suppresses it entirely. The default (neither flag) is `--sample`, below.
 - `--sample N` — show the first N rows of each entity (default 50). `--show-data` shows every row; `--no-data` none. `--sample` cannot be combined with either.
 - `--benchmark` — write per-phase metrics (`infer`, `validate` and one `write` per DBMS) to `benchmarks/benchmark_<timestamp>.json` and append `benchmarks/benchmark_history.csv` (implies `--no-data`).
-- `--no-create-schema` — skip DDL where applicable.
 - `--check-dbms` — only check that the target DBMS answer and exit (see "Checking the DBMS").
 
 ### Validation before writing
@@ -367,7 +366,6 @@ Opções úteis:
 - `--show-data` — força a exibição de todos os registros de cada entidade; `--no-data` suprime a exibição por completo. O padrão (sem nenhuma das duas flags) é `--sample`, abaixo.
 - `--sample N` — mostra as primeiras N linhas de cada entidade (padrão 50). `--show-data` mostra todas as linhas; `--no-data`, nenhuma. `--sample` não se combina com nenhuma das duas.
 - `--benchmark` — grava métricas por fase (`infer`, `validate` e um `write` por SGBD) em `benchmarks/benchmark_<timestamp>.json` e acrescenta `benchmarks/benchmark_history.csv` (implica `--no-data`).
-- `--no-create-schema` — não emite DDL de criação (quando aplicável).
 - `--check-dbms` — só verifica se os SGBDs de destino respondem e sai (veja "Verificação dos SGBDs").
 
 ### Validação prévia
