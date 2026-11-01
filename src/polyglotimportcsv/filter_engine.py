@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
 from polyglotimportcsv.business_exception import BusinessException
+
+#: Placeholder of an ``each`` filter's ``target_suffix`` template.
+VALUE_MARKER = "{value}"
 
 
 def _slugify(value: str) -> str:
@@ -117,6 +120,25 @@ def expand_each(
         raise BusinessException(f"each filter references unknown column: {col}")
     parts: List[Tuple[str, pd.DataFrame]] = []
     for val, group in df.groupby(df[col].replace("", pd.NA)):
-        suffix = flt.get("target_suffix") or _slugify(val)
-        parts.append((f"{base_entity_name}_{suffix}", group.copy()))
+        parts.append((_partition_name(base_entity_name, flt, _slugify(val)), group.copy()))
     return parts
+
+
+def _partition_name(base_entity_name: str, flt: Dict[str, Any], slug: str) -> str:
+    """``<entity>_<suffix>``: the ``target_suffix`` template with ``{value}`` replaced
+    by ``slug``, or ``slug`` itself when the filter has no template."""
+    template = flt.get("target_suffix") or VALUE_MARKER
+    return f"{base_entity_name}_{template.replace(VALUE_MARKER, slug)}"
+
+
+def each_partition_pattern(
+    base_entity_name: str, filters: Optional[List[Dict[str, Any]]]
+) -> Optional["re.Pattern[str]"]:
+    """A pattern whose ``fullmatch`` accepts exactly the names ``expand_each`` can give
+    the parts of ``base_entity_name``, or ``None`` when ``filters`` has no ``each``."""
+    each_filters = [f for f in (filters or []) if f.get("operator") == "each"]
+    if not each_filters:
+        return None
+    marker = "\0"
+    name = re.escape(_partition_name(base_entity_name, each_filters[0], marker))
+    return re.compile(name.replace(re.escape(marker), "[A-Za-z0-9_]+"))
