@@ -119,7 +119,7 @@ O relatório (§4.1, §4.3) diz que `--no-create-schema` impede a criação de t
 
 - **PostgreSQL:** remove as FKs, que `close()` recria. Com `--no-create-schema`, uma nova carga sobre FKs de uma carga anterior pode violar FK no meio da gravação.
 - **Cassandra:** cria o *keyspace*. Sem ele, a gravação falha.
-- **Neo4j:** cria as restrições de unicidade.
+- **Neo4j:** nada. As restrições de unicidade são criadas por `ensure_partition`, com ou sem a opção.
 - **MongoDB e Redis:** nada.
 
 A mensagem do *runner* "existing schema only (--no-create-schema)" é falsa. A GUI tem a caixa "Criar esquema (`--create-schema`)", que aparece nas capturas da §4.6.
@@ -130,7 +130,7 @@ A divergência já existia no modo fluxo da v2.x. A materialização respeitava 
 
 - `--create-schema`/`--no-create-schema` sai da CLI e da caixa "Criar esquema" da GUI. Sai também do *runner* e do `stream_runner`, em que `create_schema()` passa a rodar sempre. Saem ainda o `run_example.sh`, o *completion* do bash, o `benchmark_runner`, os READMEs e os testes que passam a opção. Os testes do método `create_schema()` dos *sinks* continuam. A remoção entra na 3.0.0, que ainda não foi lançada.
 - **"Deixar bem claro o que a opção fazia":**
-  - **Notas da 3.0.0, em "Mudanças incompatíveis" (inglês e português).** Dizem que a opção foi removida e que ela nunca impediu a criação de tabelas, porque `CREATE TABLE IF NOT EXISTS` rodava sempre no PostgreSQL e no Cassandra. Dizem também o que `--no-create-schema` desligava: o *keyspace* do Cassandra, as restrições de unicidade do Neo4j e a remoção e recriação das FKs do PostgreSQL em volta da carga. Por isso uma nova carga podia violar uma FK no meio da gravação. Por fim, que agora a ferramenta faz tudo isso sempre e reaproveita as estruturas existentes.
+  - **Notas da 3.0.0, em "Mudanças incompatíveis" (inglês e português).** Dizem que a opção foi removida e que ela nunca impediu a criação de tabelas, porque `CREATE TABLE IF NOT EXISTS` rodava sempre no PostgreSQL e no Cassandra. Dizem também o que `--no-create-schema` desligava: o *keyspace* do Cassandra e a remoção das FKs do PostgreSQL antes da carga (a recriação no fim rodava sempre). Por isso uma nova carga podia violar uma FK no meio da gravação. Por fim, que agora a ferramenta faz tudo isso sempre e reaproveita as estruturas existentes.
   - **Relatório.** O texto responde à pergunta do orientador descrevendo o comportamento atual, sem histórico de versões: o que a ferramenta cria em cada SGBD destino antes de gravar, que o que já existe é reaproveitado e que MongoDB e Redis não precisam de estrutura prévia.
 - **Interpretação minha da resposta** "Remova e deixe bem claro o que essa função `--no-create-schema` faz": remover a opção e explicar o que ela fazia, nas notas, e o que a ferramenta faz, no relatório.
 

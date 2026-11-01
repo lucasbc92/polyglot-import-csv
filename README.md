@@ -96,17 +96,17 @@ Options:
 
 ### Validation before writing
 
-The upfront validation has three layers:
+The upfront validation has three stages:
 
 1. **JSON Schema** — `import_config.json` and `dbms_config.json`, each against its bundled schema.
 2. **Cross-file consistency** — the import configuration only targets DBMS declared in the DBMS configuration.
 3. **Columns, keys and data, checked against the CSVs** — first the headers, then the data, in an inference read and a validation read.
 
-If any layer fails, nothing is written in any DBMS and the command exits with code 1.
+If any stage fails, nothing is written in any DBMS and the command exits with code 1.
 
 An import runs in this order:
 
-1. Layers 1 and 2, then the headers of every source. The header check finds a mapped column, a filter column, or a Cassandra partition or clustering column that does not exist; a PostgreSQL or Neo4j relationship that names an unknown entity, key or property; a PostgreSQL foreign key whose `references_key` is not the key of its `to` entity, since a foreign key must reference a primary key; and nested columns in a DBMS that takes only flat ones. An `--only` that names no DBMS the configuration declares is an error too.
+1. Stages 1 and 2, then the headers of every source. The header check finds a mapped column, a filter column, or a Cassandra partition or clustering column that does not exist; a PostgreSQL or Neo4j relationship that names an unknown entity, key or property; a PostgreSQL foreign key whose `references_key` is not the key of its `to` entity, since a foreign key must reference a primary key; and nested columns in a DBMS that takes only flat ones. An `--only` that names no DBMS the configuration declares is an error too.
 2. The DBMS check (see "Checking the DBMS"), which `--dry-run` skips.
 3. The **inference read**: every source the selected DBMS use is read in chunks, and the type of each column is inferred over the whole file, not over a sample. It connects to no DBMS and keeps only per-column aggregates in memory.
 4. The **validation read**: every source is read again, with those types, and each chunk goes through the same code the write uses (filters, type conversion, `each`, row shaping per DBMS), with the writes replaced by checks. Each kind of problem is reported with a count and up to 5 examples, with file, line, column and value.
@@ -370,17 +370,17 @@ Opções úteis:
 
 ### Validação prévia
 
-A validação prévia tem três camadas:
+A validação prévia tem três etapas:
 
 1. **JSON Schema** — `import_config.json` e `dbms_config.json`, cada um contra o seu schema embutido.
 2. **Consistência entre os arquivos** — a configuração de importação só referencia SGBDs declarados na configuração de conexão.
 3. **Colunas, chaves e dados conferidos contra os CSVs** — primeiro os cabeçalhos, depois os dados, em uma leitura de inferência e uma leitura de validação.
 
-Se qualquer camada falhar, nada é gravado em nenhum SGBD e o comando termina com código 1.
+Se qualquer etapa falhar, nada é gravado em nenhum SGBD e o comando termina com código 1.
 
 Uma importação segue esta ordem:
 
-1. As camadas 1 e 2, e então os cabeçalhos de cada fonte. A conferência dos cabeçalhos encontra coluna mapeada, coluna de filtro ou coluna de partição ou agrupamento do Cassandra que não existe; relacionamento do PostgreSQL ou do Neo4j que cita entidade, chave ou propriedade desconhecida; chave estrangeira do PostgreSQL cuja `references_key` não é a chave da sua entidade `to`, pois uma chave estrangeira deve referenciar uma chave primária; e colunas aninhadas em um SGBD que aceita só colunas planas. Um `--only` que não cita nenhum SGBD declarado na configuração também é um erro.
+1. As etapas 1 e 2, e então os cabeçalhos de cada fonte. A conferência dos cabeçalhos encontra coluna mapeada, coluna de filtro ou coluna de partição ou agrupamento do Cassandra que não existe; relacionamento do PostgreSQL ou do Neo4j que cita entidade, chave ou propriedade desconhecida; chave estrangeira do PostgreSQL cuja `references_key` não é a chave da sua entidade `to`, pois uma chave estrangeira deve referenciar uma chave primária; e colunas aninhadas em um SGBD que aceita só colunas planas. Um `--only` que não cita nenhum SGBD declarado na configuração também é um erro.
 2. A verificação dos SGBDs (veja "Verificação dos SGBDs"), que o `--dry-run` pula.
 3. A **leitura de inferência**: cada fonte usada pelos SGBDs selecionados é lida em blocos, e o tipo de cada coluna é inferido sobre o arquivo inteiro, não sobre uma amostra. Ela não conecta a nenhum SGBD e guarda na memória só agregados por coluna.
 4. A **leitura de validação**: cada fonte é lida de novo, com esses tipos, e cada bloco passa pelo mesmo código que a gravação usa (filtros, conversão de tipos, `each`, montagem das linhas de cada SGBD), com a escrita trocada por conferências. Cada tipo de problema é reportado com a contagem e até 5 exemplos, com arquivo, linha, coluna e valor.

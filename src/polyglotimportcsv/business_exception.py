@@ -18,7 +18,7 @@ class MappingError(BusinessException):
 
 
 class DataValidationError(BusinessException):
-    """Data rows break the import configuration (validation layer 3)."""
+    """Data rows break the import configuration (validation stage 3)."""
 
 
 class ImportExecutionError(BusinessException):
