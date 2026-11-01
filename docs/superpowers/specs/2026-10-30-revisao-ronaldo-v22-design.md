@@ -118,7 +118,7 @@ Esta seção registra o que muda no código. O pedido do autor exige cuidado esp
 O relatório (§4.1, §4.3) diz que `--no-create-schema` impede a criação de tabelas. Na 3.0.0, a gravação chama `sink.ensure_partition` antes do primeiro lote de cada partição. Esse método **sempre** executa `CREATE TABLE IF NOT EXISTS` no PostgreSQL (`postgres_sink.ensure_partition`) e no Cassandra (`cassandra_sink.ensure_partition`). A opção só decide se `create_schema()` roda (`stream_runner.py`, perto da linha 324), e o efeito depende do SGBD:
 
 - **PostgreSQL:** remove as FKs, que `close()` recria. Com `--no-create-schema`, uma nova carga sobre FKs de uma carga anterior pode violar FK no meio da gravação.
-- **Cassandra:** cria o *keyspace*. Sem ele, a gravação falha.
+- **Cassandra:** cria o *keyspace*. Sem a criação, a gravação falha se o *keyspace* ainda não existir.
 - **Neo4j:** nada. As restrições de unicidade são criadas por `ensure_partition`, com ou sem a opção.
 - **MongoDB e Redis:** nada.
 

@@ -253,3 +253,15 @@ def test_import_schema_rejects_a_target_suffix_that_is_not_a_template(suffix):
 @pytest.mark.parametrize("suffix", ["{value}", "state_{value}", "r_{value}_x"])
 def test_import_schema_accepts_a_target_suffix_template(suffix):
     validate_import_config_schema(_each_config(suffix))
+
+
+def test_import_schema_error_names_the_field_it_refuses():
+    with pytest.raises(BusinessException) as err:
+        validate_import_config_schema(_each_config("r"))
+    assert "$.mongodb.entities.orders.filters[0].target_suffix" in str(err.value)
+
+
+def test_dbms_schema_error_names_the_field_it_refuses():
+    with pytest.raises(BusinessException) as err:
+        validate_dbms_config({"version": 1, "postgres": {"connection": {"port": "x"}}})
+    assert "$.postgres.connection.port" in str(err.value)
