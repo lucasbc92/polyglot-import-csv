@@ -40,7 +40,6 @@ class RunOptions:
     chunk_size_mb: int = DEFAULT_CHUNK_MB
     batch_size: int = DEFAULT_BATCH_SIZE
     dry_run: bool = False
-    create_schema: bool = True
     log_level: str = "INFO"
     show_data: Optional[bool] = None
     sample_size: int = DEFAULT_SAMPLE_SIZE

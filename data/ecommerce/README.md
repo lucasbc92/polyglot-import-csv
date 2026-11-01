@@ -10,7 +10,7 @@
 | `ecommerce_join.csv` | Combined CSV (alternative input mode): column 0 (`action`) is the origin column; each distinct value becomes a source. |
 | `import_config.json` | v2 mapping config (multi-CSV `sources`). Default for `./run_example.sh`. |
 | `import_config_combined.json` | Same DBMS blocks, `sources` pointing at the combined CSV — demonstrates that switching input modes changes nothing in the per-DBMS mapping. |
-| `import_config_invalido.json` | A deliberately invalid config (its `stock` source is a number), to see the validation at work: the JSON Schema layer refuses it, with exit code 1, before any data is read or written. |
+| `import_config_invalido.json` | A deliberately invalid config (its `stock` source is a number), to see the validation at work: the JSON Schema check (validation stage 1) refuses it, with exit code 1, before any data is read or written. |
 | `dbms_config.json` | Connection settings per DBMS; its `start` blocks point at the Docker Compose services of `../../docker-compose.yml`. Default when `--dbms-config` is omitted. |
 | `dbms_config_windows.json` | Same connections; `start` holds Windows service commands (`net start …`). Cassandra, which does not run natively on Windows, keeps the Docker Compose service. |
 | `dbms_config_linux.json` | Same connections; `start` holds `sudo systemctl start …` commands. |
@@ -54,9 +54,10 @@ python -m polyglotimportcsv --config data/ecommerce/import_config.json \
   --dry-run
 ```
 
-The command exits with code 1 and prints a table with the rule (`not_convertible`),
-where it happened (`postgres · orders`), how many times, and an example with the
-file, the line, the column and the value. Without `--dry-run` the result is the same
+The command exits with code 1 and prints a table with one row for each entity that
+writes `order_date` (`postgres · orders` and `mongodb · orders`): the rule
+(`not_convertible`), how many times, and an example with the file, the line, the
+column and the value. Without `--dry-run` the result is the same
 when the DBMS are up (the DBMS check comes first, and a DBMS that is down stops the
 run before any data is read), and nothing is written in any DBMS.
 
@@ -68,7 +69,7 @@ run before any data is read), and nothing is written in any DBMS.
 | `ecommerce_join.csv` | CSV combinado (modo alternativo): a coluna 0 (`action`) é a coluna de origem; cada valor distinto vira uma fonte. |
 | `import_config.json` | Configuração de mapeamento v2 (`sources` com vários CSVs). Padrão do `./run_example.sh`. |
 | `import_config_combined.json` | Os mesmos blocos por SGBD, com `sources` apontando o CSV combinado — mostra que trocar o modo de entrada não muda nada no mapeamento de cada SGBD. |
-| `import_config_invalido.json` | Uma configuração inválida de propósito (a fonte `stock` é um número), para ver a validação em ação: a camada de JSON Schema a recusa, com código de saída 1, antes de ler ou gravar qualquer dado. |
+| `import_config_invalido.json` | Uma configuração inválida de propósito (a fonte `stock` é um número), para ver a validação em ação: a conferência do JSON Schema (etapa 1 da validação) a recusa, com código de saída 1, antes de ler ou gravar qualquer dado. |
 | `dbms_config.json` | Conexão com cada SGBD; os blocos `start` apontam os serviços do Docker Compose de `../../docker-compose.yml`. É o padrão quando `--dbms-config` é omitido. |
 | `dbms_config_windows.json` | As mesmas conexões; `start` traz comandos de serviço do Windows (`net start …`). O Cassandra, que não roda nativamente no Windows, mantém o serviço do Docker Compose. |
 | `dbms_config_linux.json` | As mesmas conexões; `start` traz comandos `sudo systemctl start …`. |
@@ -113,8 +114,9 @@ python -m polyglotimportcsv --config data/ecommerce/import_config.json \
   --dry-run
 ```
 
-O comando termina com código 1 e mostra uma tabela com a regra (`not_convertible`),
-onde aconteceu (`postgres · orders`), quantas vezes e um exemplo com o arquivo, a
-linha, a coluna e o valor. Sem `--dry-run` o resultado é o mesmo quando os SGBDs estão
+O comando termina com código 1 e mostra uma tabela com uma linha para cada entidade
+que grava `order_date` (`postgres · orders` e `mongodb · orders`): a regra
+(`not_convertible`), quantas vezes e um exemplo com o arquivo, a linha, a coluna e o
+valor. Sem `--dry-run` o resultado é o mesmo quando os SGBDs estão
 no ar (a verificação dos SGBDs vem primeiro, e um SGBD fora do ar interrompe a execução
 antes de ler qualquer dado), e nada é gravado em nenhum SGBD.

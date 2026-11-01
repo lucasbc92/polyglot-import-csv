@@ -12,7 +12,7 @@ CFG = ROOT / "data" / "ecommerce" / "import_config.json"
 
 
 def test_dry_run_smoke():
-    lines = run_import(CFG, dry_run=True, create_schema=False, only=["postgres"])
+    lines = run_import(CFG, dry_run=True, only=["postgres"])
     assert lines and all(line.startswith("[postgres] ") for line in lines)
 
 
@@ -25,6 +25,13 @@ def test_dry_run_counts_every_dbms(cfg_name):
         "[postgres] inventory: 8 row(s)",
         "[postgres] orders: 8 row(s)",
         "[postgres] products: 8 row(s)",
+        "[mongodb] orders_state_CA: 1 row(s)",
+        "[mongodb] orders_state_RJ: 1 row(s)",
+        "[mongodb] orders_state_RS: 1 row(s)",
+        "[mongodb] orders_state_SC: 1 row(s)",
+        "[mongodb] orders_state_SE: 1 row(s)",
+        "[mongodb] orders_state_SP: 2 row(s)",
+        "[mongodb] orders_state_TO: 1 row(s)",
         "[mongodb] product_catalog: 8 row(s)",
         "[cassandra] user_activity_log: 32 row(s)",
         "[redis] shopping_cart: 8 row(s)",

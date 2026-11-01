@@ -41,3 +41,6 @@ def test_dry_run_smoke_on_reference(mode):
     assert any(line.startswith("[neo4j] :PURCHASED: ") for line in lines)
     # every one of the 1000 rows is read by the inference and by the validation
     assert {m.phase: m.rows for m in c.entries()} == {"infer": 1000, "validate": 1000}
+    # the example's orders collection is split by state: four in the synthetic data
+    states = {line.split(":")[0] for line in lines if line.startswith("[mongodb] orders_state_")}
+    assert states == {f"[mongodb] orders_state_{s}" for s in ("CA", "NY", "SC", "TX")}

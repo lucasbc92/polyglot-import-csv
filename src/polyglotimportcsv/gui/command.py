@@ -2,9 +2,9 @@
 
 Every option the form can set is written out in full, including the ones left
 at the CLI's own default. Emitting only the differences made the command
-shorter but made two controls look broken: ticking "Criar esquema" or setting
-a size spin box back to its initial value — each already the default — changed
-nothing on screen, so the click seemed to have been ignored. A visible,
+shorter but made a control look broken: setting a size spin box back to its
+initial value — already the default — changed nothing on screen, so the click
+seemed to have been ignored. A visible,
 complete command is worth more here than a short one, because the panel
 doubles as documentation of what will actually run.
 
@@ -38,7 +38,6 @@ def build_argv(options: RunOptions) -> List[str]:
     argv += ["--batch-size", str(options.batch_size)]
     if options.dry_run:
         argv.append("--dry-run")
-    argv.append("--create-schema" if options.create_schema else "--no-create-schema")
     argv += ["--log-level", options.log_level]
     if options.show_data is True:
         argv.append("--show-data")

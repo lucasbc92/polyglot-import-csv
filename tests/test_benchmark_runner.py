@@ -60,7 +60,7 @@ def test_run_matrix_iterates_and_cleans_before_import(tmp_path):
     cleaners = {"postgres": make_cleaner("postgres")}
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides, chunk_size_mb):
+                      only, source_overrides, chunk_size_mb):
         events.append(("import", str(config_path), tuple(sorted(source_overrides))))
         assert chunk_size_mb == DEFAULT_CHUNK_MB
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
@@ -107,7 +107,7 @@ def test_repetitions_sweep_the_whole_matrix_instead_of_repeating_one_cell(tmp_pa
     seen = []
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides, chunk_size_mb):
+                      only, source_overrides, chunk_size_mb):
         seen.append(Path(config_path).name)
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
         return []
@@ -135,7 +135,7 @@ def test_datasets_are_prepared_before_the_first_import(tmp_path):
     events = []
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides, chunk_size_mb):
+                      only, source_overrides, chunk_size_mb):
         events.append("import")
         return []
 
@@ -159,7 +159,7 @@ def test_on_run_fires_after_each_import_and_survives_a_crash(tmp_path):
     seen: list[int] = []
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides, chunk_size_mb):
+                      only, source_overrides, chunk_size_mb):
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
         if len(seen) == 2:
             raise RuntimeError("backend blew up")
@@ -184,7 +184,7 @@ def test_run_matrix_builds_mode_overrides(tmp_path):
     seen = []
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides, chunk_size_mb):
+                      only, source_overrides, chunk_size_mb):
         seen.append((Path(config_path).name, set(source_overrides)))
         return []
 
@@ -245,7 +245,7 @@ def test_matrix_sweeps_chunk_sizes_and_labels_runs(tmp_path):
     seen = []
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides, chunk_size_mb):
+                      only, source_overrides, chunk_size_mb):
         seen.append(chunk_size_mb)
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
         return []
@@ -267,7 +267,7 @@ def test_matrix_sweeps_chunk_sizes_and_labels_runs(tmp_path):
 
 def test_run_matrix_records_peak_memory(tmp_path):
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, create_schema, source_overrides, chunk_size_mb):
+                      only, source_overrides, chunk_size_mb):
         # Allocate something inside the timed/traced region so peak > 0.
         _ = [0] * 200_000
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)

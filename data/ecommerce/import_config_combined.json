@@ -85,6 +85,24 @@
             "last_restock_date": {}
           }
         }
+      },
+      "orders": {
+        "source": "purchase",
+        "columns": {
+          "order_number": {},
+          "user_id": {},
+          "order_date": {},
+          "order_status": {},
+          "payment_method": {},
+          "quantity": {},
+          "product_id": {},
+          "price": {},
+          "comment": {},
+          "rating": {}
+        },
+        "filters": [
+          { "column": "state", "operator": "each", "target_suffix": "state_{value}" }
+        ]
       }
     }
   },

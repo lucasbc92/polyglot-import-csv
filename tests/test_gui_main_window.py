@@ -60,7 +60,7 @@ def test_window_opens_showing_the_defaults_it_would_run_with(window):
     """
     assert window.console_panel.command_text() == (
         "polyglotimportcsv --chunk-size 8 --batch-size 1024 "
-        "--create-schema --log-level INFO --sample 50"
+        "--log-level INFO --sample 50"
     )
 
 

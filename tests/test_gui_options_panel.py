@@ -18,7 +18,7 @@ def test_defaults_match_the_cli(qtbot):
     assert panel.chunk_size_mb() == 8
     assert panel.batch_size() == 1024
     assert panel.dry_run() is False
-    assert panel.create_schema() is True
+    assert not hasattr(panel, "create_schema_box")
     assert panel.log_level() == "INFO"
     assert panel.show_data() is None
     assert panel.sample_size() == 50
@@ -140,7 +140,7 @@ def test_every_unclear_option_has_a_help_badge(qtbot):
     panel = OptionsPanel()
     qtbot.addWidget(panel)
     assert set(panel.info_badges) == {
-        "chunk_size", "batch_size", "dry_run", "create_schema", "log_level", "show_data",
+        "chunk_size", "batch_size", "dry_run", "log_level", "show_data",
     }
     assert panel.info_badges["chunk_size"].toolTip() == (
         "Memória de cada bloco de leitura, em MB (8 a 256). A ferramenta calcula quantas "

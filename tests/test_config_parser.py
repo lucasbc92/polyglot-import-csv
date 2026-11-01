@@ -232,3 +232,36 @@ def test_dbms_schema_start_alone_is_not_enough(dbms):
 @pytest.mark.parametrize("dbms", ["postgres", "redis"])
 def test_dbms_schema_accepts_empty_connection_when_every_field_has_a_default(dbms):
     validate_dbms_config({"version": 1, dbms: {"connection": {}}})
+
+
+def _each_config(suffix):
+    return {
+        "sources": {"s": "s.csv"},
+        "mongodb": {"entities": {"orders": {
+            "columns": {"a": {}},
+            "filters": [{"column": "state", "operator": "each", "target_suffix": suffix}],
+        }}},
+    }
+
+
+@pytest.mark.parametrize("suffix", ["r", "r_{value}_{value}", "", "state-{value}", "{VALUE}"])
+def test_import_schema_rejects_a_target_suffix_that_is_not_a_template(suffix):
+    with pytest.raises(BusinessException):
+        validate_import_config_schema(_each_config(suffix))
+
+
+@pytest.mark.parametrize("suffix", ["{value}", "state_{value}", "r_{value}_x"])
+def test_import_schema_accepts_a_target_suffix_template(suffix):
+    validate_import_config_schema(_each_config(suffix))
+
+
+def test_import_schema_error_names_the_field_it_refuses():
+    with pytest.raises(BusinessException) as err:
+        validate_import_config_schema(_each_config("r"))
+    assert "$.mongodb.entities.orders.filters[0].target_suffix" in str(err.value)
+
+
+def test_dbms_schema_error_names_the_field_it_refuses():
+    with pytest.raises(BusinessException) as err:
+        validate_dbms_config({"version": 1, "postgres": {"connection": {"port": "x"}}})
+    assert "$.postgres.connection.port" in str(err.value)

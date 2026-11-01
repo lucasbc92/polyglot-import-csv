@@ -18,7 +18,6 @@ _run_example_completion() {
   local flags=(
     --config --dbms-config
     --dry-run --import --clean --inspect
-    --create-schema --no-create-schema
     --no-docker --fresh-start
     --only
     --log-file --no-log

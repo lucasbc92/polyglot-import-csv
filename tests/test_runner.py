@@ -378,21 +378,6 @@ def test_chunk_and_batch_sizes_reach_the_plan(tmp_path, monkeypatch):
     assert seen == {"chunk_mb": 16, "batch_size": 2048}
 
 
-@pytest.mark.parametrize("kwargs,expected", [({}, True), ({"create_schema": False}, False)])
-def test_create_schema_reaches_the_write(tmp_path, monkeypatch, kwargs, expected):
-    cfg = _events(tmp_path)
-    seen = []
-    real = runner.run_stream_import
-
-    def spy(plan, **write_kwargs):
-        seen.append(write_kwargs["create_schema"])
-        return real(plan, **write_kwargs)
-
-    monkeypatch.setattr(runner, "run_stream_import", spy)
-    run_import(cfg, sink_factories=_factories(), **kwargs)
-    assert seen == [expected]
-
-
 @pytest.mark.parametrize("dry_run", [False, True])
 def test_the_default_display_is_a_sample_of_fifty_rows(tmp_path, capsys, dry_run):
     cfg = _events(tmp_path, n=60)
@@ -509,7 +494,7 @@ def test_a_real_import_stops_before_reading_data_when_a_dbms_is_down(monkeypatch
 
 def test_the_write_passes_a_preview_to_the_orchestrator(monkeypatch, capsys):
     """The data display hangs off the write: run_import wires an on_batch."""
-    def fake_stream(plan, *, sink_factories, create_schema, on_batch=None, collector=None):
+    def fake_stream(plan, *, sink_factories, on_batch=None, collector=None):
         assert on_batch is not None
         on_batch("redis", "user_session", pd.DataFrame({"id": range(3)}))
         return StreamCounts(written={"redis": {"user_session": 3}},

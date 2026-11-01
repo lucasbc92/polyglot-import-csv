@@ -140,6 +140,22 @@ def test_cli_has_no_execution_option(monkeypatch):
     assert "No such option" in res.output and "--execution" in res.output
 
 
+@pytest.mark.parametrize("flag", ["--create-schema", "--no-create-schema"])
+def test_cli_has_no_create_schema_option(flag, monkeypatch):
+    monkeypatch.setattr("polyglotimportcsv.cli.run_import", _no_run)
+    res = CliRunner().invoke(main, ["--config", str(ECOMMERCE / "import_config.json"), flag])
+    assert res.exit_code == 2
+    assert "No such option" in res.output and flag in res.output
+
+
+def test_the_import_and_the_write_take_no_create_schema():
+    import inspect
+    from polyglotimportcsv.runner import run_import
+    from polyglotimportcsv.stream_runner import run_stream_import
+    assert "create_schema" not in inspect.signature(run_import).parameters
+    assert "create_schema" not in inspect.signature(run_stream_import).parameters
+
+
 def test_cli_option_help_and_metadata():
     options = {p.name: p for p in main.params}
     chunk, batch = options["chunk_size_mb"], options["batch_size"]

@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 
 from polyglotimportcsv import stream_source, validation
-from polyglotimportcsv.business_exception import MappingError, SourceError
+from polyglotimportcsv.business_exception import BusinessException, MappingError, SourceError
+from polyglotimportcsv.config_parser import load_import_config
 from polyglotimportcsv.gui import preflight
 from polyglotimportcsv.gui.state import RunOptions
 
@@ -387,3 +388,15 @@ def test_a_missing_explicit_dbms_config_is_not_checkable(ecommerce):
         dbms_config_path=ecommerce / "nao_existe.json",
     ))
     assert not result.checkable
+
+
+def test_a_target_suffix_without_value_is_refused_with_the_cli_message(ecommerce):
+    path = ecommerce / "import_config.json"
+    cfg = json.loads(path.read_text(encoding="utf-8"))
+    cfg["mongodb"]["entities"]["orders"]["filters"][0]["target_suffix"] = "state"
+    path.write_text(json.dumps(cfg), encoding="utf-8")
+    result = _check(ecommerce)
+    with pytest.raises(BusinessException) as cli:
+        load_import_config(path)
+    assert result.errors["config_path"] == str(cli.value)
+    assert "'state' does not match" in result.errors["config_path"]

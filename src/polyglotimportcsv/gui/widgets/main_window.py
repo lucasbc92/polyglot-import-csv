@@ -171,7 +171,6 @@ class MainWindow(QMainWindow):
             chunk_size_mb=self.options_panel.chunk_size_mb(),
             batch_size=self.options_panel.batch_size(),
             dry_run=self.options_panel.dry_run(),
-            create_schema=self.options_panel.create_schema(),
             log_level=self.options_panel.log_level(),
             show_data=self.options_panel.show_data(),
             sample_size=self.options_panel.sample_size(),

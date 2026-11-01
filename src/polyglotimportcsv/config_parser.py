@@ -80,7 +80,7 @@ def validate_dbms_config(data: Dict[str, Any]) -> None:
     try:
         jsonschema.validate(instance=data, schema=schema)
     except jsonschema.ValidationError as e:
-        raise ConfigError(f"Invalid DBMS configuration JSON: {e.message}") from e
+        raise ConfigError(f"Invalid DBMS configuration JSON at {e.json_path}: {e.message}") from e
 
 
 def validate_import_config_schema(data: Dict[str, Any]) -> None:
@@ -88,7 +88,7 @@ def validate_import_config_schema(data: Dict[str, Any]) -> None:
     try:
         jsonschema.validate(instance=data, schema=schema)
     except jsonschema.ValidationError as e:
-        raise ConfigError(f"Invalid import configuration JSON: {e.message}") from e
+        raise ConfigError(f"Invalid import configuration JSON at {e.json_path}: {e.message}") from e
 
 
 def merge_configs(

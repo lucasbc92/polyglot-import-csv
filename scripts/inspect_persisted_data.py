@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
+from polyglotimportcsv.filter_engine import each_partition_pattern
 from polyglotimportcsv.reporting import (
     banner,
     dump_rows,
@@ -83,6 +84,22 @@ def inspect_postgres(cfg: Dict[str, Any]) -> None:
         cx.close()
 
 
+def mongo_collections(db: Any, entities: Dict[str, Dict[str, Any]]) -> List[str]:
+    """The collections the entities write, in entity order.
+
+    An entity split by an ``each`` filter writes one collection per value, named
+    by ``filter_engine``; those are found among the database's collections.
+    """
+    names: List[str] = []
+    for ename, ecfg in entities.items():
+        pattern = each_partition_pattern(ename, ecfg.get("filters"))
+        if pattern is None:
+            names.append(ename)
+        else:
+            names += sorted(n for n in db.list_collection_names() if pattern.fullmatch(n))
+    return names
+
+
 def inspect_mongodb(cfg: Dict[str, Any]) -> None:
     from pymongo import MongoClient
 
@@ -96,7 +113,7 @@ def inspect_mongodb(cfg: Dict[str, Any]) -> None:
     try:
         client.admin.command("ping")
         db = client[database]
-        for collection in entities:
+        for collection in mongo_collections(db, entities):
             docs = list(db[collection].find().sort("_id", 1))
             for doc in docs:
                 doc.pop("_id", None)
@@ -270,7 +287,7 @@ def clean_mongodb(cfg: Dict[str, Any]) -> None:
     client = MongoClient(uri, serverSelectionTimeoutMS=5000)
     try:
         db = client[database]
-        for collection in entities:
+        for collection in mongo_collections(db, entities):
             result = db[collection].delete_many({})
             note(f"deleted {result.deleted_count} document(s) from {collection}")
     finally:
