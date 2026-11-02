@@ -1,0 +1,277 @@
+{
+  "metadata": {
+    "timestamp": "2026-11-02T02:56:46",
+    "python": "3.14.5",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "config": "data\\ecommerce",
+    "source_rows": {},
+    "seed": 42,
+    "sizes": [
+      100000
+    ],
+    "modes": [
+      "multi"
+    ],
+    "trace_memory": true,
+    "repetitions": 3,
+    "chunk_sizes": [
+      8,
+      64,
+      256
+    ]
+  },
+  "results": [
+    {
+      "size": 100000,
+      "mode": "multi",
+      "chunk_mb": 8,
+      "backend": "(sources)",
+      "entity": "*",
+      "phase": "infer",
+      "rows": 100000,
+      "median_seconds": 106.67723470000783,
+      "rows_per_second": 937.4071260959735,
+      "peak_memory_mb": 66.16980648040771
+    },
+    {
+      "size": 100000,
+      "mode": "multi",
+      "chunk_mb": 8,
+      "backend": "(all)",
+      "entity": "*",
+      "phase": "validate",
+      "rows": 100000,
+      "median_seconds": 127.60530349999317,
+      "rows_per_second": 783.666487655079,
+      "peak_memory_mb": 66.16980648040771
+    },
+    {
+      "size": 100000,
+      "mode": "multi",
+      "chunk_mb": 8,
+      "backend": "postgres",
+      "entity": "*",
+      "phase": "write",
+      "rows": 73660,
+      "median_seconds": 47.76411819999339,
+      "rows_per_second": 1542.1618314312393,
+      "peak_memory_mb": 66.16980648040771
+    },
+    {
+      "size": 100000,
+      "mode": "multi",
+      "chunk_mb": 8,
+      "backend": "mongodb",
+      "entity": "*",
+      "phase": "write",
+      "rows": 50442,
+      "median_seconds": 33.260334499995224,
+      "rows_per_second": 1516.5812598790083,
+      "peak_memory_mb": 66.16980648040771
+    },
+    {
+      "size": 100000,
+      "mode": "multi",
+      "chunk_mb": 8,
+      "backend": "cassandra",
+      "entity": "*",
+      "phase": "write",
+      "rows": 100000,
+      "median_seconds": 226.3038891000033,
+      "rows_per_second": 441.8837007074597,
+      "peak_memory_mb": 66.16980648040771
+    },
+    {
+      "size": 100000,
+      "mode": "multi",
+      "chunk_mb": 8,
+      "backend": "redis",
+      "entity": "*",
+      "phase": "write",
+      "rows": 49558,
+      "median_seconds": 21.775574300001608,
+      "rows_per_second": 2275.852719989862,
+      "peak_memory_mb": 66.16980648040771
+    },
+    {
+      "size": 100000,
+      "mode": "multi",
+      "chunk_mb": 8,
+      "backend": "neo4j",
+      "entity": "*",
+      "phase": "write",
+      "rows": 89275,
+      "median_seconds": 86.93829069999629,
+      "rows_per_second": 1026.877792065951,
+      "peak_memory_mb": 66.16980648040771
+    },
+    {
+      "size": 100000,
+      "mode": "multi",
+      "chunk_mb": 64,
+      "backend": "(sources)",
+      "entity": "*",
+      "phase": "infer",
+      "rows": 100000,
+      "median_seconds": 84.24107560000266,
+      "rows_per_second": 1187.069363582495,
+      "peak_memory_mb": 131.86269855499268
+    },
+    {
+      "size": 100000,
+      "mode": "multi",
+      "chunk_mb": 64,
+      "backend": "(all)",
+      "entity": "*",
+      "phase": "validate",
+      "rows": 100000,
+      "median_seconds": 124.88065619999543,
+      "rows_per_second": 800.7645302555966,
+      "peak_memory_mb": 131.86269855499268
+    },
+    {
+      "size": 100000,
+      "mode": "multi",
+      "chunk_mb": 64,
+      "backend": "postgres",
+      "entity": "*",
+      "phase": "write",
+      "rows": 73660,
+      "median_seconds": 47.27201389998663,
+      "rows_per_second": 1558.215822068474,
+      "peak_memory_mb": 131.86269855499268
+    },
+    {
+      "size": 100000,
+      "mode": "multi",
+      "chunk_mb": 64,
+      "backend": "mongodb",
+      "entity": "*",
+      "phase": "write",
+      "rows": 50442,
+      "median_seconds": 30.6577488000039,
+      "rows_per_second": 1645.3262869709984,
+      "peak_memory_mb": 131.86269855499268
+    },
+    {
+      "size": 100000,
+      "mode": "multi",
+      "chunk_mb": 64,
+      "backend": "cassandra",
+      "entity": "*",
+      "phase": "write",
+      "rows": 100000,
+      "median_seconds": 220.83071159999236,
+      "rows_per_second": 452.83556474308557,
+      "peak_memory_mb": 131.86269855499268
+    },
+    {
+      "size": 100000,
+      "mode": "multi",
+      "chunk_mb": 64,
+      "backend": "redis",
+      "entity": "*",
+      "phase": "write",
+      "rows": 49558,
+      "median_seconds": 23.277647999988403,
+      "rows_per_second": 2128.9951630862656,
+      "peak_memory_mb": 131.86269855499268
+    },
+    {
+      "size": 100000,
+      "mode": "multi",
+      "chunk_mb": 64,
+      "backend": "neo4j",
+      "entity": "*",
+      "phase": "write",
+      "rows": 89275,
+      "median_seconds": 83.327600300021,
+      "rows_per_second": 1071.3737066538024,
+      "peak_memory_mb": 131.86269855499268
+    },
+    {
+      "size": 100000,
+      "mode": "multi",
+      "chunk_mb": 256,
+      "backend": "(sources)",
+      "entity": "*",
+      "phase": "infer",
+      "rows": 100000,
+      "median_seconds": 82.91527430000133,
+      "rows_per_second": 1206.0504031884798,
+      "peak_memory_mb": 149.85010528564453
+    },
+    {
+      "size": 100000,
+      "mode": "multi",
+      "chunk_mb": 256,
+      "backend": "(all)",
+      "entity": "*",
+      "phase": "validate",
+      "rows": 100000,
+      "median_seconds": 127.55688419999206,
+      "rows_per_second": 783.9639595085549,
+      "peak_memory_mb": 149.85010528564453
+    },
+    {
+      "size": 100000,
+      "mode": "multi",
+      "chunk_mb": 256,
+      "backend": "postgres",
+      "entity": "*",
+      "phase": "write",
+      "rows": 73660,
+      "median_seconds": 45.1516337999783,
+      "rows_per_second": 1631.3916862081612,
+      "peak_memory_mb": 149.85010528564453
+    },
+    {
+      "size": 100000,
+      "mode": "multi",
+      "chunk_mb": 256,
+      "backend": "mongodb",
+      "entity": "*",
+      "phase": "write",
+      "rows": 50442,
+      "median_seconds": 29.390063699975144,
+      "rows_per_second": 1716.2943406632583,
+      "peak_memory_mb": 149.85010528564453
+    },
+    {
+      "size": 100000,
+      "mode": "multi",
+      "chunk_mb": 256,
+      "backend": "cassandra",
+      "entity": "*",
+      "phase": "write",
+      "rows": 100000,
+      "median_seconds": 226.17387230001623,
+      "rows_per_second": 442.1377190171264,
+      "peak_memory_mb": 149.85010528564453
+    },
+    {
+      "size": 100000,
+      "mode": "multi",
+      "chunk_mb": 256,
+      "backend": "redis",
+      "entity": "*",
+      "phase": "write",
+      "rows": 49558,
+      "median_seconds": 23.436978500016266,
+      "rows_per_second": 2114.521716183065,
+      "peak_memory_mb": 149.85010528564453
+    },
+    {
+      "size": 100000,
+      "mode": "multi",
+      "chunk_mb": 256,
+      "backend": "neo4j",
+      "entity": "*",
+      "phase": "write",
+      "rows": 89275,
+      "median_seconds": 83.45449439997901,
+      "rows_per_second": 1069.7446631468952,
+      "peak_memory_mb": 149.85010528564453
+    }
+  ]
+}
