@@ -1,27 +1,28 @@
-flowchart TD
-    START(["CLI: 2 configs JSON\n(+ opções)"]) --> LC["load_config()\n+ JSON Schema + merge"]
-    LC --> CHK{"verifica os SGBDs\n(sonda TCP;\nomitida em --dry-run)"}
-    CHK -->|"algum fora do ar\nou inválido"| STOP(["Fim: estados e\ncomandos para subi-los"])
-    CHK -->|todos no ar| LS["load_sources()\nlê CSV(s), infere tipos\n(fatia origem no modo combinado)"]
-    LS --> BK{"para cada\nSGBD"}
-    BK -->|fim| END(["Fim: relatório\nde contagens"])
-    BK --> BIND["mapping_resolver:\nvincula entidade -> fonte\n(nome / união / por nome)\nexpande columns + converte tipos"]
-    BIND --> VAL["validate_backend_entities()\nvalidação cruzada (camada 3)"]
-    VAL --> ENT{"para cada\nentidade"}
-    ENT -->|fim| BK
-    ENT --> FILT["apply_filters / expand_each\n(seleção, quando houver)"]
-    FILT --> MAT{"materializar"}
-    MAT --> T1["flatten_entity_dataframe\n(PostgreSQL / Cassandra)"]
-    MAT --> T2["mongo_document_from_row\n(MongoDB)"]
-    MAT --> T3["redis_payload_from_row\n(Redis)"]
-    MAT --> T4["props / relationships\n(Neo4j)"]
-    T1 --> WR["conectar + DDL + gravar\n(suprimido em --dry-run)"]
-    T2 --> WR
-    T3 --> WR
-    T4 --> WR
-    WR --> ENT
+flowchart LR
+    subgraph VALID["antes de gravar"]
+        direction TB
+        START(["linha de\ncomando"]) --> P1["1. carregar e\nvalidar as\nconfigurações\n(etapas 1 e 2)"]
+        P1 --> P2["2. conferir os\ncabeçalhos\n(etapa 3)"]
+        P2 --> P3["3. verificar\nos SGBDs\n(não no\n--dry-run)"]
+        P3 -->|"fora\ndo ar"| STOP(["fim: estado\ne como\niniciar"])
+        P3 --> P4["4. leitura de\ninferência"]
+        P4 --> P5["5. leitura de\nvalidação\n(etapa 3)"]
+        P5 -->|"erro"| FAIL(["fim: nada\ngravado"])
+        P5 -->|"--dry-run"| DRY(["fim:\ncontagens"])
+    end
+    subgraph WRITE["gravação"]
+        direction TB
+        P6["6. para cada\nSGBD destino"] --> P7["7. preparar\no SGBD"]
+        P7 --> P8["8. ler as fontes\ndele em blocos\ne gravar\nem lotes"]
+        P8 --> P9["9. fechar\n(recriar FKs\nno PostgreSQL)"]
+        P9 --> P6
+        P6 -->|fim| END(["fim: métricas\ne contagens"])
+    end
+    VALID --> WRITE
 
     style START fill:#dbeafe,stroke:#2563eb,color:#1e293b
     style END fill:#dcfce7,stroke:#16a34a,color:#1e293b
-    style WR fill:#fef3c7,stroke:#d97706,color:#1e293b
+    style DRY fill:#dcfce7,stroke:#16a34a,color:#1e293b
+    style P8 fill:#fef3c7,stroke:#d97706,color:#1e293b
     style STOP fill:#fee2e2,stroke:#dc2626,color:#1e293b
+    style FAIL fill:#fee2e2,stroke:#dc2626,color:#1e293b

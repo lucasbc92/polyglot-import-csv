@@ -1,32 +1,24 @@
-flowchart TD
-    A["📄 import_config.json\nfontes + mapeamento"] -->|"jsonschema.validate()\nimport_config.schema.json"| B{schema\nválido?}
-    C["📄 dbms_config.json\ncredenciais e\nendereços"] -->|"jsonschema.validate()\ndbms_config.schema.json"| D{schema\nválido?}
+flowchart TB
+    A["📄 import_config.json"] --> E1
+    C["📄 dbms_config.json"] --> E1
+    E1["Etapa 1 de validação\nJSON Schema de\ncada arquivo"]
+    E1 -->|falha| X1(["❌ erro com o\ncaminho do campo"])
+    E1 --> E2["Etapa 2 de validação\nSGBDs destino declarados\nno arquivo de conexão?\nao menos um?"]
+    E2 -->|falha| X2(["❌ SGBD não\ndeclarado ou\nnenhum destino"])
+    E2 --> E3H["Etapa 3 de validação\n(cabeçalhos)\nCSVs e colunas citadas\nexistem? filtros e\nrelacionamentos coerentes?"]
+    K["📋 CSV(s)"] --> E3H
+    E3H -->|falha| X3(["❌ erro de fonte\nou de mapeamento"])
+    E3H --> INF["leitura de inferência\ntipo de cada coluna\nno arquivo inteiro"]
+    INF --> E3D["Etapa 3 de validação\n(dados)\nleitura de validação:\ncada linha pelo código\nda gravação, sem gravar"]
+    E3D -->|falha| X4(["❌ não converte, db_type,\nchave vazia, referência\npendente, fonte ausente:\ncontagem e exemplos;\nnada gravado"])
+    E3D --> OK["gravação nos\nSGBDs destino"]
 
-    B -->|não| E(["❌ ConfigError\nerro de sintaxe ou tipo"])
-    D -->|não| E
-
-    B -->|sim| F["import_map\n(sources, entidades,\ncolunas, relacionamentos)"]
-    D -->|sim| G["dbms_map\n(connection, schema/uri...)"]
-
-    F --> H["merge_configs()\ntodo SGBD em import_map\nestá declarado em dbms_map?"]
-    G --> H
-
-    H -->|não| I(["❌ ConfigError\nSGBD não declarado\nem dbms_config.json"])
-    H -->|sim| J["config unificada\n(importação + conexão\npor SGBD)"]
-
-    K["📋 CSV(s)"] -->|"load_sources()\ndtype=str + kinds\n(+ fatias por origem)"| L["fontes carregadas\n(DataFrames + _source)"]
-
-    L -->|"CSV ausente / origem vazia"| SE(["❌ SourceError"])
-
-    J --> M["mapping_resolver + validation\ncolunas existem na fonte?\nunião coerente? filtros ok?\nFKs e arestas válidos?\ncolunas planas nos SGBDs planos?"]
-    L --> M
-
-    M -->|falha| N(["❌ MappingError\nerro semântico\nantes de qualquer gravação"])
-    M -->|ok| O["importação por SGBD\n(filtro, materialização, escrita)"]
-
-    style E fill:#fee2e2,stroke:#dc2626,color:#1e293b
-    style I fill:#fee2e2,stroke:#dc2626,color:#1e293b
-    style N fill:#fee2e2,stroke:#dc2626,color:#1e293b
-    style SE fill:#fee2e2,stroke:#dc2626,color:#1e293b
-    style O fill:#dcfce7,stroke:#16a34a,color:#1e293b
-    style J fill:#dbeafe,stroke:#2563eb,color:#1e293b
+    style X1 fill:#fee2e2,stroke:#dc2626,color:#1e293b
+    style X2 fill:#fee2e2,stroke:#dc2626,color:#1e293b
+    style X3 fill:#fee2e2,stroke:#dc2626,color:#1e293b
+    style X4 fill:#fee2e2,stroke:#dc2626,color:#1e293b
+    style E1 fill:#dbeafe,stroke:#2563eb,color:#1e293b
+    style E2 fill:#dbeafe,stroke:#2563eb,color:#1e293b
+    style E3H fill:#dbeafe,stroke:#2563eb,color:#1e293b
+    style E3D fill:#dbeafe,stroke:#2563eb,color:#1e293b
+    style OK fill:#dcfce7,stroke:#16a34a,color:#1e293b

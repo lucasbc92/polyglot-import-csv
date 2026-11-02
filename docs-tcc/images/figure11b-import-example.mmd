@@ -1,0 +1,24 @@
+flowchart LR
+    subgraph ANTES["antes de gravar"]
+        direction TB
+        IN["cenário exemplo\n2 JSON e 4 CSVs"] --> V12["etapas 1 e 2\nok: 5 SGBDs destino"]
+        V12 --> V3H["etapa 3, cabeçalhos\nok: colunas citadas\nexistem nos CSVs"]
+        V3H --> CHK["verificação\nos 5 SGBDs no ar"]
+        CHK --> INF["leitura de inferência\n32 linhas; em stock:\nproduct_id: integer\nquantity_available: integer\nprice: float\nlast_restock_date: datetime"]
+        INF --> VAL["leitura de validação\nlinha 1 de stock:\nuser1, Product2,\nquantidade 2, preço 50.5\n→ ok"]
+    end
+    subgraph DEPOIS["gravação, em lotes"]
+        WR["linha 1 de stock em:\nPostgreSQL: categories,\nproducts, inventory\nMongoDB: product_catalog\nCassandra: user_activity_log\nNeo4j: Product 2"]
+    end
+    subgraph FALHA["se a validação falhar"]
+        ERR["exemplos induzidos\n(cópias alteradas):\norder_date 2023-13-45\n99:99:99 → não converte\nproduct_id vazio\n→ chave vazia\nproduct_id 99 em purchase\n→ referência pendente\ncódigo 1, nada gravado"]
+    end
+    ANTES --> DEPOIS
+    ANTES -.-> FALHA
+
+    style IN fill:#f8fafc,stroke:#64748b,color:#1e293b
+    style V12 fill:#dbeafe,stroke:#2563eb,color:#1e293b
+    style V3H fill:#dbeafe,stroke:#2563eb,color:#1e293b
+    style VAL fill:#dbeafe,stroke:#2563eb,color:#1e293b
+    style WR fill:#dcfce7,stroke:#16a34a,color:#1e293b
+    style ERR fill:#fee2e2,stroke:#dc2626,color:#1e293b,stroke-dasharray: 5 5
