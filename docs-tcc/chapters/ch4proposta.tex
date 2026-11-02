@@ -124,21 +124,19 @@ A configuração da ferramenta é dividida em \textbf{dois arquivos JSON}. O arq
 \textbf{importação} (\texttt{import\_config.json}) declara as fontes de dados e o
 \textbf{mapeamento} das suas colunas para entidades e relacionamentos em cada SGBD; o
 arquivo de \textbf{conexão} (\texttt{dbms\_config.json}) declara quais SGBDs estão
-disponíveis e como alcançá-los. A separação atende a duas preocupações distintas: o
-mapeamento muda conforme o domínio dos dados, enquanto a conexão muda conforme o ambiente
-(desenvolvimento, testes, produção). Cada arquivo é validado por um \textbf{JSON Schema}
+disponíveis e como alcançá-los. Cada arquivo é validado por um \textbf{JSON Schema}
 próprio, embutido na ferramenta em \texttt{src/\allowbreak polyglotimportcsv/\allowbreak
 schemas/} e reproduzido no Apêndice~\ref{ap:schemas}.
 
-Os exemplos desta seção vêm do cenário de e-commerce apresentado na
-Seção~\ref{sec:persistencia-poliglota} (Figura~\ref{fig:polyglot-ecommerce}), cujos
+Os exemplos desta seção vêm do \textbf{cenário exemplo}, o de comércio eletrônico
+apresentado na Seção~\ref{sec:persistencia-poliglota} (Figura~\ref{fig:polyglot-ecommerce}), cujos
 arquivos acompanham o repositório da ferramenta em \texttt{data/\allowbreak ecommerce/}.
 Os dados desse cenário registram os eventos de uma loja virtual, de quatro tipos,
 resumidos na Tabela~\ref{tab:eventos-ecommerce}. Todo evento registra o instante em que
 ocorreu e o usuário envolvido; a tabela indica os demais dados de cada tipo.
 
 \begin{table}[H]
-  \caption{Tipos de evento do cenário de e-commerce.}
+  \caption{Tipos de evento do cenário exemplo.}
   \label{tab:eventos-ecommerce}
   \centering
   \begin{tabular}{>{\ttfamily}l l >{\raggedright\arraybackslash}p{6.4cm}}
@@ -171,13 +169,13 @@ validações aplicadas aos dois antes da importação.
 \label{sec:arquivo-importacao}
 
 A Figura~\ref{fig:import-schema} mostra a estrutura do schema do arquivo de importação,
-da raiz (à esquerda) até as folhas (à direita); os campos marcados com asterisco são
-obrigatórios. A Tabela~\ref{tab:partes-importacao} resume a finalidade de cada parte e
+da raiz (no alto) até as folhas (embaixo); o asterisco marca os campos que o próprio JSON
+Schema exige. A Tabela~\ref{tab:partes-importacao} resume a finalidade de cada parte e
 indica quais podem ser omitidas.
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=\textwidth]{images/figure8-import-schema}
+  \includegraphics[width=15cm]{images/figure8-import-schema}
   \caption{Estrutura do JSON Schema de importação (\texttt{import\_config}).}
   \label{fig:import-schema}
   \par\vspace{4pt}
@@ -194,7 +192,7 @@ indica quais podem ser omitidas.
     \normalfont\textbf{Parte} & \textbf{Onde} & \textbf{Finalidade} & \textbf{Obrigatória?} \\
     \midrule
     sources & raiz & nomear os CSVs de entrada & sim \\
-    postgres, mongodb, cassandra, redis, neo4j & raiz & mapear dados para um SGBD & não; só os SGBDs de destino \\
+    postgres, mongodb, cassandra, redis, neo4j & raiz & mapear dados para um SGBD & sim; ao menos os SGBDs de destino \\
     entities & bloco de SGBD & declarar os alvos (tabelas, coleções, nós\ldots) & sim \\
     relationships & bloco PostgreSQL ou Neo4j & declarar chaves estrangeiras ou arestas & não \\
     source & entidade & indicar a fonte lida & não; padrão: a fonte de mesmo nome \\
@@ -209,8 +207,13 @@ indica quais podem ser omitidas.
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{table}
 
+Os blocos de SGBD aparecem como obrigatórios na tabela, mas não na figura, porque a
+exigência não está no JSON Schema: ele aceita um arquivo sem nenhum bloco de SGBD. Quem
+a confere é a execução, que termina com código de saída 1 quando não resta nenhum SGBD
+destino, inclusive quando a opção \texttt{-{}-only} exclui todos os configurados.
+
 A Listagem~\ref{lst:import-minimo} mostra um trecho do arquivo de importação do cenário
-que percorre essa estrutura da raiz até as folhas: o bloco \texttt{sources}, o bloco do
+exemplo que percorre essa estrutura da raiz até as folhas: o bloco \texttt{sources}, o bloco do
 PostgreSQL, uma de suas entidades e duas de suas colunas. As reticências (\texttt{...})
 marcam o conteúdo omitido; o arquivo completo está no Apêndice~\ref{ap:config}.
 
@@ -246,7 +249,7 @@ cada um desses níveis, nessa ordem.
 \label{sec:sources}
 
 A raiz do arquivo admite apenas o bloco \texttt{sources}, obrigatório, e um bloco por SGBD
-de destino. Qualquer outra chave é rejeitada (\texttt{additionalProperties: false}), de
+destino. Qualquer outra chave é rejeitada (\texttt{additionalProperties: false}), de
 modo que um erro de digitação como \texttt{postgress} é apontado na validação em vez de
 ser ignorado.
 
@@ -301,7 +304,8 @@ primeira coluna do cabeçalho é a coluna de origem.
 Cada bloco de SGBD (\texttt{postgres}, \texttt{mongodb}, \texttt{cassandra},
 \texttt{redis} ou \texttt{neo4j}) descreve o que será gravado naquele SGBD; só aparecem os
 blocos dos SGBDs que se deseja alimentar. A Listagem~\ref{lst:bloco-postgres} mostra o
-esqueleto do bloco do PostgreSQL no cenário, com o conteúdo de cada entrada omitido.
+esqueleto do bloco do PostgreSQL no cenário exemplo, com o conteúdo de cada entrada
+omitido.
 
 \begin{lstlisting}[style=jsonstyle,caption={Esqueleto do bloco \texttt{postgres} do arquivo de importação.},label={lst:bloco-postgres}]
 "postgres": {
@@ -361,10 +365,10 @@ Todos os campos de uma entidade são opcionais:
   primária no Cassandra (Seção~\ref{sec:importacao-por-sgbd}).
 \end{itemize}
 
-No cenário, cada tipo de evento já vem de uma fonte própria, e nenhuma entidade precisa de
-filtros. A Listagem~\ref{lst:filtro} mostra um filtro ilustrativo, que não faz parte do
-cenário: aplicado a uma entidade que lê da fonte \texttt{purchase}, ele manteria apenas as
-compras pagas com cartão de crédito.
+No cenário exemplo, cada tipo de evento já vem de uma fonte própria, e nenhuma entidade
+precisa de filtros para selecionar linhas. A Listagem~\ref{lst:filtro} mostra um filtro
+ilustrativo, que não faz parte do cenário exemplo: aplicado a uma entidade que lê da fonte
+\texttt{purchase}, ele manteria apenas as compras pagas com cartão de crédito.
 
 \begin{lstlisting}[style=jsonstyle,caption={Filtro ilustrativo sobre a coluna \texttt{payment\_method}.},label={lst:filtro}]
 "filters": [
@@ -375,10 +379,40 @@ compras pagas com cartão de crédito.
 Cada filtro exige a coluna (\texttt{column}) e o operador (\texttt{operator}), que pode ser
 \texttt{==}, \texttt{!=}, \texttt{>}, \texttt{<}, \texttt{>=}, \texttt{<=}, \texttt{in},
 \texttt{not\_in} ou \texttt{each}; o valor comparado (\texttt{value}) também é exigido,
-exceto com \texttt{each}, e é uma lista com \texttt{in} e \texttt{not\_in}. O operador
-\texttt{each} não restringe as linhas, e sim divide a entidade: cada valor distinto e não
-vazio da coluna gera um alvo próprio, cujo nome é o da entidade seguido de um sufixo derivado
-desse valor.
+exceto com \texttt{each}, e é uma lista com \texttt{in} e \texttt{not\_in}.
+
+O operador \texttt{each} não restringe as linhas, e sim \textbf{divide} a entidade: cada
+valor distinto da coluna gera um alvo próprio, com as linhas que têm esse valor. O
+cenário exemplo usa esse operador na coleção \texttt{orders} do MongoDB, que guarda um
+documento por compra e é dividida pelo estado do comprador. A
+Listagem~\ref{lst:each-orders} reproduz essa entidade, com parte das colunas omitida.
+
+\begin{lstlisting}[style=jsonstyle,caption={Coleção \texttt{orders} do MongoDB, dividida por estado com o operador \texttt{each}.},label={lst:each-orders}]
+"orders": {
+  "source": "purchase",
+  "columns": {
+    "order_number": {},
+    "user_id": {},
+    ...
+  },
+  "filters": [
+    { "column": "state", "operator": "each", "target_suffix": "state_{value}" }
+  ]
+}
+\end{lstlisting}
+
+O campo \texttt{target\_suffix} é um modelo para o nome de cada parte: o marcador
+\texttt{\{value\}}, obrigatório e único, é trocado pelo valor da coluna, com cada trecho
+de caracteres que não sejam letras, dígitos ou sublinhado substituído por um sublinhado; o
+nome final é o da entidade, um sublinhado e o modelo preenchido. As oito compras do cenário exemplo
+vêm de sete estados, e a importação grava sete coleções: \texttt{orders\_state\_CA},
+\texttt{orders\_state\_RJ}, \texttt{orders\_state\_RS}, \texttt{orders\_state\_SC},
+\texttt{orders\_state\_SE} e \texttt{orders\_state\_TO}, com um documento cada, e
+\texttt{orders\_state\_SP}, com dois. Sem \texttt{target\_suffix}, o sufixo seria o próprio
+valor (\texttt{orders\_CA}, \ldots). Linhas com a coluna vazia não geram alvo, cada
+entidade admite um único \texttt{each}, e nenhum relacionamento pode apontar para uma
+entidade dividida, pois ela não tem um alvo único; a validação recusa essa configuração
+antes de gravar.
 
 \subsubsection{Colunas}
 \label{sec:colunas}
@@ -433,12 +467,36 @@ declaradas em \texttt{columns} somam-se às automáticas e prevalecem sobre elas
 Listagem~\ref{lst:redis-import}, a entidade \texttt{shopping\_cart} declara apenas a
 coluna-chave e recebe as demais automaticamente. Nos dois casos, \texttt{csv\_columns}
 limita o mapeamento automático às colunas indicadas, por nome, por posição (a partir de 1)
-ou por intervalo, como \texttt{"1-5"}.
+ou por intervalo, como \texttt{"1-5"}. A Listagem~\ref{lst:csv-columns} mostra uma
+entidade criada só para ilustrar esse recurso, fora do cenário exemplo, que lê da fonte
+\texttt{stock}.
+
+\begin{lstlisting}[style=jsonstyle,caption={Entidade ilustrativa com \texttt{auto\_map} e \texttt{csv\_columns}.},label={lst:csv-columns}]
+"product_summary": {
+  "source": "stock",
+  "auto_map": true,
+  "csv_columns": ["10-13", "price"],
+  "columns": { "product_id": { "schema_column": "id" } }
+}
+\end{lstlisting}
+
+O intervalo \texttt{"10-13"} seleciona as colunas de dados da 10.ª à 13.ª do arquivo
+\texttt{ecommerce\_stock.csv} (\texttt{product\_id}, \texttt{product\_name},
+\texttt{product\_variant} e \texttt{product\_brand}), e \texttt{"price"} acrescenta uma
+coluna pelo nome. Como \texttt{auto\_map} está ativo, a coluna \texttt{product\_id},
+declarada em \texttt{columns}, prevalece sobre a automática e é gravada como
+\texttt{id}. A entidade recebe, assim, cinco atributos: \texttt{id},
+\texttt{product\_name}, \texttt{product\_variant}, \texttt{product\_brand} e
+\texttt{price}.
 
 \textbf{Inferência de tipos.} Todos os valores são lidos inicialmente como texto,
-preservando o conteúdo original do arquivo. Em seguida, a ferramenta classifica cada
-coluna segundo o tipo predominante entre os seus valores --- inteiro, real, data/hora,
-booleano, texto ou vazia --- e converte os valores para o tipo nativo correspondente.
+preservando o conteúdo original do arquivo. Antes de gravar, uma \textbf{leitura de
+inferência} percorre cada arquivo inteiro, em blocos, e classifica cada coluna: booleana,
+se todos os valores não vazios são booleanos; inteira ou real, se todos são numéricos
+(inteira quando nenhum tem parte fracionária); data/hora, se mais de 85\% dos valores não
+vazios são datas; texto, nos demais casos; e vazia, se não há valor. Os valores são então
+convertidos para o tipo nativo correspondente, e um valor que não converte, como uma data
+inválida numa coluna de datas, é apontado na validação (Seção~\ref{sec:validacao}).
 Essa classificação também define o tipo de destino (\texttt{db\_type}) usado na geração de
 DDL quando a coluna é auto-mapeada, segundo a correspondência da
 Tabela~\ref{tab:kinds}. Para uma coluna declarada sem \texttt{db\_type}, o PostgreSQL
@@ -466,9 +524,9 @@ usa \texttt{TEXT}, enquanto o Cassandra usa o tipo inferido.
 \subsection{Particularidades de Cada SGBD no Arquivo de Importação}
 \label{sec:importacao-por-sgbd}
 
-Os cinco blocos de SGBD usam a mesma definição de entidade, mas cada SGBD acrescenta
+Os cinco blocos de SGBD destino usam a mesma definição de entidade, mas cada SGBD acrescenta
 regras próprias, decorrentes do seu modelo de dados. Esta subseção apresenta essas regras,
-cada uma com o trecho correspondente do arquivo de importação do cenário; o arquivo
+cada uma com o trecho correspondente do arquivo de importação do cenário exemplo; o arquivo
 completo está no Apêndice~\ref{ap:config}.
 
 \textbf{PostgreSQL.} As entidades são tabelas e só admitem colunas simples, sem
@@ -536,14 +594,16 @@ colunas em dois subdocumentos de cada documento \texttt{product\_catalog}.
           "last_restock_date": {}
         }
       }
-    }
+    },
+    ...
   }
 }
 \end{lstlisting}
 
 As reticências omitem as demais colunas cadastrais do produto (variante, marca,
 descrição, imagem e preço), mapeadas da mesma forma que \texttt{product\_id} e
-\texttt{product\_name}.
+\texttt{product\_name}, e a segunda coleção do bloco, \texttt{orders}, já apresentada na
+Listagem~\ref{lst:each-orders}.
 
 \textbf{Apache Cassandra.} As entidades são tabelas com colunas simples, e a chave
 primária é definida por dois campos próprios: \texttt{cassandra\_\allowbreak partition},
@@ -589,7 +649,7 @@ usa \texttt{auto\_map} para receber as demais colunas da fonte \texttt{add\_to\_
 \texttt{timestamp} para \texttt{last\_seen}, registrando a última navegação de cada
 usuário.
 
-\begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação Redis (e-commerce), com mapeamento automático.},label={lst:redis-import}]
+\begin{lstlisting}[style=jsonstyle,caption={Fragmento de importação Redis (cenário exemplo), com mapeamento automático.},label={lst:redis-import}]
 "redis": {
   "entities": {
     "shopping_cart": {
