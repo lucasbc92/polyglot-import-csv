@@ -1431,56 +1431,56 @@ construída sobre a biblioteca \texttt{rich}, e um subsistema de métricas de de
 Além de servir ao uso cotidiano, esse subsistema é o \textbf{instrumento de medição}
 empregado na avaliação de desempenho do Capítulo~\ref{cap:avaliacao}.
 
-\textbf{Relato da execução.} Cada execução emite, no terminal, um relato estruturado:
-um cabeçalho com o modo (importação ou \textit{dry-run}), as fontes carregadas com as
-suas contagens de linhas e colunas, uma seção por SGBD com o progresso de cada entidade e
-um resumo final. O nível de detalhe das mensagens é ajustável por
+\textbf{Relato da execução.} Cada execução emite, no terminal, um relato estruturado: um
+cabeçalho com o modo (importação ou \textit{dry-run}), uma linha para cada passo do fluxo
+(seção~\ref{sec:algoritmo}), a contagem de linhas de cada entidade e, ao final, o quadro de
+métricas. Os problemas encontrados pela leitura de validação aparecem em um quadro próprio,
+com a contagem e os exemplos de cada um. O nível de detalhe das mensagens é ajustável por
 \texttt{-{}-log-level} (\texttt{DEBUG}, \texttt{INFO}, \texttt{WARNING} ou
 \texttt{ERROR}; padrão \texttt{INFO}). Independentemente do nível escolhido para o
 terminal, a ferramenta grava um \textbf{arquivo de \textit{log} de sessão} sempre em
 nível \texttt{DEBUG}, em \texttt{logs/polyglotimportcsv\_\textless carimbo de
 tempo\textgreater.log}, preservando o rastro completo de cada execução para diagnóstico
-posterior; esse comportamento pode ser desativado ou redirecionado por variáveis de
-ambiente. Para inspeção dos dados, a ferramenta exibe as primeiras linhas de cada
+posterior. Para inspeção dos dados, a ferramenta exibe as primeiras linhas de cada
 entidade --- 50, por padrão, número ajustável por \texttt{-{}-sample}~\texttt{N} ---,
 acompanhadas da contagem total; \texttt{-{}-show-data} exibe todas as linhas e
-\texttt{-{}-no-data} suprime a exibição. A amostra vale nos dois modelos de execução da
-seção~\ref{sec:modelos-execucao}: no modelo em fluxo, as linhas são retidas à medida que
-os lotes são gravados, até o tamanho da amostra, de modo que a exibição não compromete o
-consumo limitado de memória.
+\texttt{-{}-no-data} suprime a exibição. As linhas da amostra são retidas à medida que os
+lotes passam, só até o tamanho da amostra, de modo que a exibição não compromete o consumo
+limitado de memória da leitura em blocos (seção~\ref{sec:modelos-execucao}).
 
-\textbf{Métricas de desempenho.} Ao longo da execução, a ferramenta coleta métricas por
-\textbf{fase} de processamento de cada entidade, distinguindo quatro fases:
-\textbf{leitura} (\texttt{read}, o carregamento das fontes), \textbf{seleção}
-(\texttt{filter}, a aplicação de filtros), \textbf{mapeamento} (\texttt{map}, o vínculo
-com a fonte e a conversão de tipos) e \textbf{escrita} (\texttt{write}, a persistência no
-SGBD). Para cada fase registram-se o número de linhas processadas e o tempo decorrido, do
-que se deriva a vazão em linhas por segundo. Ao final, um quadro-resumo apresenta essas
-métricas no terminal. Quando a \textit{flag} \texttt{-{}-benchmark} está ativa, a
-ferramenta grava as métricas em disco --- um arquivo JSON com carimbo de tempo e uma
-linha acrescentada a um CSV histórico, no diretório \texttt{benchmarks/} ---, acompanhadas
-de metadados do ambiente de execução (versão do Python, sistema operacional e tamanho de
-cada fonte). Além do tempo por fase, o instrumento registra o \textbf{pico de memória}
-consumido durante a execução, coletado com a biblioteca \texttt{tracemalloc}; essa medida
-é o que permite comparar, no Capítulo~\ref{cap:avaliacao}, o custo de memória dos dois
-modelos de execução apresentados na seção seguinte. Essa gravação estruturada é o que
-viabiliza a coleta sistemática de resultados reproduzíveis, explorada no
-Capítulo~\ref{cap:avaliacao}.
+\textbf{Métricas de desempenho.} Ao longo da execução, a ferramenta mede o tempo de três
+\textbf{fases}: a \textbf{inferência} (\texttt{infer}, a leitura de inferência de todas as
+fontes), a \textbf{validação} (\texttt{validate}, a leitura de validação) e a
+\textbf{escrita} (\texttt{write}), medida uma vez para cada SGBD destino, do preparo do
+SGBD ao fechamento da conexão. Para cada fase registram-se o número de linhas processadas e
+o tempo decorrido, do que se deriva a vazão em linhas por segundo. Ao final, um
+quadro-resumo apresenta essas métricas no terminal. Quando a opção
+\texttt{-{}-benchmark} está ativa, a ferramenta grava as métricas em disco --- um arquivo
+JSON com carimbo de tempo e uma linha acrescentada a um CSV histórico, no diretório
+\texttt{benchmarks/} ---, acompanhadas de metadados do ambiente de execução (versão do
+Python, sistema operacional e tamanho de cada fonte).
+
+O \textbf{pico de memória} é medido pelo executor das campanhas de medição do
+Capítulo~\ref{cap:avaliacao}, que registra, para cada importação, o maior volume de
+memória alocado pelo interpretador Python, com a biblioteca \texttt{tracemalloc}. Essa
+instrumentação deixa as fases mais lentas em proporções diferentes umas das outras, e por
+isso o tempo e o pico de memória vêm de campanhas separadas, como descreve o
+Capítulo~\ref{cap:avaliacao}. Essa gravação estruturada é o que viabiliza a coleta
+sistemática de resultados reproduzíveis.
 
 
-\section{Estratégia de Escrita e Modelos de Execução}
+\section{Estratégia de Escrita e Modelo de Execução}
 \label{sec:execucao-estrategias}
 
 O desempenho de uma importação depende de dois aspectos do projeto da ferramenta. O
 primeiro é a \textbf{estratégia de escrita}: a forma como os valores lidos são
 \textbf{convertidos} aos tipos nativos e \textbf{gravados} no SGBD, linha a linha ou em
-lote. O segundo é o \textbf{modelo de execução} (\texttt{-{}-execution}), que decide se o
-arquivo é carregado por inteiro na memória antes de ser gravado ou se é processado em
-fluxo, com consumo de memória limitado. Ambos são os fatores controlados na avaliação de
-desempenho do Capítulo~\ref{cap:avaliacao}; esta seção descreve o que cada um significa em
-termos de projeto e implementação.
+lote. O segundo é o \textbf{modelo de execução}: a forma como os arquivos ocupam a memória
+durante a importação. A seção~\ref{sec:estrategias-escrita} descreve como os dois
+evoluíram ao longo do projeto, e a seção~\ref{sec:modelos-execucao}, o modelo da versão
+final, a leitura em blocos, com o efeito do tamanho do bloco.
 
-\subsection{Evolução da Estratégia de Escrita}
+\subsection{Evolução da Estratégia de Escrita e do Modelo de Execução}
 \label{sec:estrategias-escrita}
 
 A primeira implementação da ferramenta, desenvolvida na primeira etapa deste Trabalho de
@@ -1506,60 +1506,84 @@ lote); no \textbf{Redis}, o enfileiramento de comandos em um \textit{pipeline} d
 de uma só vez; e no \textbf{Neo4j}, a cláusula \texttt{UNWIND} aplicada a uma lista de
 registros, seguida de \texttt{MERGE}, sobre um rótulo com restrição de unicidade.
 
-A estratégia ingênua permanece descrita neste trabalho porque é a \textit{linha de base}
-contra a qual o ganho da estratégia em lote é medido no Capítulo~\ref{cap:avaliacao}: as
-duas gravam os mesmos dados, e a comparação isola o custo de cada uma.
+O modelo de execução também mudou ao longo do projeto. O modelo original, a
+\textbf{materialização}, carregava cada fonte inteira na memória, em uma estrutura tabular
+(\textit{DataFrame}), antes de gravá-la. O pico de memória desse modelo cresce com o
+tamanho do arquivo: um arquivo maior que a memória disponível não chegaria a ser
+carregado, e a importação falharia por falta de memória. Essa limitação motivou a leitura
+em blocos, descrita a seguir, que conviveu com a materialização durante o TCC2 e é o único
+modelo de execução da versão final da ferramenta.
 
-\subsection{Modelos de Execução: Materialização e \textit{Streaming}}
+A estratégia ingênua e a materialização permanecem descritas neste trabalho porque são as
+\textit{linhas de base} contra as quais o Capítulo~\ref{cap:avaliacao} mede, com números
+históricos, o ganho da estratégia em lote e a redução de memória da leitura em blocos.
+
+\subsection{Modelo de Execução: Leitura em Blocos}
 \label{sec:modelos-execucao}
 
-A opção \texttt{-{}-execution} controla \textbf{quando} os dados ocupam a memória. No modo
-de \textbf{materialização} (\texttt{materialize}), cada fonte é carregada integralmente em
-memória --- em uma estrutura tabular (\textit{DataFrame}) --- e só então percorre as quatro
-fases de processamento (leitura, seleção, mapeamento e escrita) descritas na
-seção~\ref{sec:observabilidade}. Esse modelo torna as fases nitidamente separáveis, razão
-pela qual é ele que sustenta a decomposição por fase medida na avaliação; em contrapartida,
-o seu \textbf{pico de memória cresce com o tamanho do arquivo}, o que o inviabiliza para
-entradas maiores que a memória disponível.
+Na \textbf{leitura em blocos} (em inglês, \textit{streaming}), nenhum arquivo é carregado
+inteiro: cada uma das leituras do fluxo (seção~\ref{sec:algoritmo}) percorre o arquivo em
+\textbf{blocos} de linhas, e cada bloco é tratado antes de o próximo ser lido. O tamanho do
+bloco é dado em memória, pela opção \texttt{-{}-chunk-size} (8~MB, por padrão, de 8 a
+256~MB). Para convertê-lo em linhas, a ferramenta lê as primeiras mil linhas de cada
+arquivo, mede quanto cada linha ocupa na memória e divide o orçamento do bloco por esse
+valor; a estimativa é aproximada, pois um arquivo cujas linhas fiquem mais largas adiante
+ultrapassa o orçamento. Na gravação, as linhas de cada destino acumulam-se até completar um
+\textbf{lote} de \texttt{-{}-batch-size} linhas (1024, por padrão, de 1024 a 8192), limitado
+às linhas de um bloco, para que um lote não retenha vários blocos na memória.
 
-No modo de \textbf{fluxo} (\texttt{stream}, o padrão para importações reais), a fonte é
-lida em \textbf{blocos} de tamanho fixo (8192 linhas por bloco) e cada bloco é processado e
-gravado antes de o próximo ser lido. Assim, o pico de memória permanece próximo de
-\textbf{um único bloco} --- somado aos poucos registros ainda acumulados à espera de
-completar um lote de gravação ---, \textbf{constante em relação ao tamanho total do
-arquivo}. Isso habilita a importação de arquivos maiores que a memória da máquina, ao custo
-de um processamento mais entrelaçado: as quatro fases deixam de ser etapas sequenciais
-distintas e passam a se repetir a cada bloco.
+O pico de memória acompanha, assim, o tamanho do bloco, e não o do arquivo. Além do
+bloco, a memória guarda os agregados por coluna da leitura de inferência, que resumem o
+necessário para decidir o tipo de cada coluna, e, na leitura de validação, os conjuntos de
+chaves das entidades referenciadas, usados para conferir as referências pendentes. Estes
+últimos crescem com o número de chaves distintas, e não com o número de linhas.
 
-A arquitetura que viabiliza esse modo segue o padrão \textbf{portas e adaptadores}
-(\textit{ports and adapters}). Um \textbf{orquestrador} agnóstico de SGBD coordena o fluxo,
-mas não conhece nenhum banco em particular: ele não emite SQL nem Cypher e não remove
-duplicatas. Toda a especificidade de cada SGBD é isolada atrás de uma \textbf{porta} de
-escrita comum, o \texttt{DbmsSink}, para a qual cada banco fornece um \textbf{adaptador}
-(\texttt{PostgresSink}, \texttt{MongoSink}, \texttt{CassandraSink}, \texttt{RedisSink} e
-\texttt{Neo4jSink}). Cada adaptador reaproveita as mesmas rotinas de formatação de linha e
-de gravação em lote já usadas na importação por materialização, de modo que a lógica de
-cada SGBD não é duplicada entre os dois modelos de execução.
+A Tabela~\ref{tab:bloco} mostra o efeito do tamanho do bloco em uma importação de cem mil
+linhas no modo multifonte, medida nas campanhas do Capítulo~\ref{cap:avaliacao}.
 
-O processamento de cada bloco reproduz, em pequena escala, o pipeline de importação. Ao ver
-o primeiro bloco de uma entidade, o orquestrador realiza um \textbf{vínculo tardio}: infere
-os tipos das colunas a partir daquela amostra --- prevalecendo sempre um tipo declarado
-explicitamente na configuração sobre o inferido --- e reutiliza esse vínculo para os blocos
-seguintes. A cada bloco, aplica os filtros de seleção, converte os tipos (de forma vetorizada) e roteia as linhas para as suas partições de destino, acumulando-as
-em áreas de espera; quando uma partição acumula registros suficientes, um lote é descarregado
-ao adaptador correspondente. Duas particularidades merecem nota: a gravação de
-\textbf{relacionamentos} no Neo4j exige um \textbf{segundo passe} sobre as fontes (as arestas
-só podem ser criadas depois que todos os nós de destino existem), realizado também em fluxo e
-com memória limitada; e o modo de fluxo suporta \textbf{fontes-união}, em que uma mesma
-entidade é alimentada por mais de um CSV.
+\begin{table}[H]
+  \caption{Efeito do tamanho do bloco ($N = 100\,000$, multifonte): pico de memória e tempos, em medianas de três repetições.}
+  \label{tab:bloco}
+  \centering
+  \begin{tabular}{r r r r r}
+    \toprule
+    \textbf{Bloco} & \textbf{Pico (MB)} & \textbf{Total (s)} & \textbf{Inferência (s)} & \textbf{Validação (s)} \\
+    \midrule
+    8~MB   &  66{,}2 & 204{,}00 & 15{,}69 & 27{,}53 \\
+    64~MB  & 131{,}9 & 192{,}91 & 10{,}95 & 22{,}71 \\
+    256~MB & 149{,}9 & 190{,}88 &  9{,}74 & 23{,}57 \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026). Pico de \texttt{benchmarks/v3/chunks-memory/} (com instrumentação de memória); tempos de \texttt{benchmarks/v3/chunks-timings/} (sem instrumentação).}
+\end{table}
 
-Por fim, a escolha do modelo de execução não altera o resultado. A equivalência dos dados
-gravados entre os dois
-modelos de execução --- mesmas partições, mesmas contagens e mesmas conversões --- é
-assegurada por testes automatizados, de modo que a escolha entre materialização e fluxo é
-uma decisão de \textbf{custo}, não de \textbf{correção}. É justamente esse custo --- tempo de
-importação e, sobretudo, pico de memória --- que a avaliação do Capítulo~\ref{cap:avaliacao}
-quantifica, varrendo sistematicamente os dois aspectos aqui descritos.
+Em cem mil linhas, a maior fonte, \texttt{purchase}, ocupa 10 blocos de 8~MB, 2 de 64~MB e
+um só de 256~MB; as outras três ocupam 2 blocos de 8~MB e um só a partir de 64~MB. Com o
+bloco de 256~MB, portanto, cada fonte já é lida inteira de uma vez. Em relação ao bloco de
+8~MB, o de 64~MB dobra o pico de memória e reduz o tempo total em 5{,}4\%; o de 256~MB
+eleva o pico 2{,}3 vezes e reduz o tempo em 6{,}4\%. O ganho concentra-se nas leituras de
+inferência e de validação, que leem mais linhas por bloco; a escrita, que domina o
+tempo, quase não muda. O padrão de 8~MB privilegia, portanto, a memória, e blocos maiores
+compensam pouco.
+
+A arquitetura que viabiliza a leitura em blocos segue o padrão \textbf{portas e
+adaptadores} (\textit{ports and adapters}). Um \textbf{orquestrador} agnóstico de SGBD
+coordena o fluxo, mas não conhece nenhum banco em particular: ele não emite SQL nem Cypher
+e não remove duplicatas. Toda a especificidade de cada SGBD é isolada atrás de uma
+\textbf{porta} de escrita comum, para a qual cada banco fornece um \textbf{adaptador}. A
+leitura de validação usa o mesmo orquestrador, com adaptadores que, em vez de gravar,
+conferem os registros; é isso que garante que ela passe as linhas pelo mesmo tratamento da
+gravação.
+
+O tratamento de cada bloco reproduz, em pequena escala, os passos de gravação: o
+orquestrador aplica os filtros de seleção, converte os tipos (de forma vetorizada, com os
+tipos fixados na leitura de inferência) e roteia as linhas para as suas partições de
+destino, acumulando-as em áreas de espera; quando uma partição completa um lote, ele é
+entregue ao adaptador correspondente. Duas particularidades merecem nota: as
+\textbf{arestas} do Neo4j exigem uma \textbf{releitura} das fontes que as alimentam, feita
+depois de todos os nós, pois uma aresta só pode ser criada entre nós que já existem; e uma
+mesma entidade pode ser alimentada por mais de um CSV (\textbf{fontes-união}).
 
 \section{Interface Gráfica}
 \label{sec:interface-grafica}
