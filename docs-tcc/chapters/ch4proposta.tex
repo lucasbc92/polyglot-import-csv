@@ -721,8 +721,8 @@ nota da avaliação.
 \subsection{O Arquivo de Conexão}
 \label{sec:arquivo-conexao}
 
-O arquivo de conexão diz \textit{onde} alcançar cada SGBD, sem nenhuma informação de
-mapeamento. A Figura~\ref{fig:dbms-schema} mostra a estrutura do seu schema, também com
+O arquivo de conexão diz \textit{onde} alcançar cada SGBD. A Figura~\ref{fig:dbms-schema}
+mostra a estrutura do seu schema, também com
 os campos obrigatórios marcados com asterisco: a raiz, um bloco por SGBD e, dentro de cada
 bloco, os parâmetros de acesso. A Tabela~\ref{tab:partes-conexao} resume a finalidade de
 cada parte.
@@ -737,7 +737,7 @@ cada parte.
     \normalfont\textbf{Parte} & \textbf{Onde} & \textbf{Finalidade} & \textbf{Obrigatória?} \\
     \midrule
     version & raiz & versão do formato do arquivo (atualmente, 1) & sim \\
-    postgres, mongodb, cassandra, redis, neo4j & raiz & dar acesso a um SGBD & não; ao menos os SGBDs de destino \\
+    postgres, mongodb, cassandra, redis, neo4j & raiz & dar acesso a um SGBD & sim; ao menos os SGBDs de destino \\
     connection & bloco de SGBD & parâmetros de acesso & sim \\
     schema & bloco PostgreSQL & schema de destino das tabelas & não; padrão: \texttt{public} \\
     start & bloco de SGBD & como iniciar o SGBD & não \\
@@ -747,12 +747,15 @@ cada parte.
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{table}
 
-A Listagem~\ref{lst:conexao-exemplo} mostra o início do arquivo de conexão do cenário,
-com os blocos do PostgreSQL e do MongoDB. As reticências marcam os descritores
+Como no arquivo de importação, os blocos de SGBD são obrigatórios na tabela, mas não na
+figura: o JSON Schema exige apenas \texttt{version}, e a exigência de que cada SGBD destino
+tenha o seu bloco é conferida na segunda etapa de validação (Seção~\ref{sec:validacao}).
+A Listagem~\ref{lst:conexao-exemplo} mostra o início do arquivo de conexão do cenário
+exemplo, com os blocos do PostgreSQL e do MongoDB. As reticências marcam os descritores
 \texttt{start}, tratados na Seção~\ref{sec:inicializacao-sgbds}, e os blocos dos demais
 SGBDs; o arquivo completo está no Apêndice~\ref{ap:config}.
 
-\begin{lstlisting}[style=jsonstyle,caption={Início do arquivo de conexão do cenário (\texttt{dbms\_config.json}).},label={lst:conexao-exemplo}]
+\begin{lstlisting}[style=jsonstyle,caption={Início do arquivo de conexão do cenário exemplo (\texttt{dbms\_config.json}).},label={lst:conexao-exemplo}]
 {
   "version": 1,
   "postgres": {
@@ -861,52 +864,70 @@ reproduzido no Apêndice~\ref{ap:config}, foi omitido. O PostgreSQL, instalado c
 serviço do Windows, é iniciado por \texttt{net start}; o
 Apache Cassandra, que não roda nativamente no Windows, é descrito por um serviço do
 Docker Compose, cujo arquivo tem caminho relativo à pasta do próprio arquivo de
-conexão. O cenário de exemplo traz três arquivos de conexão com as mesmas conexões e
+conexão. O cenário exemplo traz três arquivos de conexão com as mesmas conexões e
 descritores \texttt{start} distintos: \texttt{dbms\_config.json}, todo em Docker
 Compose; \texttt{dbms\_config\_windows.json}, com serviços do Windows; e
 \texttt{dbms\_config\_linux.json}, com o \texttt{systemctl}. Como os nomes de serviço
 dependem de cada instalação, os comandos desses arquivos são exemplos a ajustar.
 
-\subsection{Validação, Consistência entre Arquivos e Fluxo de Carregamento}
+\subsection{As Três Etapas de Validação}
 \label{sec:validacao}
 
-A validação ocorre em \textbf{três camadas} antes de qualquer gravação nos SGBDs. A
-primeira é a validação por \textbf{JSON Schema}: cada arquivo é validado contra o seu
-schema (sintaxe, tipos e propriedades permitidas) --- \texttt{import\_config.schema.json}
-para o arquivo de importação e \texttt{dbms\_config.schema.json} para o arquivo de
-conexão. A segunda é a \textbf{consistência entre arquivos}
-(\texttt{config\_parser.merge\_configs}): todo SGBD referenciado no arquivo
-de importação deve estar declarado no arquivo de conexão. A terceira é a
-\textbf{validação cruzada com os dados}: ao carregar as fontes
-(\texttt{sources.load\_sources}) e vincular cada entidade à sua fonte
-(\texttt{mapping\_resolver}), confere-se se as colunas referenciadas existem, se os SGBDs
-de modelo plano não usam \texttt{columns} aninhados, se as colunas de partição e
-agrupamento do Cassandra existem, se os filtros são coerentes e se as chaves estrangeiras
-do PostgreSQL e as arestas do Neo4j referenciam entidades válidas
-(\texttt{validation.validate\_backend\_entities}).
-
-Cada camada levanta uma exceção específica da hierarquia \texttt{BusinessException}, o que
-torna o diagnóstico preciso: \texttt{ConfigError} para erros de schema ou de consistência
-entre os arquivos; \texttt{SourceError} para problemas com os arquivos de fonte (por
-exemplo, um CSV inexistente ou uma coluna de origem vazia no modo combinado);
-\texttt{MappingError} para incoerências entre o mapeamento e os dados; e
-\texttt{ImportExecutionError} para falhas na conexão ou na gravação em um SGBD. Qualquer
-falha nas três primeiras camadas \textbf{impede} o início da importação. A
-Figura~\ref{fig:config-pipeline} apresenta o fluxo completo de carregamento, com os
-pontos de falha de cada camada e a convergência dos dois arquivos em uma configuração
-única, à qual os dados das fontes se juntam apenas na validação cruzada (camada 3). O
-diagrama evidencia por que a separação em dois arquivos isola falhas: um
-\texttt{dbms\_config.json} inválido é detectado independentemente do
-\texttt{import\_config.json}, sem necessidade de ler os CSVs.
+Antes de gravar qualquer dado, a ferramenta confere as entradas em três \textbf{etapas de
+validação}, mostradas na Figura~\ref{fig:config-pipeline}. Cada etapa só começa se a
+anterior passou, e qualquer problema encerra a execução com código de saída 1, sem gravar
+nada em nenhum SGBD.
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=14cm]{images/figure10-config-pipeline}
-  \caption{Fluxo de carregamento e validação das entradas da ferramenta.}
+  \includegraphics[width=\textwidth]{images/figure10-config-pipeline}
+  \caption{As três etapas de validação, todas antes da gravação.}
   \label{fig:config-pipeline}
   \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{figure}
+
+A \textbf{etapa 1 de validação} confere cada arquivo de configuração contra o seu JSON
+Schema (Apêndice~\ref{ap:schemas}): a sintaxe JSON, os tipos dos valores, os campos
+obrigatórios e as chaves permitidas. A mensagem de erro indica o caminho do campo
+recusado, como \texttt{\$.sources.stock}. Um erro em qualquer dos dois arquivos é
+apontado antes de qualquer CSV ser aberto.
+
+A \textbf{etapa 2 de validação} confere a consistência entre os dois arquivos: todo SGBD
+que tem um bloco no arquivo de importação precisa estar declarado no arquivo de conexão,
+e precisa restar ao menos um SGBD destino depois de aplicada a opção \texttt{-{}-only}.
+
+A \textbf{etapa 3 de validação} confronta o mapeamento com os CSVs, em duas partes. A
+primeira olha só os \textbf{cabeçalhos}: confere se os arquivos existem e se as colunas
+citadas no mapeamento estão neles, se os SGBDs de modelo plano (todos, exceto o MongoDB)
+não recebem colunas aninhadas, se as colunas de partição e de agrupamento do Cassandra
+existem, se os filtros são coerentes e se as chaves estrangeiras do PostgreSQL e as
+arestas do Neo4j ligam entidades válidas, nenhuma delas dividida por \texttt{each}.
+
+A segunda parte olha os \textbf{dados}. Depois da verificação dos SGBDs destino
+(Seção~\ref{sec:verificacao-sgbds}), omitida no \texttt{-{}-dry-run}, a ferramenta lê
+os CSVs duas vezes, em blocos. A \textbf{leitura de inferência} percorre cada arquivo
+inteiro e fixa o tipo de cada coluna (Seção~\ref{sec:colunas}); nela, uma entidade do modo
+combinado cuja fonte não aparece na coluna de origem do arquivo é recusada. A
+\textbf{leitura de validação} passa cada linha pelo mesmo código da gravação --- filtros,
+divisão por \texttt{each}, conversão de tipos e montagem dos registros de cada SGBD ---,
+com a escrita trocada por conferências, e aponta:
+
+\begin{itemize}
+  \item valor que não converte para o tipo da sua coluna;
+  \item valor que o \texttt{db\_type} declarado recusaria, como um inteiro grande demais
+  para a coluna;
+  \item chave vazia;
+  \item referência pendente: uma chave estrangeira do PostgreSQL ou uma aresta do Neo4j
+  que aponta para uma chave ausente da entidade de destino.
+\end{itemize}
+
+Cada tipo de problema é relatado com o número de ocorrências e até cinco exemplos, cada um
+com arquivo, linha, coluna e valor. A Figura~\ref{fig:import-example}, na
+Seção~\ref{sec:algoritmo}, acompanha esse caminho no cenário exemplo e mostra um problema
+de cada tipo. As etapas de validação não cobrem falhas que só aparecem durante a gravação,
+como a queda de um SGBD no meio da carga; nesse caso, a execução também termina com
+código 1, informando os SGBDs já gravados, e o que foi gravado permanece.
 
 \section{Algoritmo de Execução da Importação}
 \label{sec:algoritmo}

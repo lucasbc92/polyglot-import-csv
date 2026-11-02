@@ -10,7 +10,7 @@ flowchart TB
     E3H -->|falha| X3(["❌ erro de fonte\nou de mapeamento"])
     E3H --> INF["leitura de inferência\ntipo de cada coluna\nno arquivo inteiro"]
     INF --> E3D["Etapa 3 de validação\n(dados)\nleitura de validação:\ncada linha pelo código\nda gravação, sem gravar"]
-    E3D -->|falha| X4(["❌ não converte, db_type,\nchave vazia, referência\npendente, fonte ausente:\ncontagem e exemplos;\nnada gravado"])
+    E3D -->|falha| X4(["❌ não converte, db_type,\nchave vazia, referência\npendente: contagem e\nexemplos; nada gravado"])
     E3D --> OK["gravação nos\nSGBDs destino"]
 
     style X1 fill:#fee2e2,stroke:#dc2626,color:#1e293b
