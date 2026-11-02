@@ -4,8 +4,11 @@
 
 ## English
 
-Audited 2026-08-01. Four campaigns are current and mutually consistent; everything
-in `archive-prefix/` is superseded and must not be used.
+Audited 2026-08-01. The four campaigns in the root, `timings/`, `naive/` and
+`timings-naive/` were measured with the 2.x releases and are mutually consistent;
+they stay valid as history (whole-file load × stream, naive × optimized writes).
+Everything in `archive-prefix/` is superseded and must not be used. The campaigns of
+the current version, 3.0.0, are in `v3/` (see "Campaigns of the current version").
 
 `write_consolidated` **appends** to `benchmark_results.csv`. A folder that has been
 written twice therefore holds two runs' rows under one filename. Every current
@@ -162,17 +165,124 @@ per DBMS. A results file with the old header (an `execution` column and no
 of this version goes into another folder:
 
     python scripts/run_benchmarks.py --sizes 100000 --modes multi \
-      --chunk-sizes 8,64,256 --repetitions 3 --out benchmarks/chunk-sizes
+      --chunk-sizes 8,64,256 --repetitions 3 --out benchmarks/v3/chunks-memory
 
 As in the campaigns above, memory and time come from separate runs: a traced run
 (the default) for `peak_memory_mb` and an untraced one (`--no-trace-memory`) for
 `median_seconds`. `--resume` continues an interrupted matrix only when
 `--chunk-sizes` and the other axis flags match.
 
+#### The 3.0.0 campaigns
+
+| Folder | Axes | tracemalloc | Use it for |
+|---|---|---|---|
+| `v3/memory/` | 1k/10k/100k × multi/combined × 8 MB × 3 | **on** | `peak_memory_mb` only |
+| `v3/timings/` | same axes | **off** | `median_seconds` only |
+| `v3/chunks-memory/` | 100k × multi × 8/64/256 MB × 3 | **on** | peak per chunk size |
+| `v3/chunks-timings/` | same axes | **off** | time per chunk size |
+
+Measured on 2026-11-01 and 02, at commit `eeac219` (branch `fluxo-unico`, before the
+3.0.0 tag), with Python 3.14.5 on Windows 11. The five DBMSs ran in Docker Desktop
+with 3.88 GiB of memory and 8 CPUs; Cassandra has a 1 GB heap
+(`MAX_HEAP_SIZE` in `docker-compose.yml`). The host has 8 GB of memory, with 650 to
+800 MB free whenever it was checked during the campaigns, and its system drive was
+found full after them. The memory campaign was stopped after 8 of its 18 runs, when
+the host ran low on memory, and was resumed with `--resume`; its CSV carries the
+timestamp of the resumed run.
+
+**Verification performed**, on every folder:
+
+- Each `benchmark_results.csv` carries a single `timestamp`, and its row count
+  matches its `benchmark_run_*.json` (42 / 42 / 21 / 21).
+- No duplicate `(size, mode, chunk_mb, backend, entity, phase)` keys.
+- `peak_memory_mb` filled in every traced row and empty in every untraced row.
+- `infer` and `validate` read exactly `size` rows in every cell.
+- The MongoDB write holds the `stock` plus the `purchase` rows of the generated
+  dataset (`product_catalog` plus `orders`): 11 609 + 38 833 = 50 442 at 100 000.
+- Row counts identical between the paired folders for every shared key (42 keys
+  between `memory` and `timings`, 21 between `chunks-memory` and `chunks-timings`).
+
+Below, every number is a median of 3 repetitions, and a total is the sum of the
+phase medians.
+
+**Time per phase, 100 000 rows, 8 MB chunks (`v3/timings`, seconds):**
+
+| Phase | multi | combined |
+|---|---|---|
+| `infer` | 16.98 | 21.23 |
+| `validate` | 27.69 | 34.98 |
+| `write` PostgreSQL | 12.72 | 14.26 |
+| `write` MongoDB | 8.63 | 9.00 |
+| `write` Cassandra | 110.96 | 116.25 |
+| `write` Redis | 5.44 | 12.61 |
+| `write` Neo4j | 27.10 | 29.06 |
+| **total** | **209.51** | **237.39** |
+| `infer` + `validate`, share of the total | 21.3% | 23.7% |
+
+**Growth, 8 MB chunks (total seconds from `v3/timings`, peak MB from `v3/memory`):**
+
+| Size | multi, s | multi, peak MB | combined, s | combined, peak MB |
+|---|---|---|---|---|
+| 1 000 | 6.51 | 10.4 | 5.81 | 10.2 |
+| 10 000 | 22.67 | 40.1 | 27.18 | 44.2 |
+| 100 000 | 209.51 | 66.1 | 237.39 | 54.6 |
+
+From 1 000 to 100 000 rows (100×), the total grows 32× in multi and 41× in
+combined, and the peak grows 6.4× and 5.3×. From 10 000 to 100 000 (10×), the total
+grows 9.2× and 8.7×, and the peak 1.65× and 1.24×.
+
+**Chunk size, 100 000 rows, multi (peak from `v3/chunks-memory`, seconds from
+`v3/chunks-timings`):**
+
+| Chunk | `purchase` blocks | peak MB | total, s | `infer`, s | `validate`, s |
+|---|---|---|---|---|---|
+| 8 MB | 10 | 66.2 | 204.00 | 15.69 | 27.53 |
+| 64 MB | 2 | 131.9 | 192.91 | 10.95 | 22.71 |
+| 256 MB | 1 | 149.9 | 190.88 | 9.74 | 23.57 |
+
+At 100 000 rows the largest source, `purchase` (38 833 rows, 14.4 MB on disk),
+takes 10 blocks at 8 MB, 2 at 64 MB and 1 at 256 MB; the other three take 2 blocks
+at 8 MB and 1 from 64 MB on. At 256 MB, then, every source is read whole in one
+block. Against 8 MB, 64 MB doubles the peak (2.0×) and cuts the total by 5.4%, and
+256 MB raises the peak 2.3× and cuts the total by 6.4%. `infer` falls 30% and 38%;
+`validate` falls 17% and 14%.
+
+**Write throughput per DBMS, 100 000 rows, multi, 8 MB chunks (`v3/timings`):**
+
+| DBMS | rows | seconds | rows/s |
+|---|---|---|---|
+| PostgreSQL | 73 660 | 12.72 | 5 793 |
+| MongoDB | 50 442 | 8.63 | 5 845 |
+| Cassandra | 100 000 | 110.96 | 901 |
+| Redis | 49 558 | 5.44 | 9 118 |
+| Neo4j | 89 275 | 27.10 | 3 294 |
+
+#### Caveats for these numbers
+
+- **Never mix traced and untraced folders.** tracemalloc slows the phases unevenly:
+  with it, the 100 000-row multi import takes 3.3× as long, `infer` 6.2× and the
+  Cassandra write 2.1×. Peaks come from `memory` and `chunks-memory`; times from
+  `timings` and `chunks-timings`.
+- **Variation between campaigns.** The same cell, 100 000 multi with 8 MB chunks,
+  was measured in two campaigns: 209.51 s in `timings` and 204.00 s in
+  `chunks-timings` (2.7% apart), and 66.1 MB in `memory` and 66.2 MB in
+  `chunks-memory`. A time difference of a few percent is within that noise: the
+  5–6% that 64 and 256 MB chunks save in total is about twice it.
+- **The load is not the 2.x load.** The example now writes the `orders`
+  collection to MongoDB, split by state: at 100 000 rows, 38 833 more documents
+  than in the 2.x campaigns. Do not compare the totals with the 2.x ones as if the
+  load were the same.
+- **Cassandra dominates the write.** At 100 000 multi it takes 67% of the write
+  time (64% in combined) and 53% of the whole import.
+
 ## Português (BR)
 
-Auditado em 2026-08-01. Quatro campanhas estão atuais e mutuamente consistentes;
-tudo em `archive-prefix/` está superado e não deve ser usado.
+Auditado em 2026-08-01. As quatro campanhas da raiz, `timings/`, `naive/` e
+`timings-naive/` foram medidas com as versões 2.x e são mutuamente consistentes;
+continuam válidas como histórico (carga integral × transmissão em blocos, escrita
+ingênua × otimizada). Tudo em `archive-prefix/` está superado e não deve ser usado.
+As campanhas da versão atual, a 3.0.0, estão em `v3/` (veja "Campanhas da versão
+atual").
 
 `write_consolidated` **acrescenta** ao `benchmark_results.csv`. Uma pasta gravada
 duas vezes, portanto, guarda as linhas de duas execuções sob um único nome de
@@ -343,9 +453,117 @@ e nenhuma `chunk_mb`) é recusado com código de saída 2 antes de medir qualque
 então uma campanha desta versão vai para outra pasta:
 
     python scripts/run_benchmarks.py --sizes 100000 --modes multi \
-      --chunk-sizes 8,64,256 --repetitions 3 --out benchmarks/chunk-sizes
+      --chunk-sizes 8,64,256 --repetitions 3 --out benchmarks/v3/chunks-memory
 
 Como nas campanhas acima, memória e tempo vêm de execuções separadas: uma execução
 rastreada (o padrão) para o `peak_memory_mb` e uma não rastreada
 (`--no-trace-memory`) para o `median_seconds`. O `--resume` só continua uma matriz
 interrompida quando `--chunk-sizes` e os demais flags de eixo coincidem.
+
+#### As campanhas da 3.0.0
+
+| Pasta | Eixos | tracemalloc | Use para |
+|---|---|---|---|
+| `v3/memory/` | 1k/10k/100k × multi/combined × 8 MB × 3 | **ligado** | só `peak_memory_mb` |
+| `v3/timings/` | mesmos eixos | **desligado** | só `median_seconds` |
+| `v3/chunks-memory/` | 100k × multi × 8/64/256 MB × 3 | **ligado** | pico por tamanho de bloco |
+| `v3/chunks-timings/` | mesmos eixos | **desligado** | tempo por tamanho de bloco |
+
+Medidas em 2026-11-01 e 02, no *commit* `eeac219` (ramo `fluxo-unico`, antes da tag
+3.0.0), com Python 3.14.5 no Windows 11. Os cinco SGBDs rodaram no Docker Desktop
+com 3,88 GiB de memória e 8 CPUs; o Cassandra tem *heap* de 1 GB (`MAX_HEAP_SIZE` no
+`docker-compose.yml`). A máquina tem 8 GB de memória, com 650 a 800 MB livres em
+todas as vezes em que isso foi conferido durante as campanhas, e o disco do sistema
+foi encontrado cheio depois delas. A campanha de memória parou depois de 8 das suas
+18 execuções, quando faltou memória na máquina, e foi retomada com `--resume`; o
+CSV dela traz o *timestamp* da execução retomada.
+
+**Verificação realizada**, em todas as pastas:
+
+- Cada `benchmark_results.csv` traz um único `timestamp`, e o número de linhas bate
+  com o do seu `benchmark_run_*.json` (42 / 42 / 21 / 21).
+- Nenhuma chave `(size, mode, chunk_mb, backend, entity, phase)` repetida.
+- `peak_memory_mb` preenchido em todas as linhas rastreadas e vazio em todas as não
+  rastreadas.
+- `infer` e `validate` leram exatamente `size` linhas em todas as células.
+- A escrita do MongoDB tem as linhas de `stock` mais as de `purchase` da base gerada
+  (`product_catalog` mais `orders`): 11 609 + 38 833 = 50 442 em 100 000.
+- Contagens de linhas idênticas entre as pastas pareadas em todas as chaves comuns
+  (42 chaves entre `memory` e `timings`, 21 entre `chunks-memory` e
+  `chunks-timings`).
+
+Abaixo, todo número é a mediana de 3 repetições, e um total é a soma das medianas
+das fases.
+
+**Tempo por fase, 100 000 linhas, blocos de 8 MB (`v3/timings`, segundos):**
+
+| Fase | multi | combined |
+|---|---|---|
+| `infer` | 16,98 | 21,23 |
+| `validate` | 27,69 | 34,98 |
+| `write` PostgreSQL | 12,72 | 14,26 |
+| `write` MongoDB | 8,63 | 9,00 |
+| `write` Cassandra | 110,96 | 116,25 |
+| `write` Redis | 5,44 | 12,61 |
+| `write` Neo4j | 27,10 | 29,06 |
+| **total** | **209,51** | **237,39** |
+| `infer` + `validate`, fração do total | 21,3% | 23,7% |
+
+**Crescimento, blocos de 8 MB (total em segundos de `v3/timings`, pico em MB de
+`v3/memory`):**
+
+| Tamanho | multi, s | multi, pico MB | combined, s | combined, pico MB |
+|---|---|---|---|---|
+| 1 000 | 6,51 | 10,4 | 5,81 | 10,2 |
+| 10 000 | 22,67 | 40,1 | 27,18 | 44,2 |
+| 100 000 | 209,51 | 66,1 | 237,39 | 54,6 |
+
+De 1 000 para 100 000 linhas (100×), o total cresce 32× no multifonte e 41× no
+combinado, e o pico cresce 6,4× e 5,3×. De 10 000 para 100 000 (10×), o total cresce
+9,2× e 8,7×, e o pico 1,65× e 1,24×.
+
+**Tamanho do bloco, 100 000 linhas, multifonte (pico de `v3/chunks-memory`, segundos
+de `v3/chunks-timings`):**
+
+| Bloco | blocos de `purchase` | pico MB | total, s | `infer`, s | `validate`, s |
+|---|---|---|---|---|---|
+| 8 MB | 10 | 66,2 | 204,00 | 15,69 | 27,53 |
+| 64 MB | 2 | 131,9 | 192,91 | 10,95 | 22,71 |
+| 256 MB | 1 | 149,9 | 190,88 | 9,74 | 23,57 |
+
+Em 100 000 linhas, a maior fonte, `purchase` (38 833 linhas, 14,4 MB em disco), ocupa
+10 blocos com 8 MB, 2 com 64 MB e 1 com 256 MB; as outras três ocupam 2 blocos com
+8 MB e 1 a partir de 64 MB. Com 256 MB, portanto, toda fonte é lida inteira em um só
+bloco. Em relação a 8 MB, o bloco de 64 MB dobra o pico (2,0×) e reduz o total em
+5,4%, e o de 256 MB eleva o pico 2,3× e reduz o total em 6,4%. O `infer` cai 30% e
+38%; o `validate` cai 17% e 14%.
+
+**Vazão de escrita por SGBD, 100 000 linhas, multifonte, blocos de 8 MB
+(`v3/timings`):**
+
+| SGBD | linhas | segundos | linhas/s |
+|---|---|---|---|
+| PostgreSQL | 73 660 | 12,72 | 5 793 |
+| MongoDB | 50 442 | 8,63 | 5 845 |
+| Cassandra | 100 000 | 110,96 | 901 |
+| Redis | 49 558 | 5,44 | 9 118 |
+| Neo4j | 89 275 | 27,10 | 3 294 |
+
+#### Ressalvas sobre estes números
+
+- **Nunca misture pastas rastreadas e não rastreadas.** O tracemalloc deixa as fases
+  mais lentas de forma desigual: com ele, a importação multifonte de 100 000 linhas
+  leva 3,3× mais tempo, o `infer` 6,2× e a escrita no Cassandra 2,1×. Os picos vêm de
+  `memory` e `chunks-memory`; os tempos, de `timings` e `chunks-timings`.
+- **Variação entre campanhas.** A mesma célula, 100 000 multifonte com blocos de
+  8 MB, foi medida em duas campanhas: 209,51 s em `timings` e 204,00 s em
+  `chunks-timings` (2,7% de diferença), e 66,1 MB em `memory` e 66,2 MB em
+  `chunks-memory`. Uma diferença de tempo de poucos por cento está dentro desse
+  ruído: os 5–6% que os blocos de 64 e 256 MB economizam no total são cerca do dobro
+  dele.
+- **A carga não é a da 2.x.** O cenário agora grava no MongoDB a coleção `orders`,
+  dividida por estado: em 100 000 linhas, são 38 833 documentos a mais do que nas
+  campanhas da 2.x. Não compare os totais com os da 2.x como se a carga fosse a
+  mesma.
+- **O Cassandra domina a escrita.** Em 100 000 multifonte, ele leva 67% do tempo de
+  escrita (64% no combinado) e 53% da importação inteira.
