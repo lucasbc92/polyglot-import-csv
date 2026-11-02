@@ -153,9 +153,10 @@ ocorreu e o usuário envolvido; a tabela indica os demais dados de cada tipo.
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{table}
 
-Cada tipo de evento tem o seu próprio CSV, com oito linhas: \texttt{ecommerce\_stock.csv},
-\texttt{ecommerce\_purchase.csv}, \texttt{ecommerce\_select\_product.csv} e
-\texttt{ecommerce\_add\_to\_cart.csv}. Os mesmos eventos estão também reunidos em um único
+Cada tipo de evento tem o seu próprio CSV, com oito linhas:
+\texttt{ecommerce\_\allowbreak stock.csv}, \texttt{ecommerce\_\allowbreak purchase.csv},
+\texttt{ecommerce\_\allowbreak select\_\allowbreak product.csv} e
+\texttt{ecommerce\_\allowbreak add\_\allowbreak to\_\allowbreak cart.csv}. Os mesmos eventos estão também reunidos em um único
 arquivo, \texttt{ecommerce\_join.csv}, cuja primeira coluna (\texttt{action}) indica o
 tipo de cada linha. O Apêndice~\ref{ap:csv} reproduz esses dados em forma tabular.
 
@@ -929,96 +930,101 @@ de cada tipo. As etapas de validação não cobrem falhas que só aparecem duran
 como a queda de um SGBD no meio da carga; nesse caso, a execução também termina com
 código 1, informando os SGBDs já gravados, e o que foi gravado permanece.
 
-\section{Algoritmo de Execução da Importação}
+\section{Fluxo de Execução da Importação}
 \label{sec:algoritmo}
 
-Definidos o formato de configuração e as validações, esta seção descreve como a
-ferramenta executa a importação propriamente dita, desde o comando de linha de comando
-apresentado na seção~\ref{sec:visao-geral} até a persistência em cada SGBD. A
-Figura~\ref{fig:import-algorithm} apresenta o fluxo completo de execução; cada etapa do
-diagrama é explicada textualmente na sequência.
+Definidos o formato de configuração e as etapas de validação, esta seção descreve como a
+ferramenta executa a importação, desde o comando apresentado na
+seção~\ref{sec:visao-geral} até a gravação em cada SGBD destino. A
+Figura~\ref{fig:import-algorithm} mostra os passos do fluxo de execução, explicados a
+seguir; a seção~\ref{sec:exemplo-linha} acompanha esses passos no cenário exemplo.
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=12cm]{images/figure11-import-algorithm}
-  \caption{Algoritmo de execução da importação PolyglotImportCSV.}
+  \includegraphics[width=15.2cm]{images/figure11-import-algorithm}
+  \caption{Passos do fluxo de execução da importação.}
   \label{fig:import-algorithm}
   \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{figure}
 
-A execução parte da \textbf{entrada} fornecida pelo usuário na linha de comando: os
-caminhos dos dois arquivos JSON de configuração (importação e conexão), eventuais
-sobrescritas de fonte (\texttt{-{}-source}) e as opções de execução
-\texttt{-{}-dry-run}, \texttt{-{}-create-schema}/\texttt{-{}-no-create-schema} e
-\texttt{-{}-only}, descritas na seção~\ref{sec:visao-geral}.
+A execução parte da \textbf{entrada} fornecida na linha de comando: os caminhos dos dois
+arquivos JSON de configuração, eventuais sobrescritas de fonte (\texttt{-{}-source}) e as
+opções \texttt{-{}-dry-run}, \texttt{-{}-only}, \texttt{-{}-chunk-size} e
+\texttt{-{}-batch-size}, descritas na seção~\ref{sec:visao-geral}.
 
-Na etapa de \textbf{carregamento da configuração}, os dois arquivos JSON são lidos e
-validados contra os seus respectivos JSON Schemas (camada 1 da
-seção~\ref{sec:validacao}); em seguida, verifica-se a consistência entre os arquivos ---
-todo SGBD referenciado no arquivo de importação deve estar declarado no
-arquivo de conexão (camada 2) --- e as configurações são mescladas em uma estrutura única
-de execução.
+No \textbf{passo 1}, os dois arquivos de configuração são carregados e passam pelas
+etapas 1 e 2 de validação (seção~\ref{sec:validacao}); em seguida, são mesclados em uma
+estrutura única de execução, com o mapeamento e a conexão de cada SGBD destino.
 
-Em uma importação real, segue-se a \textbf{verificação dos SGBDs} de destino,
-detalhada na Seção~\ref{sec:verificacao-sgbds}: se algum deles não responder, a
-execução termina antes da leitura de qualquer CSV, com a indicação de como iniciá-lo.
+No \textbf{passo 2}, a ferramenta lê apenas o cabeçalho de cada CSV declarado no bloco
+\texttt{sources} e aplica a primeira parte da etapa 3 de validação, sobre os cabeçalhos.
 
-Na etapa de \textbf{carregamento das fontes}, cada CSV declarado no bloco
-\texttt{sources} é lido uma única vez. Todos os valores são lidos inicialmente como
-texto, preservando o conteúdo original do arquivo e evitando conversões prematuras de
-tipo (por exemplo, em datas com fuso horário). Quando a fonte é combinada, a sua primeira
-coluna é interpretada como a origem e cada valor distinto dá origem a uma fonte derivada;
-a pseudo-coluna \texttt{\_source} é preenchida em ambos os modos. Em seguida, a ferramenta
-infere o tipo de cada coluna de cada fonte, informação que alimenta tanto a conversão dos
-valores para tipos nativos quanto a geração de DDL para colunas auto-mapeadas.
+No \textbf{passo 3}, em uma importação real, verificam-se os SGBDs destino, como detalha
+a Seção~\ref{sec:verificacao-sgbds}: se algum deles não responder, a execução termina
+antes da leitura dos dados, com a indicação de como iniciá-lo. O \texttt{-{}-dry-run}
+pula este passo, pois não se conecta a nenhum SGBD.
 
-Validadas as entradas, inicia-se o núcleo do algoritmo, que percorre os SGBDs presentes
-na configuração (excluídos os não selecionados por \texttt{-{}-only}) e, para cada um,
-\textbf{vincula} as suas entidades às respectivas fontes (\texttt{mapping\_resolver}):
-resolve o \texttt{source} de cada entidade --- nome único, união de fontes ou vínculo pelo
-nome ---, expande o mapeamento de colunas (manual, automático ou híbrido) e converte os
-valores da fonte para tipos nativos. Realiza-se então a validação cruzada da camada 3
-(seção~\ref{sec:validacao}). Qualquer falha, em qualquer camada, encerra a execução com
-uma mensagem de erro antes que qualquer dado seja gravado nos SGBDs.
+No \textbf{passo 4}, a \textbf{leitura de inferência} percorre cada CSV inteiro, em
+blocos cujo tamanho em memória é dado por \texttt{-{}-chunk-size}, e fixa o tipo de cada
+coluna (seção~\ref{sec:colunas}). Os valores são lidos como texto, preservando o conteúdo
+original do arquivo e evitando conversões prematuras de tipo (por exemplo, em datas com
+fuso horário). Quando a fonte é combinada, a sua primeira coluna indica a origem de cada
+linha, e cada valor distinto dá nome a uma fonte derivada; a pseudo-coluna
+\texttt{\_source} é preenchida nos dois modos. Com os tipos fixados, a ferramenta
+\textbf{vincula} cada entidade à sua fonte --- nome único, união de fontes ou vínculo
+pelo nome --- e expande o mapeamento de colunas (manual, automático ou híbrido).
 
-Para cada entidade vinculada, a ferramenta \textbf{aplica os filtros} declarados na
-configuração, quando houver --- operação que corresponde à \textit{seleção} da álgebra
-relacional: apenas as linhas que satisfazem os predicados participam da entidade. Havendo
-filtro com o operador \texttt{each}, a entidade é adicionalmente \textbf{particionada}
-pelos valores distintos da coluna indicada --- um particionamento horizontal em que cada
-valor dá origem a um destino próprio, identificado por sufixo.
+No \textbf{passo 5}, a \textbf{leitura de validação} percorre os CSVs mais uma vez e
+passa cada linha pelo mesmo tratamento da gravação, descrito a seguir, com a escrita
+trocada pela segunda parte da etapa 3 de validação. Uma só leitura atende a todos os SGBDs
+destino. Qualquer problema encerra a execução sem que nada seja gravado; no
+\texttt{-{}-dry-run}, a execução termina neste passo, com a contagem das linhas que cada
+entidade receberia.
 
-Em seguida, na \textbf{materialização}, cada linha selecionada é convertida na estrutura
-do modelo de dados de destino, segundo os conceitos revisados no capítulo~2. Para os
-SGBDs de organização tabular (o relacional PostgreSQL e o colunar Cassandra), a conversão
-combina três operações também descritas pela álgebra relacional: \textit{projeção}
-(somente as colunas mapeadas em \texttt{columns} são mantidas), \textit{renomeação}
-(aplicação de \texttt{schema\_column}) e \textit{eliminação de duplicatas} com base nas
-colunas de chave (\texttt{is\_key}), de modo que cada tabela receba apenas tuplas únicas.
-Para o modelo de documentos (MongoDB), os valores da linha são agregados em um documento
-cuja hierarquia reproduz o aninhamento declarado em \texttt{columns}, materializando a
-representação desnormalizada característica desse modelo. Para o modelo chave-valor
-(Redis), cada linha dá origem a um par em que a chave é o valor da coluna marcada com
-\texttt{is\_key} e o valor é a representação textual (JSON) dos demais campos mapeados.
-Para o modelo de grafo (Neo4j), cada linha dá origem a um nó com as propriedades mapeadas;
-na sequência, as arestas declaradas em \texttt{relationships} conectam os nós criados, com
-semântica de mesclagem --- a aresta só é criada se ainda não existir, evitando duplicação
-quando a mesma relação aparece em várias linhas.
+Os passos 6 a 9 compõem a \textbf{gravação}, que percorre os SGBDs destino um de cada
+vez. No \textbf{passo 7}, a ferramenta conecta-se ao SGBD e o prepara, criando as
+estruturas que ainda não existem, como descreve a seção~\ref{sec:visao-geral}. No
+\textbf{passo 8}, lê de novo, em blocos, apenas as fontes usadas pelas entidades desse
+SGBD e trata cada bloco da seguinte forma.
 
-Por fim, para cada entidade materializada, a ferramenta \textbf{conecta-se} ao SGBD
-(etapa suprimida quando \texttt{-{}-dry-run} está ativo), \textbf{cria as estruturas de
-armazenamento} quando \texttt{-{}-create-schema} está ativo (tabelas no PostgreSQL;
-\textit{keyspace} e tabelas no Cassandra) e \textbf{grava} os registros por meio da
-operação de escrita própria de cada tecnologia. A \textbf{saída} da execução é um
-relatório com as contagens de registros gravados por entidade e por SGBD, que permite
-conferir o resultado da carga.
+Primeiro, a ferramenta \textbf{aplica os filtros} declarados, quando houver ---
+operação que corresponde à \textit{seleção} da álgebra relacional: apenas as linhas que
+satisfazem os predicados participam da entidade. Havendo filtro com o operador
+\texttt{each}, a entidade é ainda \textbf{particionada} pelos valores distintos da coluna
+indicada, um particionamento horizontal em que cada valor dá origem a um alvo próprio.
+Em seguida, os valores são convertidos para os tipos nativos fixados no passo 4.
+
+Depois, cada linha selecionada é \textbf{transformada} na estrutura do modelo de dados de
+destino, segundo os conceitos revisados no capítulo~2. Para os SGBDs de organização
+tabular (o relacional PostgreSQL e o colunar Cassandra), a transformação combina três
+operações também descritas pela álgebra relacional: \textit{projeção} (somente as colunas
+mapeadas em \texttt{columns} são mantidas), \textit{renomeação} (aplicação de
+\texttt{schema\_column}) e \textit{eliminação de duplicatas} com base nas colunas de chave
+(\texttt{is\_key}), detalhada na seção~\ref{sec:exemplo-uso}. Para o modelo de documentos
+(MongoDB), os valores da linha são agregados em um documento cuja hierarquia reproduz o
+aninhamento declarado em \texttt{columns}, na representação desnormalizada característica
+desse modelo. Para o modelo chave-valor (Redis), cada linha dá origem a um par em que a
+chave é o valor da coluna marcada com \texttt{is\_key} e o valor é a representação
+textual (JSON) dos demais campos mapeados. Para o modelo de grafo (Neo4j), cada linha dá
+origem a um nó com as propriedades mapeadas; na sequência, as arestas declaradas em
+\texttt{relationships} conectam os nós criados, com semântica de mesclagem --- a aresta
+só é criada se ainda não existir, evitando duplicação quando a mesma relação aparece em
+várias linhas. Por fim, os registros são \textbf{gravados em lotes} de até
+\texttt{-{}-batch-size} linhas, pela operação de escrita própria de cada tecnologia.
+
+No \textbf{passo 9}, a ferramenta fecha a conexão com o SGBD; no PostgreSQL, recria
+antes as chaves estrangeiras removidas no passo 7. Concluídos todos os SGBDs destino, a
+\textbf{saída} da execução é um relatório com as contagens de registros gravados por
+entidade e por SGBD e as métricas de cada fase (seção~\ref{sec:observabilidade}), que
+permite conferir o resultado da carga.
 
 \subsection{Verificação dos SGBDs}
 \label{sec:verificacao-sgbds}
 
-Antes de ler as fontes, toda importação real verifica se os SGBDs de destino --- os
-presentes no arquivo de importação, filtrados por \texttt{-{}-only} --- respondem. A
+Antes de ler os dados das fontes, toda importação real verifica se os SGBDs destino ---
+os presentes no arquivo de importação, filtrados por \texttt{-{}-only} --- respondem;
+até esse ponto, só os cabeçalhos dos CSVs foram lidos. A
 verificação abre uma conexão TCP com cada endereço declarado no arquivo de conexão e a
 fecha em seguida, sem autenticar. As sondas correm em paralelo, com limite de dois
 segundos cada, de modo que o tempo total não cresce com o número de SGBDs. Cada SGBD
@@ -1026,7 +1032,7 @@ termina em um de três estados: \textbf{no ar}, quando algum de seus endereços 
 (no Cassandra, basta um nó); \textbf{fora do ar}, quando nenhum responde; e
 \textbf{conexão inválida}, quando o próprio \textit{driver} rejeita a configuração, como
 em uma URI com esquema desconhecido. Um único SGBD fora do ar ou com conexão inválida
-\textbf{interrompe} a execução antes da leitura dos CSVs, o que evita uma carga parcial:
+\textbf{interrompe} a execução antes da leitura dos dados, o que evita uma carga parcial:
 sem a verificação, os SGBDs anteriores na ordem de importação receberiam dados antes que
 a falha do seguinte fosse descoberta.
 
@@ -1040,9 +1046,11 @@ de hosts e \textit{sockets} Unix.
 Quando algum SGBD não responde, a ferramenta mostra, abaixo da tabela de estados, o
 que fazer: para cada descritor \texttt{command}, o próprio comando; para os descritores
 \texttt{compose} de um mesmo arquivo, um único \texttt{docker compose up}; e, para um
-SGBD sem \texttt{start}, uma orientação genérica. A opção \texttt{-{}-check-dbms}
-executa apenas essa etapa e encerra, com código de saída zero quando todos os SGBDs
-respondem. A Tabela~\ref{tab:check-dbms} e a Listagem~\ref{lst:check-dbms} reproduzem
+SGBD sem \texttt{start}, uma orientação genérica. A opção \texttt{-{}-check-dbms}, da
+linha de comando da ferramenta (seção~\ref{sec:visao-geral}), executa apenas esse passo e
+encerra, com código de saída zero quando todos os SGBDs respondem e 1 quando algum não
+responde; na interface gráfica, o mesmo passo é disparado pelo botão ``Verificar SGBDs''
+(seção~\ref{sec:interface-grafica}). A Tabela~\ref{tab:check-dbms} e a Listagem~\ref{lst:check-dbms} reproduzem
 uma verificação feita com o arquivo de conexão de exemplo para Windows, com o MongoDB e
 o Neo4j fora do ar.
 
@@ -1076,14 +1084,33 @@ To start the DBMS that are down, run in a terminal:
 Service commands (net start, systemctl) may need an administrator terminal or sudo.
 \end{lstlisting}
 
-\subsection{O Cenário de Exemplo e os Arquivos de Dados}
+\subsection{O Cenário Exemplo e os Arquivos de Dados}
 \label{sec:exemplo-linha}
 
-Para concretizar o algoritmo, esta subseção e a seguinte acompanham as linhas do cenário
-de e-commerce apresentado na seção~\ref{sec:config-format}
-(Tabela~\ref{tab:eventos-ecommerce}) pelo núcleo do algoritmo; a execução completa do
-cenário é demonstrada na seção~\ref{sec:exemplo-uso}. O exemplo adota o modo multifonte,
-em que cada tipo de evento tem o seu próprio CSV.
+Para concretizar o fluxo, esta subseção e a seguinte acompanham as linhas do cenário
+exemplo apresentado na seção~\ref{sec:config-format}
+(Tabela~\ref{tab:eventos-ecommerce}) pelos passos da Figura~\ref{fig:import-algorithm}; a
+execução completa do cenário exemplo é demonstrada na seção~\ref{sec:exemplo-uso}. O
+exemplo adota o modo multifonte, em que cada tipo de evento tem o seu próprio CSV.
+
+A Figura~\ref{fig:import-example} resume o caminho da primeira linha da fonte
+\texttt{stock} por esses passos. À esquerda, as etapas de validação e as leituras de
+inferência e de validação, com os tipos que a leitura de inferência fixou para algumas
+colunas; à direita, acima, as entidades em que essa linha é gravada. À direita, abaixo,
+aparecem três problemas que a leitura de validação recusa, provocados de propósito em
+cópias alteradas dos arquivos: uma data inválida em \texttt{purchase}, um
+\texttt{product\_id} vazio em \texttt{stock} e um \texttt{product\_id} de
+\texttt{purchase} sem produto correspondente em \texttt{stock}. Em cada um deles, a
+execução termina com código 1 e a mensagem \texttt{nothing was written}.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=13cm]{images/figure11b-import-example}
+  \caption{Caminho da primeira linha de \texttt{stock} no cenário exemplo, com três problemas induzidos em cópias alteradas dos arquivos.}
+  \label{fig:import-example}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026), a partir de execuções reais da ferramenta.}
+\end{figure}
 
 A Tabela~\ref{tab:csv-stock} apresenta as oito linhas da fonte \texttt{stock}
 (\texttt{ecommerce\_stock.csv}), que servem de fio condutor do exemplo. Para caber na
@@ -1095,10 +1122,11 @@ pertence à categoria \texttt{Categoria}$N$ (\texttt{category\_id} $N$); o usuá
 \texttt{user}$N$\texttt{@example.com} e um endereço próprio, detalhado no
 Apêndice~\ref{ap:csv}; a descrição e a imagem do produto seguem padrões análogos. Todos
 os eventos de estoque ocorrem em 02/11/2023, e a coluna \texttt{last\_restock\_date}
-repete o instante do próprio evento.
+repete o instante do próprio evento (Tabela~\ref{tab:csv-stock-completa}, no
+Apêndice~\ref{ap:csv}).
 
 \begin{table}[H]
-  \caption{Linhas da fonte \texttt{stock} (\texttt{ecommerce\_stock.csv}, colunas de identificação resumidas).}
+  \caption{Linhas da fonte \texttt{stock} (\texttt{ecommerce\_stock.csv}, colunas de identificação resumidas; todas as colunas, inclusive \texttt{last\_restock\_date}, estão na Tabela~\ref{tab:csv-stock-completa}).}
   \label{tab:csv-stock}
   \centering
   \begin{tabular}{c l l l l l r r}
@@ -1122,8 +1150,8 @@ repete o instante do próprio evento.
 \subsection{A Importação em Cada SGBD}
 \label{sec:importacao-sgbds}
 
-Apresentados os arquivos de dados, esta subseção acompanha o percurso dessas linhas pelo
-núcleo do algoritmo, SGBD a SGBD. Em cada caso estão em jogo as entradas da ferramenta:
+Apresentados os arquivos de dados, esta subseção acompanha o percurso dessas linhas pelos
+passos de gravação, SGBD a SGBD. Em cada caso estão em jogo as entradas da ferramenta:
 as linhas da fonte pertinente, o trecho correspondente do arquivo de importação e o
 arquivo de conexão --- trechos reproduzidos nas listagens da
 seção~\ref{sec:config-format} e, na íntegra, no Apêndice~\ref{ap:config}. O que varia
@@ -1141,7 +1169,7 @@ reduz o resultado aos oito produtos e oito categorias distintos; a entidade
 declaradas em \texttt{relationships} ligam produtos a categorias e pedidos a produtos.
 
 \begin{table}[H]
-  \caption{Relação \texttt{inventory} materializada no PostgreSQL a partir da fonte \texttt{stock}.}
+  \caption{Relação \texttt{inventory} gravada no PostgreSQL a partir da fonte \texttt{stock}.}
   \label{tab:pg-inventory}
   \centering
   \begin{tabular}{c r c r}
@@ -1163,7 +1191,7 @@ declaradas em \texttt{relationships} ligam produtos a categorias e pedidos a pro
 \end{table}
 
 \textbf{MongoDB.} A entidade \texttt{product\_catalog}
-(Listagem~\ref{lst:mongo-import}) também lê da fonte \texttt{stock}, mas materializa cada
+(Listagem~\ref{lst:mongo-import}) também lê da fonte \texttt{stock}, mas grava cada
 linha como um documento cuja hierarquia reproduz o aninhamento declarado em
 \texttt{columns}. A Listagem~\ref{lst:mongo-doc} mostra o documento gerado a partir da
 primeira linha de estoque. Os valores preservam a forma textual lida do CSV, coerente com
@@ -1255,7 +1283,7 @@ nós e arestas não se dupliquem quando a mesma chave reaparece. A
 Listagem~\ref{lst:neo4j-grafo} representa, na notação usual de grafos de propriedades, o
 fragmento do grafo derivado da primeira compra (\texttt{ORD1}).
 
-\begin{lstlisting}[style=textstyle,caption={Fragmento do grafo materializado no Neo4j para o pedido \texttt{ORD1}.},label={lst:neo4j-grafo}]
+\begin{lstlisting}[style=textstyle,caption={Fragmento do grafo gravado no Neo4j para o pedido \texttt{ORD1}.},label={lst:neo4j-grafo}]
 (:User {user_id: "7fd7eee7-...", user_name: "user1",
         user_email: "user1@example.com"})
     -[:PURCHASED {order_number: "ORD1", quantity: "1",
@@ -1266,12 +1294,12 @@ fragmento do grafo derivado da primeira compra (\texttt{ORD1}).
 
 A Tabela~\ref{tab:exemplo-ecommerce} consolida o percurso, tomando por referência a
 primeira linha da fonte \texttt{stock} (Tabela~\ref{tab:csv-stock}, o produto
-\texttt{Product2}): cada célula da coluna ``Saída materializada'' decorre diretamente das
+\texttt{Product2}): cada célula da coluna ``Saída gravada'' decorre diretamente das
 entidades, do vínculo com a fonte e das \texttt{columns} declaradas no arquivo de
 importação.
 
 \begin{table}[H]
-  \caption{Materialização de uma linha da fonte \texttt{stock} nos diferentes SGBDs.}
+  \caption{Gravação de uma linha da fonte \texttt{stock} nos diferentes SGBDs.}
   \label{tab:exemplo-ecommerce}
   \centering
   \setlength{\extrarowheight}{8pt}%
@@ -1282,7 +1310,7 @@ importação.
     >{\raggedright\arraybackslash}p{5.3cm}
   }
     \toprule
-    \textbf{SGBD} & \textbf{Entidade} & \textbf{Fonte} & \textbf{Saída materializada} \\
+    \textbf{SGBD} & \textbf{Entidade} & \textbf{Fonte} & \textbf{Saída gravada} \\
     \midrule
     PostgreSQL & \texttt{inventory} (a linha também alimenta \texttt{products} e \texttt{categories}) & \texttt{stock} & Linha da Tabela~\ref{tab:pg-inventory}: \texttt{product\_\allowbreak id}, \texttt{quantity\_\allowbreak available}, \texttt{last\_\allowbreak restock\_\allowbreak date}, \texttt{price}. \\
     MongoDB & \texttt{product\_catalog} & \texttt{stock} & Documento da Listagem~\ref{lst:mongo-doc}, com subdocumentos \texttt{category} e \texttt{stock} aninhados. \\
@@ -1297,16 +1325,16 @@ importação.
 
 Assim, \textbf{fontes heterogêneas} alimentam destinos igualmente heterogêneos: tabelas
 relacionais, documentos aninhados, \textit{log} colunar com renomeação de colunas e união
-de fontes, pares chave-valor e um grafo de propriedades --- materializando a persistência
+de fontes, pares chave-valor e um grafo de propriedades --- concretizando a persistência
 poliglota descrita no capítulo 2. As contagens observadas neste percurso (oito registros
 por entidade de estoque e 32 no registro de atividades) reaparecem na verificação prévia
 da execução, apresentada a seguir.
 
-\subsection{Exemplo de Uso e Evidência de Execução (Cenário E-commerce)}
+\subsection{Exemplo de Uso e Evidência de Execução (Cenário Exemplo)}
 \label{sec:exemplo-uso}
 
-Esta seção demonstra o uso da ferramenta em uma execução completa do cenário de
-e-commerce que acompanha o código-fonte. Todos os arquivos de entrada encontram-se no
+Esta seção demonstra o uso da ferramenta em uma execução completa do cenário exemplo, que
+acompanha o código-fonte. Todos os arquivos de entrada encontram-se no
 diretório \texttt{data/\allowbreak ecommerce/} do repositório da ferramenta: os quatro
 CSVs de fonte (\texttt{ecommerce\_\allowbreak stock.csv},
 \texttt{ecommerce\_\allowbreak purchase.csv},
@@ -1327,54 +1355,71 @@ python -m polyglotimportcsv \
   --dry-run
 \end{lstlisting}
 
-\looseness=-1
-Com a \textit{flag} \texttt{-{}-dry-run}, a ferramenta executa todas as validações e a
-materialização, mas não abre conexão com nenhum SGBD --- o \textit{driver} Apache
-Cassandra, por exemplo, sequer é importado, o que permite o \textit{dry-run} em
-ambientes onde a sua extensão C não está disponível. O resultado são as contagens de
-registros por destino mostradas na Tabela~\ref{tab:dryrun}, úteis para revisar o
-mapeamento antes da carga real.
+Com a opção \texttt{-{}-dry-run}, a ferramenta executa os passos 1, 2, 4 e 5 da
+Figura~\ref{fig:import-algorithm} --- todas as etapas de validação, inclusive as leituras
+de inferência e de validação ---, mas não abre conexão com nenhum SGBD. O resultado são
+as contagens da Tabela~\ref{tab:dryrun}: as linhas que cada destino receberia, úteis para
+revisar o mapeamento antes da carga real.
 
 \begin{table}[H]
-  \caption{Contagens reportadas pelo modo \texttt{-{}-dry-run} no cenário e-commerce.}
+  \caption{Linhas a gravar em cada destino, após os filtros, reportadas pelo modo \texttt{-{}-dry-run} no cenário exemplo.}
   \label{tab:dryrun}
   \centering
   \begin{tabular}{l l r}
     \toprule
-    \textbf{SGBD} & \textbf{Destino} & \textbf{Registros (após projeção/deduplicação)} \\
+    \textbf{SGBD} & \textbf{Destino} & \textbf{Linhas a gravar} \\
     \midrule
     PostgreSQL & \texttt{categories}        & 8 \\
     PostgreSQL & \texttt{products}           & 8 \\
     PostgreSQL & \texttt{inventory}          & 8 \\
     PostgreSQL & \texttt{orders}             & 8 \\
-    MongoDB    & \texttt{product\_catalog}   & 8 documentos \\
-    Cassandra  & \texttt{user\_activity\_log} & 32 linhas (união das 4 fontes) \\
+    MongoDB    & \texttt{product\_catalog}   & 8 \\
+    MongoDB    & \texttt{orders\_state\_SP}  & 2 \\
+    MongoDB    & \texttt{orders\_state\_}CA, RJ, RS, SC, SE e TO & 1 cada \\
+    Cassandra  & \texttt{user\_activity\_log} & 32 (união das 4 fontes) \\
     Redis      & \texttt{shopping\_cart}     & 8 \\
     Redis      & \texttt{user\_session}      & 8 \\
     Neo4j      & nó \texttt{User}            & 8 \\
     Neo4j      & nó \texttt{Product}         & 8 \\
-    Neo4j      & aresta \texttt{PURCHASED}   & 8 (uma por linha da fonte \texttt{purchase}) \\
+    Neo4j      & aresta \texttt{PURCHASED}   & 8 \\
     \bottomrule
   \end{tabular}
   \par\vspace{4pt}
-  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+  {\footnotesize Fonte: Elaborado pelo autor (2026), a partir da saída do \texttt{-{}-dry-run}.}
 \end{table}
 
-Para a importação real, basta subir os contêineres com \texttt{docker compose up -d} e
-repetir o mesmo comando sem a \textit{flag} \texttt{-{}-dry-run}: os mesmos volumes da
-Tabela~\ref{tab:dryrun} são então persistidos nos cinco SGBDs configurados,
-materializando o cenário poliglota da Seção~\ref{sec:persistencia-poliglota}. Alternativamente, o script
-\texttt{run\_example.sh}, na raiz do repositório, automatiza o fluxo completo: lê o
-\texttt{dbms\_config.json}, sobe apenas os contêineres dos SGBDs ali declarados e, em
-seguida, executa o \textit{dry-run} e a importação real com \texttt{-{}-create-schema}.
+As contagens são de linhas depois dos filtros e da divisão por \texttt{each}, e antes de
+qualquer eliminação de duplicatas, que acontece na gravação e varia por SGBD. No
+PostgreSQL, a ferramenta descarta, dentro de cada lote, as linhas com chave repetida,
+mantendo a última, e grava com \texttt{INSERT ... ON CONFLICT DO NOTHING}, de modo que,
+entre lotes diferentes, prevalece a primeira linha gravada. No Neo4j, prevalece a
+primeira linha de cada chave, e o \texttt{MERGE} não duplica nós nem arestas já
+existentes. No Cassandra e no Redis, uma escrita com chave já existente substitui o
+registro anterior. No MongoDB, não há eliminação de duplicatas: cada linha gera um
+documento. No cenário exemplo, nenhuma chave se repete --- as oito compras são de oito
+compradores e oito pedidos distintos ---, e o que é gravado coincide com as contagens da
+tabela.
+
+A ferramenta nunca inicia os SGBDs: quem os coloca no ar é o usuário, antes da
+importação real. No cenário exemplo, isso se faz com \texttt{docker compose up -d} na raiz
+do repositório; o arquivo \texttt{docker-compose.yml} também acompanha os pacotes
+executáveis da ferramenta. Também é possível usar instalações nativas, alcançadas pelos
+endereços do arquivo de conexão. Com os SGBDs no ar, basta repetir o mesmo comando sem a
+opção \texttt{-{}-dry-run}: as linhas da Tabela~\ref{tab:dryrun} são então gravadas nos
+cinco SGBDs configurados, concretizando o cenário poliglota da
+Seção~\ref{sec:persistencia-poliglota}. Alternativamente, o script
+\texttt{run\_example.sh}, na raiz do repositório, automatiza o fluxo completo: sobe os
+contêineres do Docker Compose, se preciso, esvazia os SGBDs, executa o \texttt{-{}-dry-run}
+e a importação real e, por fim, exibe os dados gravados.
 
 Complementarmente à evidência de execução, testes automatizados (\texttt{pytest}) cobrem
-a validação por schema, a separação e mesclagem dos dois arquivos de configuração, o
-carregamento das fontes (multifonte e combinada), o mapeamento de colunas
+a validação por schema, a separação e mesclagem dos dois arquivos de configuração, a
+leitura das fontes (multifonte e combinada), o mapeamento de colunas
 (\texttt{csv\_column}, \texttt{schema\_column}, aninhamento, mapeamento automático), a
-união de fontes, a inferência e conversão de tipos, os filtros e \textit{smoke tests} de
-validação com \textit{dry-run}. Um teste dedicado verifica ainda a \textbf{equivalência
-entre os modos} multifonte e combinado, assegurando que ambos produzem a mesma carga.
+união de fontes, a inferência e conversão de tipos, os filtros, cada problema apontado pela
+leitura de validação e a leitura em blocos. Um dos testes executa o \texttt{-{}-dry-run}
+do cenário exemplo nos dois modos e confere que ambos produzem exatamente as contagens da
+Tabela~\ref{tab:dryrun}.
 
 \section{Observabilidade e Métricas}
 \label{sec:observabilidade}
