@@ -1,4 +1,4 @@
-\chapter{A Proposta da Ferramenta PolyglotImportCSV}
+\chapter{A Ferramenta PolyglotImportCSV}
 
 \section{Visão Geral}
 \label{sec:visao-geral}
@@ -9,12 +9,14 @@ a Figura~\ref{fig:overview}, a ferramenta recebe como entrada os \textbf{arquivo
 dados} (um ou mais CSV) e \textbf{dois arquivos de configuração} em formato JSON --- o
 arquivo de \textbf{importação}, que declara quais CSVs alimentam a carga e mapeia as
 suas colunas para as entidades e relacionamentos desejados em cada SGBD, e o arquivo de
-\textbf{conexão}, que declara quais SGBDs estão disponíveis e como alcançá-los. O
-processamento é disparado por um comando de linha de comando (CLI), que primeiro
+\textbf{conexão}, que declara quais SGBDs estão disponíveis e como alcançá-los.
+
+O processamento é disparado por um comando de linha de comando (CLI), que primeiro
 \textbf{valida} as entradas --- cada arquivo de configuração é conferido contra um
-\textbf{JSON Schema} embutido e, em seguida, contra os próprios CSVs --- e só então
-executa a importação. A \textbf{saída} são os dados persistidos em cada SGBD presente na
-configuração, dentre os suportados: PostgreSQL, MongoDB, Cassandra, Redis e Neo4j.
+\textbf{JSON Schema} embutido e, em seguida, contra os cabeçalhos e os dados dos próprios
+CSVs --- e só então grava os dados. A \textbf{saída} são os dados persistidos em cada SGBD
+destino presente na configuração, dentre os suportados: PostgreSQL, MongoDB, Cassandra,
+Redis e Neo4j.
 A ferramenta é um projeto de código aberto, hospedado no GitHub sob o nome
 \texttt{polyglot-import-csv}\footnote{Disponível em
 \url{https://github.com/lucasbc92/polyglot-import-csv}. Executáveis para Windows e Linux,
@@ -32,28 +34,23 @@ citados neste trabalho, como \texttt{data/\allowbreak ecommerce/} ou
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{figure}
 
-Diferentemente de uma importação amarrada a um único arquivo, os dados de entrada são
-declarados em um bloco \texttt{sources} dentro do arquivo de importação, o que habilita
-\textbf{dois modos de uso}: no modo \textbf{multifonte}, cada entidade lê de um CSV
-próprio (um arquivo por conjunto de dados); no modo \textbf{combinado}, um único CSV largo
-carrega todos os conjuntos de dados, distinguidos por uma coluna de origem. Ambos os modos
-e o formato
-completo dos dois arquivos de configuração são detalhados na
-seção~\ref{sec:config-format}; as validações realizadas antes da importação, na
-seção~\ref{sec:validacao}; o algoritmo de importação em si, na
-seção~\ref{sec:algoritmo}; e a camada de observabilidade e métricas, na
-seção~\ref{sec:observabilidade}. O comando principal da CLI é o seguinte:
+O formato completo dos dois arquivos de configuração é detalhado na
+seção~\ref{sec:config-format}; as etapas de validação realizadas antes de gravar, na
+seção~\ref{sec:validacao}; o fluxo de execução da importação, na
+seção~\ref{sec:algoritmo}; a camada de observabilidade e métricas, na
+seção~\ref{sec:observabilidade}; e a interface gráfica, na
+seção~\ref{sec:interface-grafica}. O comando principal da CLI é o seguinte:
 
 \begin{lstlisting}[style=bashstyle]
 python -m polyglotimportcsv \
   --config caminho/import_config.json \
   [--dbms-config caminho/dbms_config.json] \
-  [--source NOME=CAMINHO] \
+  [--source NOME=CAMINHO ...] \
   [--dry-run] \
   [--check-dbms] \
-  [--create-schema / --no-create-schema] \
   [--only postgres,redis] \
-  [--execution stream|materialize] \
+  [--chunk-size MB] \
+  [--batch-size N] \
   [--log-level INFO] \
   [--sample N | --show-data | --no-data] \
   [--benchmark]
@@ -68,29 +65,56 @@ JSON de conexão dos SGBDs; quando não é informada, a ferramenta usa o arquivo
 \texttt{-{}-source} \texttt{NOME=CAMINHO} \textbf{sobrescreve}, em tempo de execução, o
 caminho de uma fonte declarada no bloco \texttt{sources} sem editar o arquivo de
 configuração (por exemplo, para apontar a mesma configuração a um conjunto de dados
-maior); pode ser repetida uma vez por fonte.
+maior). Ela não aceita uma lista com separador: para substituir mais de uma fonte, a
+opção é repetida, uma vez por fonte. A Listagem~\ref{lst:source-repetida} mostra uma
+importação do cenário exemplo em que as fontes \texttt{purchase} e \texttt{stock} são
+lidas de outros arquivos.
 
-As outras opções agrupam-se em três conjuntos. O primeiro controla
-\textbf{o que} e \textbf{onde} importar: \texttt{-{}-dry-run} executa somente as
-validações e a preparação dos dados e reporta quantos registros \textbf{seriam}
-importados em cada destino, sem conectar a nenhum SGBD, o que é útil para revisar o
-mapeamento antes da carga real; \texttt{-{}-check-dbms} apenas verifica se os SGBDs de
-destino respondem e encerra sem importar, como detalha a
-Seção~\ref{sec:verificacao-sgbds}; \texttt{-{}-create-schema} e
-\texttt{-{}-no-create-schema} controlam se a ferramenta cria as estruturas de
-armazenamento necessárias (tabelas no PostgreSQL, \textit{keyspace} e tabelas no
-Cassandra) antes de gravar os dados, sendo a criação ativada por padrão; e
+\begin{lstlisting}[style=bashstyle,caption={Duas fontes substituídas com a opção \texttt{-{}-source} repetida.},label={lst:source-repetida}]
+python -m polyglotimportcsv \
+  --config data/ecommerce/import_config.json \
+  --source purchase=novos/compras.csv \
+  --source stock=novos/estoque.csv
+\end{lstlisting}
+
+Cada ocorrência de \texttt{-{}-source} associa o nome de uma fonte do bloco
+\texttt{sources} a um novo caminho; as fontes não citadas, como \texttt{select\_product} e
+\texttt{add\_to\_cart}, continuam lidas dos caminhos do arquivo de importação.
+
+As outras opções agrupam-se em três conjuntos. O primeiro controla \textbf{o que} e
+\textbf{onde} importar. A opção \texttt{-{}-dry-run} executa todas as etapas de
+validação, inclusive a leitura completa dos dados, e informa quantas linhas
+\textbf{seriam} gravadas em cada destino, sem conectar a nenhum SGBD, o que é útil para
+revisar o mapeamento antes da carga real. A opção \texttt{-{}-check-dbms} apenas verifica
+se os SGBDs destino respondem e encerra sem importar; ela é passada no mesmo comando,
+como em \texttt{python -m polyglotimportcsv -{}-config data/ecommerce/import\_config.json
+-{}-check-dbms}, e a interface gráfica oferece a mesma verificação no botão ``Verificar
+SGBDs'' (seções~\ref{sec:verificacao-sgbds} e~\ref{sec:interface-grafica}). A opção
 \texttt{-{}-only} restringe a execução a um subconjunto dos SGBDs configurados (por
-exemplo, \texttt{-{}-only postgres,redis}). O segundo define \textbf{como} importar:
-\texttt{-{}-execution} escolhe o modelo de execução (\texttt{stream}, o padrão, ou
-\texttt{materialize}), descrito na Seção~\ref{sec:modelos-execucao}. O terceiro conjunto
-governa a
-\textbf{observabilidade} da execução --- \texttt{-{}-log-level} ajusta o nível de detalhe
-das mensagens no terminal; \texttt{-{}-sample}~\texttt{N} exibe as primeiras
-\texttt{N} linhas de cada entidade (50, por padrão), enquanto \texttt{-{}-show-data}
-exibe todas as linhas e \texttt{-{}-no-data}, nenhuma; e \texttt{-{}-benchmark} registra
-métricas de desempenho por fase ---; essas opções são descritas em detalhe na
-seção~\ref{sec:observabilidade}.
+exemplo, \texttt{-{}-only postgres,redis}).
+
+Não há opção para criar ou deixar de criar estruturas: antes de gravar, a ferramenta
+sempre prepara cada SGBD destino. No PostgreSQL, ela cria o esquema e as tabelas que ainda
+não existem e remove as chaves estrangeiras declaradas no mapeamento, que recria ao fim da
+carga, porque as tabelas são gravadas em blocos e uma tabela filha pode receber linhas
+antes da tabela mãe. No Cassandra, cria o \textit{keyspace} e as tabelas que ainda não
+existem; no Neo4j, cria as restrições de unicidade sobre a chave de cada rótulo de nó.
+Estruturas que já existem são reaproveitadas. O MongoDB e o Redis não exigem estrutura
+prévia: coleções e chaves surgem na primeira gravação.
+
+O segundo conjunto define \textbf{como} importar. Os arquivos são lidos em
+\textbf{blocos}, nunca inteiros, e gravados em \textbf{lotes}: \texttt{-{}-chunk-size}
+fixa a memória reservada a cada bloco de leitura, em MB (8, por padrão, de 8 a 256), e
+\texttt{-{}-batch-size}, o número de linhas de cada lote de gravação (1024, por padrão, de
+1024 a 8192), limitado às linhas de um bloco. A seção~\ref{sec:modelos-execucao} descreve
+esse modelo de execução e o efeito do tamanho do bloco.
+
+O terceiro conjunto governa a \textbf{observabilidade} da execução ---
+\texttt{-{}-log-level} ajusta o nível de detalhe das mensagens no terminal;
+\texttt{-{}-sample}~\texttt{N} exibe as primeiras \texttt{N} linhas de cada entidade (50,
+por padrão), enquanto \texttt{-{}-show-data} exibe todas as linhas e \texttt{-{}-no-data},
+nenhuma; e \texttt{-{}-benchmark} registra métricas de desempenho por fase ---; essas
+opções são descritas em detalhe na seção~\ref{sec:observabilidade}.
 
 
 \section{Formato de Configuração (JSON Schema)}
