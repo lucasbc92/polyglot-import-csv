@@ -1166,7 +1166,9 @@ no arquivo de conexão (Listagem~\ref{lst:conexao-exemplo}). As entidades \textt
 \texttt{products} também leem de \texttt{stock}, e a eliminação de duplicatas pela chave
 reduz o resultado aos oito produtos e oito categorias distintos; a entidade
 \texttt{orders} lê da fonte \texttt{purchase} (as oito compras). As chaves estrangeiras
-declaradas em \texttt{relationships} ligam produtos a categorias e pedidos a produtos.
+declaradas em \texttt{relationships} ligam produtos a categorias e pedidos a produtos. Como
+a coluna \texttt{price} é declarada \texttt{NUMERIC(14,2)}, o PostgreSQL guarda os preços com
+duas casas decimais (\texttt{50.50} para o \texttt{50.5} do CSV).
 
 \begin{table}[H]
   \caption{Relação \texttt{inventory} gravada no PostgreSQL a partir da fonte \texttt{stock}.}
@@ -1176,46 +1178,48 @@ declaradas em \texttt{relationships} ligam produtos a categorias e pedidos a pro
     \toprule
     \texttt{product\_id} & \texttt{quantity\_available} & \texttt{last\_restock\_date} & \texttt{price} \\
     \midrule
-    2 &  2 & 02/11/2023 03:30 & 50.5 \\
+    2 &  2 & 02/11/2023 03:30 & 50.50 \\
     3 &  1 & 02/11/2023 06:45 & 52.07 \\
     9 & 67 & 02/11/2023 09:15 & 32.78 \\
     8 & 60 & 02/11/2023 12:00 & 46.79 \\
     4 & 82 & 02/11/2023 14:30 & 55.94 \\
     5 & 57 & 02/11/2023 17:15 & 34.21 \\
     6 & 64 & 02/11/2023 20:00 & 51.98 \\
-    7 &  1 & 02/11/2023 22:30 & 100000 \\
+    7 &  1 & 02/11/2023 22:30 & 100000.00 \\
     \bottomrule
   \end{tabular}
   \par\vspace{4pt}
-  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+  {\footnotesize Fonte: Elaborado pelo autor (2026), a partir da tabela gravada.}
 \end{table}
 
 \textbf{MongoDB.} A entidade \texttt{product\_catalog}
 (Listagem~\ref{lst:mongo-import}) também lê da fonte \texttt{stock}, mas grava cada
 linha como um documento cuja hierarquia reproduz o aninhamento declarado em
 \texttt{columns}. A Listagem~\ref{lst:mongo-doc} mostra o documento gerado a partir da
-primeira linha de estoque. Os valores preservam a forma textual lida do CSV, coerente com
-a política de carregamento descrita no início desta seção; os subdocumentos
+primeira linha de estoque, tal como lido do MongoDB depois da importação, com a data na
+notação do terminal do MongoDB. Os valores são gravados com os tipos fixados pela leitura de
+inferência: números como números e a data como data, e não como o texto lido do CSV; os
+subdocumentos
 \texttt{category} e \texttt{stock} agrupam, sem repetição de linhas, o que no PostgreSQL
 ficou distribuído em três tabelas ligadas por chaves estrangeiras --- a representação
 desnormalizada característica do modelo de documentos.
 
 \begin{lstlisting}[style=jsonstyle,caption={Documento gerado na coleção \texttt{product\_catalog} para a primeira linha de estoque.},label={lst:mongo-doc}]
 {
-  "product_id": "2",
+  "product_id": 2,
   "product_name": "Product2",
   "product_variant": "blue",
   "product_brand": "Microsoft",
   "product_description": "Description1",
   "product_image": "https://example.com/image1.jpg",
-  "price": "50.5",
+  "price": 50.5,
   "category": {
-    "category_id": "2",
+    "category_id": 2,
     "category_name": "Categoria2"
   },
   "stock": {
-    "quantity_available": "2",
-    "last_restock_date": "2023-11-02 03:30:00Z"
+    "quantity_available": 2,
+    "last_restock_date": ISODate("2023-11-02T03:30:00Z")
   }
 }
 \end{lstlisting}
@@ -1265,13 +1269,13 @@ valor reúne todas as demais colunas da fonte \texttt{add\_to\_cart}; já
 
 \begin{lstlisting}[style=textstyle,caption={Pares chave-valor gerados no Redis a partir dos eventos de \texttt{user1}.},label={lst:redis-pares}]
 chave: user:7fd7eee7-4675-4f56-ad81-108da6cecebc:cart
-valor: {"timestamp": "2023-11-15 15:17:30Z", "user_id": "7fd7...",
+valor: {"timestamp": "2023-11-15 15:17:30+00:00", "user_id": "7fd7...",
         "user_name": "user1", "user_email": "user1@example.com",
-        "cart_product_id": "3", "cart_quantity": "1"}
+        "cart_product_id": 3, "cart_quantity": 1}
 
 chave: 7fd7eee7-4675-4f56-ad81-108da6cecebc
 valor: {"user_name": "user1", "user_email": "user1@example.com",
-        "last_seen": "2023-11-15 15:09:30Z"}
+        "last_seen": "2023-11-15 15:09:30+00:00"}
 \end{lstlisting}
 
 \textbf{Neo4j.} As entidades e a aresta da Listagem~\ref{lst:neo4j-import} produzem um
@@ -1286,9 +1290,9 @@ fragmento do grafo derivado da primeira compra (\texttt{ORD1}).
 \begin{lstlisting}[style=textstyle,caption={Fragmento do grafo gravado no Neo4j para o pedido \texttt{ORD1}.},label={lst:neo4j-grafo}]
 (:User {user_id: "7fd7eee7-...", user_name: "user1",
         user_email: "user1@example.com"})
-    -[:PURCHASED {order_number: "ORD1", quantity: "1",
-                  price: "50.5", rating: "2"}]->
-(:Product {product_id: "2", product_name: "Product2",
+    -[:PURCHASED {order_number: "ORD1", quantity: 1,
+                  price: 50.5, rating: 2}]->
+(:Product {product_id: 2, product_name: "Product2",
            product_brand: "Microsoft"})
 \end{lstlisting}
 
