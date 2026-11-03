@@ -1,13 +1,12 @@
 \roteiro{5}
 
-% Slide 22: contribuições (relatório §1.2; evidências no Cap. 4, §4.6 e Cap. 5)
+% Slide 22: contribuições (relatório v2.4 §1.2; evidências no Cap. 4, §4.6 e Cap. 5)
 % Os objetivos repetem a redação do slide 5 (secoes/1-introducao.tex). Cada linha aparece
 % num passo. Sem números de tempo ou memória: eles exigiriam declarar a campanha.
 % Evidências: §4.2 (filters, is_key, schema_column; os dois arquivos e os seus JSON Schema);
-% §4.2.4 e §4.3.1 (camadas 1 e 2 e a verificação dos SGBDs, antes de ler os CSVs; conferido
-% em runner.py: load_config e _require_dbms vêm antes de load_sources); §4.3.4 (--dry-run,
-% "valida e conta, sem gravar", como no slide 14; a camada 3, cruzada com os dados, é completa só
-% no --dry-run e na GUI, e a célula diz isso); §5.1 (QP1-QP6, volumes); §4.6 (GUI).
+% §4.2.4 e §4.3 (as três etapas de validação e a verificação dos SGBDs, todas antes da
+% primeira gravação; conferido em runner.py e stream_runner.py da 3.0.0); §5.1 (QP1-QP7,
+% volumes); §4.1 e §4.6 (opções da CLI e GUI).
 % \leavevmode antes de \onslide: sem ele, cada célula p ganha uma linha em branco no topo.
 \newcommand{\cmobjetivo}[3]{% #1 passo, #2 objetivo, #3 evidência
   \leavevmode\onslide<#1->{#2} & \leavevmode\onslide<#1->{#3} \\}
@@ -25,15 +24,15 @@
        \texttt{schema\_column}; arquivo de conexão à parte; cada um com o seu JSON Schema.}
     \cmobjetivo{2}{2. \destaque{Validação prévia}: um erro na configuração ou nos dados
       impede qualquer gravação.}
-      {JSON Schema e consistência entre os arquivos antes de ler os CSVs; verificação dos
-       SGBDs; validação cruzada completa no \texttt{-{}-dry-run} e na GUI.}
+      {Três etapas de validação antes de qualquer gravação: os arquivos, a consistência
+       entre eles e os próprios dados; verificação dos SGBDs.}
     \cmobjetivo{3}{3. \destaque{Avaliação} do desempenho com diferentes volumes e modelos de
       dados.}
-      {Seis questões de pesquisa (QP1--QP6); de \num{1000} a \num{100000} linhas; os cinco
-       SGBDs; tempo e memória em campanhas separadas.}
+      {Sete questões de pesquisa (QP1--QP7), três delas históricas; de \num{1000} a
+       \num{100000} linhas; os cinco SGBDs; tempo e memória em campanhas separadas.}
     \cmobjetivo{4}{4. \destaque{Acesso} por linha de comando (CLI) e por interface gráfica
       (GUI).}
-      {CLI com \texttt{-{}-dry-run}, \texttt{-{}-only} e \texttt{-{}-execution}; GUI que monta
+      {CLI com \texttt{-{}-dry-run}, \texttt{-{}-only} e \texttt{-{}-chunk-size}; GUI que monta
        e executa o comando, mantendo-o visível.}
     \bottomrule
   \end{tabular}\par
@@ -71,8 +70,9 @@
         gravar.
       & \destaque{resolve} \\
     \leavevmode\onslide<2->{\textit{Garantir atomicidade} (tudo ou nada)}
-      & \leavevmode\onslide<2->{Grava um SGBD por vez, sem transação comum: uma falha no meio deixa uma
-        carga parcial.}
+      & \leavevmode\onslide<2->{A validação prévia barra os erros de configuração e de dados,
+        mas a gravação vai de um SGBD por vez, sem transação comum: uma falha durante ela,
+        como a queda de um SGBD, deixa uma carga parcial.}
       & \leavevmode\onslide<2->{\cmaberto} \\
     \bottomrule
   \end{tabular}
