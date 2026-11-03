@@ -1598,7 +1598,7 @@ Cada opção de uso cotidiano da CLI corresponde a um controle gráfico, e o com
 permanece visível
 o tempo todo, de modo que a interface \textbf{ensina} a linha de comando em vez de substituí-la.
 
-A interface é um \textbf{invólucro fino}: ela não reimplementa nenhuma etapa da importação.
+A interface é um \textbf{invólucro fino}: ela não reimplementa nenhum passo da importação.
 O seu núcleo traduz o estado do formulário na lista de argumentos da CLI e a executa como
 \textbf{processo filho}, capturando a saída do processo e apresentando-a em um console
 integrado. Duas consequências decorrem dessa escolha. A primeira é de correção: como quem
@@ -1612,13 +1612,14 @@ aplicação de janelas.
 A janela divide-se em duas regiões, separadas por um divisor ajustável, como mostra a
 Figura~\ref{fig:gui-ocioso}. Na metade superior estão três cartões de formulário. O primeiro
 seleciona, por diálogos de arquivo, os dois arquivos de configuração. O segundo reúne as
-opções de execução, com um controle para cada \textit{flag}: os SGBDs de destino, o modelo de
-execução discutido na Seção~\ref{sec:modelos-execucao}, os modificadores de simulação e de
-criação de esquema, o nível de \textit{log} e a exibição de dados --- uma amostra das
-primeiras linhas de cada entidade, em quantidade escolhida pelo usuário, todos os dados ou
-nenhum. Ao lado de cada opção cujo nome não se explica sozinho há um \textbf{ícone de ajuda}
-que, ao receber o cursor ou um clique, descreve o efeito da opção; o de \texttt{stream}, por
-exemplo, explica que a memória usada não cresce com o tamanho do arquivo. Uma opção da CLI
+opções de execução, com um controle para cada opção: os SGBDs destino, os campos ``Bloco em
+MB (\texttt{-{}-chunk-size})'' e ``Lote (\texttt{-{}-batch-size})'', descritos na
+Seção~\ref{sec:modelos-execucao}, a simulação (\texttt{-{}-dry-run}), o nível de
+\textit{log} e a exibição de dados --- uma amostra das primeiras linhas de cada entidade, em
+quantidade escolhida pelo usuário, todos os dados ou nenhum. Ao lado de cada opção cujo nome
+não se explica sozinho há um \textbf{ícone de ajuda} que, ao receber o cursor ou um clique,
+descreve o efeito da opção; o do bloco, por exemplo, explica que blocos maiores usam mais
+memória. Uma opção da CLI
 não aparece no formulário: o registro de métricas de \textit{benchmark}, instrumento da
 avaliação de desempenho do Capítulo~\ref{cap:avaliacao}, e não do uso cotidiano da
 ferramenta, que continua disponível na linha de comando. O terceiro cartão contém a tabela
@@ -1637,16 +1638,17 @@ configuração não descarta as linhas já escolhidas: as que deixam de caber na
 configuração são apontadas como erro até que o usuário as remova.
 
 Antes de executar, a interface faz uma \textbf{validação prévia} com o próprio código da
-CLI. Os dois arquivos de configuração passam pelo mesmo \textit{JSON Schema} e pela mesma
-verificação de consistência entre si descritos na Seção~\ref{sec:validacao}; em seguida,
-cada CSV envolvido tem apenas o seu cabeçalho lido, e as entidades são vinculadas a fontes
-sem linhas pelo mesmo mecanismo empregado na importação. Uma coluna referenciada na
-configuração e ausente do arquivo produz, assim, exatamente a mensagem que a CLI emitiria,
-só que antes da execução, e o botão de execução permanece desabilitado enquanto houver
-pendências. A validação prévia tem um limite deliberado: nada que exija conexão com um SGBD
-ou a leitura das linhas de dados é verificado nessa etapa, porque os arquivos podem ser
-maiores que a memória disponível. Essas verificações continuam a cargo da CLI, durante a
-execução.
+CLI: as etapas 1 e 2 de validação e a parte da etapa 3 que olha os cabeçalhos
+(Seção~\ref{sec:validacao}). Os dois arquivos de configuração passam pelo mesmo
+\textit{JSON Schema} e pela mesma verificação de consistência entre si; em seguida, cada
+CSV envolvido tem apenas o seu cabeçalho lido e conferido pela mesma regra da CLI. Uma
+coluna referenciada na configuração e ausente do arquivo produz, assim, exatamente a
+mensagem que a CLI emitiria, só que antes da execução, e o botão de execução permanece
+desabilitado enquanto houver pendências. A validação prévia da interface tem um limite
+deliberado: nada que exija conexão com um SGBD ou a leitura das linhas de dados é verificado
+nesse momento, porque os arquivos podem ser grandes e a interface responde a cada clique. A
+leitura dos dados fica a cargo da CLI, que a faz nas leituras de inferência e de validação,
+antes de gravar qualquer dado.
 
 \begin{figure}[H]
   \centering
@@ -1708,17 +1710,18 @@ Os erros aparecem em dois momentos. Os que a validação prévia detecta são ap
 próprio formulário, junto ao cartão a que se referem, como mostra a
 Figura~\ref{fig:gui-erro}: a mensagem é a mesma que a CLI produziria, e a execução fica
 bloqueada. Quando o usuário corrige o arquivo em um editor externo e retorna à janela, a
-validação é refeita automaticamente. Os erros que só surgem durante a importação, como a
-falha de gravação em um SGBD, aparecem no console exatamente como apareceriam no terminal, e
-a barra de estado informa o código de saída do processo. Como a interface executa a CLI
+validação é refeita automaticamente. Os erros que só surgem durante a execução --- os
+problemas encontrados pela leitura de validação e as falhas de gravação em um SGBD ---
+aparecem no console exatamente como apareceriam no terminal, e a barra de estado informa o
+código de saída do processo. Como a interface executa a CLI
 real, não há tradução intermediária que pudesse mascarar a mensagem.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.95\textwidth]{images/figure15-gui-erro}
   \caption{Erro detectado antes da execução: a configuração de importação viola o
-  \textit{JSON Schema}, a mensagem da CLI aparece no cartão de configuração e o botão de
-  execução permanece desabilitado.}
+  \textit{JSON Schema}, a mensagem da CLI, com o caminho do campo recusado, aparece no
+  cartão de configuração e o botão de execução permanece desabilitado.}
   \label{fig:gui-erro}
   \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026).}

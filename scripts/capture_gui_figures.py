@@ -154,7 +154,7 @@ def main() -> int:
         # Wait for the run to be visibly under way rather than for a fixed
         # delay, so the figure shows incremental output instead of a console
         # that merely happens to be empty on a slower machine.
-        pump_until_text(app, window, "Load sources")
+        pump_until_text(app, window, "Infer types")
         pump(app, 0.08)  # one render cycle; more scrolls past the opening
         grab(window, "figure13-gui-executando.png")
 
