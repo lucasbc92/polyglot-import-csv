@@ -2,33 +2,41 @@
 \label{cap:conclusao}
 
 Este trabalho apresentou a \textit{PolyglotImportCSV}, uma ferramenta de importação
-declarativa que materializa um mesmo conjunto de dados em formato CSV em cinco SGBDs de
+declarativa que grava um mesmo conjunto de dados em formato CSV em cinco SGBDs de
 paradigmas distintos --- PostgreSQL, MongoDB, Cassandra, Redis e Neo4j --- a partir de dois
 arquivos de configuração validados estaticamente. Partindo da fundamentação sobre
 persistência poliglota e do estado da arte em importação e modelagem de dados heterogêneos,
 o trabalho evoluiu da proposta a uma implementação funcional, avaliada empiricamente.
 
 As principais contribuições são: (i) um formato de configuração JSON, separado em mapeamento
-e conexão e validado por JSON Schema antes de qualquer escrita, com dois modos de entrada ---
-um arquivo por entidade (multifonte) e um único CSV combinado; (ii) o mapeamento declarativo
-de colunas com conversão nativa aos tipos de cada SGBD; (iii) uma camada de observabilidade e
-um subsistema de métricas que instrumentam cada fase da importação; (iv) dois eixos de
-desempenho --- a estratégia de escrita em lote, com conversão vetorizada e gravação em lotes, e o
-modelo de execução em fluxo, de memória limitada; e (v) uma avaliação empírica com dados reais
-que quantifica o custo de importar para os cinco paradigmas e o ganho de cada eixo.
+e conexão, com dois modos de entrada --- um arquivo por entidade (multifonte) e um único CSV
+combinado; (ii) três etapas de validação, que conferem os dois arquivos, a consistência entre
+eles e os próprios dados, com o mesmo código da gravação, antes de qualquer escrita; (iii) o
+mapeamento declarativo de colunas com conversão nativa aos tipos de cada SGBD; (iv) uma camada
+de observabilidade e um subsistema de métricas que instrumentam cada fase da importação; (v)
+dois recursos de desempenho --- a estratégia de escrita em lote, com conversão vetorizada e
+gravação em lotes, e a leitura dos arquivos em blocos, de memória limitada, com tamanhos de
+bloco e de lote configuráveis; e (vi) uma avaliação empírica com dados sintéticos, gerados de
+forma determinística, que quantifica o custo de importar para os cinco paradigmas e o custo
+da validação prévia.
 
-A avaliação (Capítulo~\ref{cap:avaliacao}) confirmou os objetivos traçados. A estratégia
-em lote acelerou a importação em cerca de nove vezes sobre a linha de base ingênua, e o modo
-de execução em fluxo reduziu o pico de memória em mais de doze vezes no maior volume medido,
-mantendo-o constante em relação ao tamanho do arquivo --- o que habilita a importação de
-arquivos maiores que a memória disponível. A equivalência dos dados gravados entre os dois
-modos de importação e entre os dois modelos de execução, assegurada por testes automatizados,
-permitiu tratar a escolha entre eles como uma decisão de custo, não de correção.
+A avaliação (Capítulo~\ref{cap:avaliacao}) confirmou os objetivos traçados. Em cem mil
+linhas, a escrita nos bancos responde por cerca de quatro quintos do tempo de uma importação,
+e a validação prévia dos dados, pelo quinto restante; em troca, nenhum problema que ela
+detecta chega a uma gravação parcial. As medições históricas mostraram que a estratégia em
+lote acelerou a importação em cerca de nove vezes sobre a linha de base ingênua e que a
+leitura em blocos reduziu o pico de memória em mais de doze vezes no maior volume medido, em
+relação à carga do arquivo inteiro na memória --- o que habilita a importação de arquivos
+maiores que a memória disponível. A equivalência das contagens entre os dois modos de
+importação, conferida por testes automatizados, permite tratar a escolha entre eles como uma
+questão de organização e de custo, não de correção.
 
 As limitações reconhecidas dizem respeito sobretudo ao ambiente de avaliação: os experimentos
 correram em uma única máquina, com os cinco SGBDs em contêineres partilhando os mesmos
 recursos, o que penalizou em especial a escrita no Cassandra --- uma restrição do ambiente, e
-não uma propriedade da ferramenta. Além disso, a suíte de testes permanece majoritariamente
+não uma propriedade da ferramenta. A validação prévia, por sua vez, não cobre as falhas que
+só aparecem durante a gravação, como a queda de um SGBD no meio da carga, e a ferramenta não
+desfaz o que já foi gravado. Além disso, a suíte de testes permanece majoritariamente
 unitária, sem integração contínua contra os SGBDs conteinerizados.
 
 Como trabalho futuro (Capítulo~\ref{cap:futuros}), destacam-se a edição assistida da

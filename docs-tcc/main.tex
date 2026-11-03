@@ -413,12 +413,17 @@
   (chave-valor), MongoDB (documento), Apache Cassandra (colunar) e Neo4j (grafo). A
   importação admite dois modos de entrada --- um arquivo CSV por entidade ou um único CSV
   combinado --- e realiza a conversão nativa aos tipos de cada SGBD, com observabilidade e
-  métricas por fase de execução. O desempenho apoia-se em dois recursos: a escrita em lote,
-  com conversão vetorizada de tipos, e um modelo de execução em fluxo, de memória limitada, capaz de importar
-  arquivos maiores que a memória disponível. Uma avaliação empírica com dados reais
-  quantificou esses ganhos: a escrita em lote acelerou a importação em cerca de nove vezes em relação à gravação linha a linha
-  e o modo de fluxo reduziu o pico de memória em mais de doze vezes no maior volume medido,
-  mantendo-o constante em relação ao tamanho do arquivo. Não foram identificadas ferramentas
+  métricas por fase de execução. Antes de gravar qualquer dado, a ferramenta confere as
+  configurações e os dados em três etapas de validação, inclusive uma leitura completa dos
+  dados pelo mesmo código da gravação, e interrompe a importação, sem gravar nada, diante de
+  qualquer problema. O desempenho apoia-se na escrita em lote, com conversão vetorizada de
+  tipos, e na leitura dos arquivos em blocos, de memória limitada, capaz de importar
+  arquivos maiores que a memória disponível. Uma avaliação empírica com dados sintéticos
+  mostrou que a validação prévia ocupa cerca de um quinto do tempo de uma importação de cem
+  mil linhas, dominada pela escrita nos bancos; medições históricas mostraram que a escrita
+  em lote acelerou a importação em cerca de nove vezes em relação à gravação linha a linha e
+  que a leitura em blocos reduziu o pico de memória em mais de doze vezes no maior volume
+  medido, em relação à carga do arquivo inteiro na memória. Não foram identificadas ferramentas
   equivalentes que realizem, a partir de arquivos CSV e de regras declarativas, a importação
   simultânea para múltiplos paradigmas de dados, o que evidencia a originalidade da proposta.
   A publicação do código aberto da ferramenta impulsiona avanços colaborativos na dinâmica
@@ -449,12 +454,16 @@
   (key-value), MongoDB (document), Apache Cassandra (columnar), and Neo4j (graph). The
   import supports two input modes --- one CSV file per entity or a single combined CSV ---
   and performs native type casting to each DBMS, with observability and per-phase execution
-  metrics. Performance rests on two features: batch writing, with vectorized type casting, and a streaming
-  execution model, with bounded memory, able to import files larger than available memory.
-  An empirical evaluation with real data quantified these gains: batch writing sped up
-  the import by roughly nine times over row-by-row writing, and the streaming mode reduced peak memory by more than
-  twelve times at the largest measured volume, keeping it constant with respect to file
-  size. No equivalent tools were identified that perform, from CSV files and declarative
+  metrics. Before writing any data, the tool checks the configuration and the data in three
+  validation stages, including a full read of the data through the same code as the write,
+  and stops the import, writing nothing, at any problem. Performance rests on batch writing,
+  with vectorized type casting, and on reading the files in chunks, with bounded memory,
+  able to import files larger than available memory. An empirical evaluation with synthetic
+  data showed that the prior validation takes about one fifth of the time of a
+  100,000-row import, which is dominated by database writes; historical measurements showed
+  that batch writing sped up the import by roughly nine times over row-by-row writing and
+  that chunked reading reduced peak memory by more than twelve times at the largest
+  measured volume, compared with loading the whole file in memory. No equivalent tools were identified that perform, from CSV files and declarative
   rules, the simultaneous import to multiple data paradigms, which highlights the
   originality of the proposal. The open-source publication of the tool drives collaborative
   advances in the dynamic modern database architecture.

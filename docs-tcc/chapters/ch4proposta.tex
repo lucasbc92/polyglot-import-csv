@@ -532,7 +532,7 @@ completo está no Apêndice~\ref{ap:config}.
 
 \textbf{PostgreSQL.} As entidades são tabelas e só admitem colunas simples, sem
 aninhamento. O campo \texttt{db\_type} de cada coluna define o tipo usado na criação da
-tabela (\texttt{CREATE TABLE}) quando \texttt{-{}-create-schema} está ativo, e as colunas
+tabela (\texttt{CREATE TABLE}), quando ela ainda não existe, e as colunas
 com \texttt{is\_key} formam a chave primária. O mapa \texttt{relationships} declara chaves
 estrangeiras: \texttt{from} é a tabela que contém a chave, \texttt{to} é a tabela
 referenciada, \texttt{foreign\_key} é a coluna de \texttt{from} e \texttt{references\_key}
