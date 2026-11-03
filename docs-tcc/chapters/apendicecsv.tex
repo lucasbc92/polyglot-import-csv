@@ -1,7 +1,7 @@
 \chapter{O Arquivo de Dados \texttt{ecommerce\_join.csv}}
 \label{ap:csv}
 
-Este apêndice reproduz, em forma tabular, o arquivo de dados do cenário e-commerce,
+Este apêndice reproduz, em forma tabular, o arquivo de dados do cenário exemplo,
 \texttt{data/ecommerce/ecommerce\_join.csv}, utilizado nas seções~\ref{sec:algoritmo}
 e~\ref{sec:exemplo-uso}. O arquivo contém 32 linhas de dados e 39 colunas, e resulta da
 \textbf{junção} (\textit{join}) de todas as coleções de dados da fonte --- usuários,
@@ -78,76 +78,204 @@ nome (\texttt{user}$N$), tanto na coluna \texttt{user\_id} quanto em
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
 \end{table}
 
-Nas seções seguintes, o arquivo é apresentado em quatro blocos, um por ação. Cada
-tabela exibe as colunas com valores próprios daquele bloco; as colunas cujo valor é
-constante ou segue os padrões acima são descritas no texto que antecede cada tabela. Os
-valores e a ordem das linhas são exatamente os do arquivo original.
+Nas seções seguintes, o arquivo é apresentado em quatro blocos, um por ação. As tabelas são
+\textbf{verticais}: cada linha da tabela corresponde a uma coluna do CSV, e cada coluna da
+tabela, a uma linha de dados daquela ação, na ordem em que aparece no arquivo. Todas as
+colunas que a ação preenche são mostradas, com os valores exatamente como no arquivo,
+exceto \texttt{user\_id} e \texttt{traded\_with}, que aparecem pelo nome do usuário
+(Tabela~\ref{tab:csv-usuarios}). Como cada ação tem oito linhas, cada bloco ocupa duas
+tabelas, com as linhas 1 a 4 e 5 a 8.
 
 \section{Linhas com \texttt{action == stock}}
 
-As oito linhas de reposição de estoque preenchem os grupos de usuário, endereço,
-produto, categoria e estoque (21 das 39 colunas). Todas ocorrem em 02/11/2023 e, em
-cada uma, \texttt{last\_restock\_date} repete o instante do próprio evento
-(\texttt{timestamp}). A Tabela~\ref{tab:csv-stock-ap} apresenta os valores.
+As oito linhas de reposição de estoque preenchem os grupos de evento, usuário, endereço,
+produto, categoria e estoque (21 das 39 colunas). Todas ocorrem em 02/11/2023 e, em cada
+uma, \texttt{last\_restock\_date} repete o instante do próprio evento
+(\texttt{timestamp}). As Tabelas~\ref{tab:csv-stock-completa}
+e~\ref{tab:csv-stock-completa-b} apresentam os valores.
 
 \begin{table}[H]
-  \caption{Linhas \texttt{action == stock} do \texttt{ecommerce\_join.csv}.}
-  \label{tab:csv-stock-ap}
+  \caption{Linhas \texttt{action == stock} do \texttt{ecommerce\_join.csv}, todas as colunas preenchidas (linhas 1 a 4).}
+  \label{tab:csv-stock-completa}
   \centering
-  \begin{tabular}{c l l l l l r r}
+  \setlength{\tabcolsep}{3pt}%
+  \renewcommand{\arraystretch}{1.15}%
+  \begin{tabular}{l *{4}{>{\raggedright\arraybackslash}p{2.5cm}}}
     \toprule
-    \textbf{Hora} & \textbf{Usuário} & \textbf{Produto} & \textbf{Variante} & \textbf{Marca} & \textbf{Categoria} & \textbf{Qtd.} & \textbf{Preço} \\
+    \textbf{Coluna} & \textbf{Linha 1} & \textbf{Linha 2} & \textbf{Linha 3} & \textbf{Linha 4} \\
     \midrule
-    03:30 & user1 & Product2 & blue   & Microsoft & Categoria2 &  2 & 50.5 \\
-    06:45 & user2 & Product3 & green  & Google    & Categoria3 &  1 & 52.07 \\
-    09:15 & user2 & Product9 & black  & Pepsi     & Categoria9 & 67 & 32.78 \\
-    12:00 & user8 & Product8 & white  & Google    & Categoria8 & 60 & 46.79 \\
-    14:30 & user9 & Product4 & yellow & Apple     & Categoria4 & 82 & 55.94 \\
-    17:15 & user9 & Product5 & red    & Samsung   & Categoria5 & 57 & 34.21 \\
-    20:00 & user9 & Product6 & orange & Coca-Cola & Categoria6 & 64 & 51.98 \\
-    22:30 & user9 & Product7 & grey   & Audi      & Categoria7 &  1 & 100000 \\
+    \texttt{action} & stock & stock & stock & stock \\
+    \texttt{timestamp} & 2023-11-02 03:30:00Z & 2023-11-02 06:45:00Z & 2023-11-02 09:15:00Z & 2023-11-02 12:00:00Z \\
+    \texttt{user\_id} & user1 & user2 & user2 & user8 \\
+    \texttt{user\_name} & user1 & user2 & user2 & user8 \\
+    \texttt{user\_email} & user1@\allowbreak example.com & user2@\allowbreak example.com & user2@\allowbreak example.com & user8@\allowbreak example.com \\
+    \texttt{street} & Street 1, 42 & Street 2, 42 & Street 2, 42 & Street 8, 42 \\
+    \texttt{neighborhood} & ABC & DEF & DEF & VWX \\
+    \texttt{state} & CA & SC & SC & SE \\
+    \texttt{country} & United States & Brasil & Brasil & Brasil \\
+    \texttt{zip\_code} & 12345 & 84102149 & 84102149 & 18439703 \\
+    \texttt{product\_id} & 2 & 3 & 9 & 8 \\
+    \texttt{product\_name} & Product2 & Product3 & Product9 & Product8 \\
+    \texttt{product\_variant} & blue & green & black & white \\
+    \texttt{product\_brand} & Microsoft & Google & Pepsi & Google \\
+    \texttt{product\_description} & Description1 & Description2 & Description8 & Description7 \\
+    \texttt{product\_image} & https://\allowbreak example.com/\allowbreak image1.jpg & https://\allowbreak example.com/\allowbreak image2.jpg & https://\allowbreak example.com/\allowbreak image8.jpg & https://\allowbreak example.com/\allowbreak image7.jpg \\
+    \texttt{category\_id} & 2 & 3 & 9 & 8 \\
+    \texttt{category\_name} & Categoria2 & Categoria3 & Categoria9 & Categoria8 \\
+    \texttt{quantity\_available} & 2 & 1 & 67 & 60 \\
+    \texttt{price} & 50.5 & 52.07 & 32.78 & 46.79 \\
+    \texttt{last\_restock\_date} & 2023-11-02 03:30:00Z & 2023-11-02 06:45:00Z & 2023-11-02 09:15:00Z & 2023-11-02 12:00:00Z \\
     \bottomrule
   \end{tabular}
   \par\vspace{4pt}
-  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+  {\footnotesize Fonte: Elaborado pelo autor (2026), a partir de \texttt{data/ecommerce/ecommerce\_join.csv}.}
+\end{table}
+
+\begin{table}[H]
+  \caption{Linhas \texttt{action == stock} do \texttt{ecommerce\_join.csv}, todas as colunas preenchidas (linhas 5 a 8).}
+  \label{tab:csv-stock-completa-b}
+  \centering
+  \setlength{\tabcolsep}{3pt}%
+  \renewcommand{\arraystretch}{1.15}%
+  \begin{tabular}{l *{4}{>{\raggedright\arraybackslash}p{2.5cm}}}
+    \toprule
+    \textbf{Coluna} & \textbf{Linha 5} & \textbf{Linha 6} & \textbf{Linha 7} & \textbf{Linha 8} \\
+    \midrule
+    \texttt{action} & stock & stock & stock & stock \\
+    \texttt{timestamp} & 2023-11-02 14:30:00Z & 2023-11-02 17:15:00Z & 2023-11-02 20:00:00Z & 2023-11-02 22:30:00Z \\
+    \texttt{user\_id} & user9 & user9 & user9 & user9 \\
+    \texttt{user\_name} & user9 & user9 & user9 & user9 \\
+    \texttt{user\_email} & user9@\allowbreak example.com & user9@\allowbreak example.com & user9@\allowbreak example.com & user9@\allowbreak example.com \\
+    \texttt{street} & Street 9, 42 & Street 9, 42 & Street 9, 42 & Street 9, 42 \\
+    \texttt{neighborhood} & YZ & YZ & YZ & YZ \\
+    \texttt{state} & AM & AM & AM & AM \\
+    \texttt{country} & Brasil & Brasil & Brasil & Brasil \\
+    \texttt{zip\_code} & 18439666 & 18439666 & 18439666 & 18439666 \\
+    \texttt{product\_id} & 4 & 5 & 6 & 7 \\
+    \texttt{product\_name} & Product4 & Product5 & Product6 & Product7 \\
+    \texttt{product\_variant} & yellow & red & orange & grey \\
+    \texttt{product\_brand} & Apple & Samsung & Coca-Cola & Audi \\
+    \texttt{product\_description} & Description3 & Description4 & Description5 & Description6 \\
+    \texttt{product\_image} & https://\allowbreak example.com/\allowbreak image3.jpg & https://\allowbreak example.com/\allowbreak image4.jpg & https://\allowbreak example.com/\allowbreak image5.jpg & https://\allowbreak example.com/\allowbreak image6.jpg \\
+    \texttt{category\_id} & 4 & 5 & 6 & 7 \\
+    \texttt{category\_name} & Categoria4 & Categoria5 & Categoria6 & Categoria7 \\
+    \texttt{quantity\_available} & 82 & 57 & 64 & 1 \\
+    \texttt{price} & 55.94 & 34.21 & 51.98 & 100000 \\
+    \texttt{last\_restock\_date} & 2023-11-02 14:30:00Z & 2023-11-02 17:15:00Z & 2023-11-02 20:00:00Z & 2023-11-02 22:30:00Z \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026), a partir de \texttt{data/ecommerce/ecommerce\_join.csv}.}
 \end{table}
 
 \section{Linhas com \texttt{action == purchase}}
 
 As oito linhas de compra são as mais completas do arquivo (34 das 39 colunas):
 acrescentam aos grupos anteriores os dados de pedido, contraparte da venda, avaliação e
-pagamento. Em todas elas, \texttt{order\_status} vale \texttt{Completed} e
-\texttt{quantity} vale 1; o registro do evento (\texttt{timestamp}) ocorre entre 15 e
-19/11/2023, posterior à data do pedido (\texttt{order\_date}), que inclui hora e fuso
-horário no arquivo original. O pagamento (\texttt{payment\_method}) é \texttt{cash} nos
-pedidos \texttt{ORD1} e \texttt{ORD2} e \texttt{credit\_card} nos demais. As colunas de
-produto, categoria e estoque trazem os dados
-cadastrais do produto negociado, tal como nas linhas de estoque
-(Tabela~\ref{tab:csv-stock-ap}); o endereço do comprador e o do vendedor (colunas
-\texttt{trader\_*}) são os da Tabela~\ref{tab:csv-usuarios}. A
-Tabela~\ref{tab:csv-purchase-ap} apresenta os valores próprios de cada compra.
+pagamento. As colunas de produto, categoria e estoque trazem os dados cadastrais do
+produto negociado, tal como nas linhas de estoque (Tabela~\ref{tab:csv-stock-completa}),
+e as colunas \texttt{trader\_*} trazem o endereço do vendedor. As
+Tabelas~\ref{tab:csv-purchase-completa} e~\ref{tab:csv-purchase-completa-b} apresentam
+os valores.
 
 \begin{table}[H]
-  \caption{Linhas \texttt{action == purchase} do \texttt{ecommerce\_join.csv}.}
-  \label{tab:csv-purchase-ap}
+  \caption{Linhas \texttt{action == purchase} do \texttt{ecommerce\_join.csv}, todas as colunas preenchidas (linhas 1 a 4).}
+  \label{tab:csv-purchase-completa}
   \centering
   \setlength{\tabcolsep}{3pt}%
-  \begin{tabular}{l c l l l c l}
+  \renewcommand{\arraystretch}{1.15}%
+  \begin{tabular}{l *{4}{>{\raggedright\arraybackslash}p{2.5cm}}}
     \toprule
-    \textbf{Pedido} & \textbf{Data} & \textbf{Comprador} & \textbf{Vendedor} & \textbf{Produto} & \textbf{Nota} & \textbf{Comentário} \\
+    \textbf{Coluna} & \textbf{Linha 1} & \textbf{Linha 2} & \textbf{Linha 3} & \textbf{Linha 4} \\
     \midrule
-    ORD1 & 03/11 & user1 & user2 & Product2 & 2 & Bad \\
-    ORD2 & 03/11 & user2 & user1 & Product3 & 4 & Bom \\
-    ORD3 & 05/11 & user3 & user9 & Product4 & 3 & Médio \\
-    ORD4 & 07/11 & user4 & user9 & Product5 & 5 & Ótimo produto \\
-    ORD5 & 09/11 & user5 & user9 & Product6 & 1 & Não gostei \\
-    ORD6 & 10/11 & user6 & user9 & Product7 & 5 & --- \\
-    ORD7 & 11/11 & user7 & user8 & Product8 & 1 & Reprovado \\
-    ORD8 & 14/11 & user8 & user2 & Product9 & 4 & Bom, bonito e barato \\
+    \texttt{action} & purchase & purchase & purchase & purchase \\
+    \texttt{timestamp} & 2023-11-15 15:46:30Z & 2023-11-16 03:46:30Z & 2023-11-16 18:46:30Z & 2023-11-17 06:46:30Z \\
+    \texttt{user\_id} & user1 & user2 & user3 & user4 \\
+    \texttt{user\_name} & user1 & user2 & user3 & user4 \\
+    \texttt{user\_email} & user1@\allowbreak example.com & user2@\allowbreak example.com & user3@\allowbreak example.com & user4@\allowbreak example.com \\
+    \texttt{street} & Street 1, 42 & Street 2, 42 & Street 3, 42 & Street 4, 42 \\
+    \texttt{neighborhood} & ABC & DEF & GHI & JKL \\
+    \texttt{state} & CA & SC & RS & TO \\
+    \texttt{country} & United States & Brasil & Brasil & Brasil \\
+    \texttt{zip\_code} & 12345 & 84102149 & 18057313 & 19645442 \\
+    \texttt{order\_number} & ORD1 & ORD2 & ORD3 & ORD4 \\
+    \texttt{order\_date} & 2023-11-03T14:30:00-05:00 & 2023-11-03T12:30:00-03:00 & 2023-11-05T15:30:00-03:00 & 2023-11-07T16:20:00-03:00 \\
+    \texttt{order\_status} & Completed & Completed & Completed & Completed \\
+    \texttt{traded\_with} & user2 & user1 & user9 & user9 \\
+    \texttt{trader\_street} & Street 2, 42 & Street 1, 42 & Street 9, 42 & Street 9, 42 \\
+    \texttt{trader\_neighborhood} & DEF & ABC & YZ & YZ \\
+    \texttt{trader\_state} & SC & CA & AM & AM \\
+    \texttt{trader\_country} & Brasil & United States & Brasil & Brasil \\
+    \texttt{trader\_zip\_code} & 84102149 & 12345 & 18439666 & 18439666 \\
+    \texttt{comment} & Bad & Bom & Médio & Ótimo produto \\
+    \texttt{rating} & 2 & 4 & 3 & 5 \\
+    \texttt{payment\_method} & cash & cash & credit\_\allowbreak card & credit\_\allowbreak card \\
+    \texttt{quantity} & 1 & 1 & 1 & 1 \\
+    \texttt{product\_id} & 2 & 3 & 4 & 5 \\
+    \texttt{product\_name} & Product2 & Product3 & Product4 & Product5 \\
+    \texttt{product\_variant} & blue & green & yellow & red \\
+    \texttt{product\_brand} & Microsoft & Google & Apple & Samsung \\
+    \texttt{product\_description} & Description1 & Description2 & Description3 & Description4 \\
+    \texttt{product\_image} & https://\allowbreak example.com/\allowbreak image1.jpg & https://\allowbreak example.com/\allowbreak image2.jpg & https://\allowbreak example.com/\allowbreak image3.jpg & https://\allowbreak example.com/\allowbreak image4.jpg \\
+    \texttt{category\_id} & 2 & 3 & 4 & 5 \\
+    \texttt{category\_name} & Categoria2 & Categoria3 & Categoria4 & Categoria5 \\
+    \texttt{quantity\_available} & 2 & 1 & 82 & 57 \\
+    \texttt{price} & 50.5 & 52.07 & 55.94 & 34.21 \\
+    \texttt{last\_restock\_date} & 2023-11-02 03:30:00Z & 2023-11-02 06:45:00Z & 2023-11-02 14:30:00Z & 2023-11-02 17:15:00Z \\
     \bottomrule
   \end{tabular}
   \par\vspace{4pt}
-  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+  {\footnotesize Fonte: Elaborado pelo autor (2026), a partir de \texttt{data/ecommerce/ecommerce\_join.csv}.}
+\end{table}
+
+\begin{table}[H]
+  \caption{Linhas \texttt{action == purchase} do \texttt{ecommerce\_join.csv}, todas as colunas preenchidas (linhas 5 a 8).}
+  \label{tab:csv-purchase-completa-b}
+  \centering
+  \setlength{\tabcolsep}{3pt}%
+  \renewcommand{\arraystretch}{1.15}%
+  \begin{tabular}{l *{4}{>{\raggedright\arraybackslash}p{2.5cm}}}
+    \toprule
+    \textbf{Coluna} & \textbf{Linha 5} & \textbf{Linha 6} & \textbf{Linha 7} & \textbf{Linha 8} \\
+    \midrule
+    \texttt{action} & purchase & purchase & purchase & purchase \\
+    \texttt{timestamp} & 2023-11-17 22:46:30Z & 2023-11-18 10:46:30Z & 2023-11-18 23:46:30Z & 2023-11-19 15:46:30Z \\
+    \texttt{user\_id} & user5 & user6 & user7 & user8 \\
+    \texttt{user\_name} & user5 & user6 & user7 & user8 \\
+    \texttt{user\_email} & user5@\allowbreak example.com & user6@\allowbreak example.com & user7@\allowbreak example.com & user8@\allowbreak example.com \\
+    \texttt{street} & Street 5, 42 & Street 6, 42 & Street 7, 42 & Street 8, 42 \\
+    \texttt{neighborhood} & MNO & PQR & STU & VWX \\
+    \texttt{state} & RJ & SP & SP & SE \\
+    \texttt{country} & Brasil & Brasil & Brasil & Brasil \\
+    \texttt{zip\_code} & 30097508 & 92083256 & 67065799 & 18439703 \\
+    \texttt{order\_number} & ORD5 & ORD6 & ORD7 & ORD8 \\
+    \texttt{order\_date} & 2023-11-09T12:30:00-03:00 & 2023-11-10T12:30:00-03:00 & 2023-11-11T12:30:00-03:00 & 2023-11-14T12:30:00-03:00 \\
+    \texttt{order\_status} & Completed & Completed & Completed & Completed \\
+    \texttt{traded\_with} & user9 & user9 & user8 & user2 \\
+    \texttt{trader\_street} & Street 9, 42 & Street 9, 42 & Street 8, 42 & Street 2, 42 \\
+    \texttt{trader\_neighborhood} & YZ & YZ & VWX & DEF \\
+    \texttt{trader\_state} & AM & AM & SE & SC \\
+    \texttt{trader\_country} & Brasil & Brasil & Brasil & Brasil \\
+    \texttt{trader\_zip\_code} & 18439666 & 18439666 & 18439703 & 84102149 \\
+    \texttt{comment} & Não gostei & --- & Reprovado & Bom, bonito e barato \\
+    \texttt{rating} & 1 & 5 & 1 & 4 \\
+    \texttt{payment\_method} & credit\_\allowbreak card & credit\_\allowbreak card & credit\_\allowbreak card & credit\_\allowbreak card \\
+    \texttt{quantity} & 1 & 1 & 1 & 1 \\
+    \texttt{product\_id} & 6 & 7 & 8 & 9 \\
+    \texttt{product\_name} & Product6 & Product7 & Product8 & Product9 \\
+    \texttt{product\_variant} & orange & grey & white & black \\
+    \texttt{product\_brand} & Coca-Cola & Audi & Google & Pepsi \\
+    \texttt{product\_description} & Description5 & Description6 & Description7 & Description8 \\
+    \texttt{product\_image} & https://\allowbreak example.com/\allowbreak image5.jpg & https://\allowbreak example.com/\allowbreak image6.jpg & https://\allowbreak example.com/\allowbreak image7.jpg & https://\allowbreak example.com/\allowbreak image8.jpg \\
+    \texttt{category\_id} & 6 & 7 & 8 & 9 \\
+    \texttt{category\_name} & Categoria6 & Categoria7 & Categoria8 & Categoria9 \\
+    \texttt{quantity\_available} & 64 & 1 & 60 & 67 \\
+    \texttt{price} & 51.98 & 100000 & 46.79 & 32.78 \\
+    \texttt{last\_restock\_date} & 2023-11-02 20:00:00Z & 2023-11-01T00:00:00-03:00 & 2023-11-02 12:00:00Z & 2023-11-02 09:15:00Z \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026), a partir de \texttt{data/ecommerce/ecommerce\_join.csv}.}
 \end{table}
 
 \section{Linhas com \texttt{action == select\_product}}
@@ -155,29 +283,53 @@ Tabela~\ref{tab:csv-purchase-ap} apresenta os valores próprios de cada compra.
 As oito linhas de seleção de produto preenchem apenas a identificação do evento, o
 usuário e o grupo de seleção (7 das 39 colunas): o produto visualizado
 (\texttt{selected\_product\_id}) e a quantidade de sugestões exibidas
-(\texttt{suggested\_product\_count}), que vale 3 em todas as linhas. A
-Tabela~\ref{tab:csv-select-ap} apresenta os valores.
+(\texttt{suggested\_product\_count}). As Tabelas~\ref{tab:csv-select-completa}
+e~\ref{tab:csv-select-completa-b} apresentam os valores.
 
 \begin{table}[H]
-  \caption{Linhas \texttt{action == select\_product} do \texttt{ecommerce\_join.csv}.}
-  \label{tab:csv-select-ap}
+  \caption{Linhas \texttt{action == select\_product} do \texttt{ecommerce\_join.csv}, todas as colunas preenchidas (linhas 1 a 4).}
+  \label{tab:csv-select-completa}
   \centering
-  \begin{tabular}{c l c c}
+  \setlength{\tabcolsep}{3pt}%
+  \renewcommand{\arraystretch}{1.15}%
+  \begin{tabular}{l *{4}{>{\raggedright\arraybackslash}p{2.5cm}}}
     \toprule
-    \textbf{Momento} & \textbf{Usuário} & \textbf{Produto selecionado} & \textbf{Sugestões} \\
+    \textbf{Coluna} & \textbf{Linha 1} & \textbf{Linha 2} & \textbf{Linha 3} & \textbf{Linha 4} \\
     \midrule
-    15/11 15:09 & user1 & 11 & 3 \\
-    16/11 03:11 & user2 & 12 & 3 \\
-    16/11 17:50 & user3 & 22 & 3 \\
-    17/11 06:05 & user4 & 14 & 3 \\
-    17/11 21:56 & user5 & 14 & 3 \\
-    18/11 10:09 & user6 & 21 & 3 \\
-    18/11 23:20 & user7 & 33 & 3 \\
-    19/11 15:18 & user8 & 17 & 3 \\
+    \texttt{action} & select\_\allowbreak product & select\_\allowbreak product & select\_\allowbreak product & select\_\allowbreak product \\
+    \texttt{timestamp} & 2023-11-15 15:09:30Z & 2023-11-16 03:11:30Z & 2023-11-16 17:50:30Z & 2023-11-17 06:05:30Z \\
+    \texttt{user\_id} & user1 & user2 & user3 & user4 \\
+    \texttt{user\_name} & user1 & user2 & user3 & user4 \\
+    \texttt{user\_email} & user1@\allowbreak example.com & user2@\allowbreak example.com & user3@\allowbreak example.com & user4@\allowbreak example.com \\
+    \texttt{selected\_product\_id} & 11 & 12 & 22 & 14 \\
+    \texttt{suggested\_product\_count} & 3 & 3 & 3 & 3 \\
     \bottomrule
   \end{tabular}
   \par\vspace{4pt}
-  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+  {\footnotesize Fonte: Elaborado pelo autor (2026), a partir de \texttt{data/ecommerce/ecommerce\_join.csv}.}
+\end{table}
+
+\begin{table}[H]
+  \caption{Linhas \texttt{action == select\_product} do \texttt{ecommerce\_join.csv}, todas as colunas preenchidas (linhas 5 a 8).}
+  \label{tab:csv-select-completa-b}
+  \centering
+  \setlength{\tabcolsep}{3pt}%
+  \renewcommand{\arraystretch}{1.15}%
+  \begin{tabular}{l *{4}{>{\raggedright\arraybackslash}p{2.5cm}}}
+    \toprule
+    \textbf{Coluna} & \textbf{Linha 5} & \textbf{Linha 6} & \textbf{Linha 7} & \textbf{Linha 8} \\
+    \midrule
+    \texttt{action} & select\_\allowbreak product & select\_\allowbreak product & select\_\allowbreak product & select\_\allowbreak product \\
+    \texttt{timestamp} & 2023-11-17 21:56:30Z & 2023-11-18 10:09:30Z & 2023-11-18 23:20:30Z & 2023-11-19 15:18:30Z \\
+    \texttt{user\_id} & user5 & user6 & user7 & user8 \\
+    \texttt{user\_name} & user5 & user6 & user7 & user8 \\
+    \texttt{user\_email} & user5@\allowbreak example.com & user6@\allowbreak example.com & user7@\allowbreak example.com & user8@\allowbreak example.com \\
+    \texttt{selected\_product\_id} & 14 & 21 & 33 & 17 \\
+    \texttt{suggested\_product\_count} & 3 & 3 & 3 & 3 \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026), a partir de \texttt{data/ecommerce/ecommerce\_join.csv}.}
 \end{table}
 
 \section{Linhas com \texttt{action == add\_to\_cart}}
@@ -185,28 +337,53 @@ Tabela~\ref{tab:csv-select-ap} apresenta os valores.
 As oito linhas de adição ao carrinho preenchem a identificação do evento, o usuário e
 o grupo de carrinho (8 das 39 colunas). O identificador do carrinho
 (\texttt{shopping\_cart\_id}) segue o padrão
-\texttt{user:$\langle$user\_id$\rangle$:cart} --- por exemplo,
-\texttt{user:7fd7eee7-\ldots:cart} para \texttt{user1}. A
-Tabela~\ref{tab:csv-cart-ap} apresenta os demais valores.
+\texttt{user:$\langle$user\_id$\rangle$:cart}. As Tabelas~\ref{tab:csv-cart-completa}
+e~\ref{tab:csv-cart-completa-b} apresentam os valores.
 
 \begin{table}[H]
-  \caption{Linhas \texttt{action == add\_to\_cart} do \texttt{ecommerce\_join.csv}.}
-  \label{tab:csv-cart-ap}
+  \caption{Linhas \texttt{action == add\_to\_cart} do \texttt{ecommerce\_join.csv}, todas as colunas preenchidas (linhas 1 a 4).}
+  \label{tab:csv-cart-completa}
   \centering
-  \begin{tabular}{c l c c}
+  \setlength{\tabcolsep}{3pt}%
+  \renewcommand{\arraystretch}{1.15}%
+  \begin{tabular}{l *{4}{>{\raggedright\arraybackslash}p{2.5cm}}}
     \toprule
-    \textbf{Momento} & \textbf{Usuário} & \textbf{Produto adicionado} & \textbf{Quantidade} \\
+    \textbf{Coluna} & \textbf{Linha 1} & \textbf{Linha 2} & \textbf{Linha 3} & \textbf{Linha 4} \\
     \midrule
-    15/11 15:17 & user1 & 3 & 1 \\
-    16/11 03:27 & user2 & 2 & 1 \\
-    16/11 18:08 & user3 & 2 & 1 \\
-    17/11 06:14 & user4 & 2 & 1 \\
-    17/11 22:11 & user5 & 2 & 1 \\
-    18/11 10:21 & user6 & 2 & 1 \\
-    18/11 23:34 & user7 & 2 & 1 \\
-    19/11 15:29 & user8 & 2 & 1 \\
+    \texttt{action} & add\_\allowbreak to\_\allowbreak cart & add\_\allowbreak to\_\allowbreak cart & add\_\allowbreak to\_\allowbreak cart & add\_\allowbreak to\_\allowbreak cart \\
+    \texttt{timestamp} & 2023-11-15 15:17:30Z & 2023-11-16 03:27:30Z & 2023-11-16 18:08:30Z & 2023-11-17 06:14:30Z \\
+    \texttt{user\_id} & user1 & user2 & user3 & user4 \\
+    \texttt{user\_name} & user1 & user2 & user3 & user4 \\
+    \texttt{user\_email} & user1@\allowbreak example.com & user2@\allowbreak example.com & user3@\allowbreak example.com & user4@\allowbreak example.com \\
+    \texttt{shopping\_cart\_id} & {\footnotesize user:\allowbreak 7fd7eee7-\allowbreak 4675-\allowbreak 4f56-\allowbreak ad81-\allowbreak 108da6cecebc:\allowbreak cart} & {\footnotesize user:\allowbreak f246fb91-\allowbreak e47d-\allowbreak 44e8-\allowbreak a015-\allowbreak ce5dfd2cb8d1:\allowbreak cart} & {\footnotesize user:\allowbreak 09b3458a-\allowbreak 9d1d-\allowbreak 4708-\allowbreak 8d2d-\allowbreak 3eb5fadbac9b:\allowbreak cart} & {\footnotesize user:\allowbreak 1fd3d09a-\allowbreak a310-\allowbreak 4a46-\allowbreak bfdf-\allowbreak 37f2f9935a8c:\allowbreak cart} \\
+    \texttt{cart\_product\_id} & 3 & 2 & 2 & 2 \\
+    \texttt{cart\_quantity} & 1 & 1 & 1 & 1 \\
     \bottomrule
   \end{tabular}
   \par\vspace{4pt}
-  {\footnotesize Fonte: Elaborado pelo autor (2026).}
+  {\footnotesize Fonte: Elaborado pelo autor (2026), a partir de \texttt{data/ecommerce/ecommerce\_join.csv}.}
+\end{table}
+
+\begin{table}[H]
+  \caption{Linhas \texttt{action == add\_to\_cart} do \texttt{ecommerce\_join.csv}, todas as colunas preenchidas (linhas 5 a 8).}
+  \label{tab:csv-cart-completa-b}
+  \centering
+  \setlength{\tabcolsep}{3pt}%
+  \renewcommand{\arraystretch}{1.15}%
+  \begin{tabular}{l *{4}{>{\raggedright\arraybackslash}p{2.5cm}}}
+    \toprule
+    \textbf{Coluna} & \textbf{Linha 5} & \textbf{Linha 6} & \textbf{Linha 7} & \textbf{Linha 8} \\
+    \midrule
+    \texttt{action} & add\_\allowbreak to\_\allowbreak cart & add\_\allowbreak to\_\allowbreak cart & add\_\allowbreak to\_\allowbreak cart & add\_\allowbreak to\_\allowbreak cart \\
+    \texttt{timestamp} & 2023-11-17 22:11:30Z & 2023-11-18 10:21:30Z & 2023-11-18 23:34:30Z & 2023-11-19 15:29:30Z \\
+    \texttt{user\_id} & user5 & user6 & user7 & user8 \\
+    \texttt{user\_name} & user5 & user6 & user7 & user8 \\
+    \texttt{user\_email} & user5@\allowbreak example.com & user6@\allowbreak example.com & user7@\allowbreak example.com & user8@\allowbreak example.com \\
+    \texttt{shopping\_cart\_id} & {\footnotesize user:\allowbreak 0331463b-\allowbreak 7e62-\allowbreak 44ed-\allowbreak 945f-\allowbreak 6b3c8195245b:\allowbreak cart} & {\footnotesize user:\allowbreak f4857da9-\allowbreak c991-\allowbreak 4bc6-\allowbreak b0a9-\allowbreak a4277c005956:\allowbreak cart} & {\footnotesize user:\allowbreak a87df805-\allowbreak ad1b-\allowbreak 4ae9-\allowbreak b5ad-\allowbreak cbb64ce9e475:\allowbreak cart} & {\footnotesize user:\allowbreak c11a1ef2-\allowbreak c7c0-\allowbreak 4a47-\allowbreak 8128-\allowbreak 16dc3da9d72b:\allowbreak cart} \\
+    \texttt{cart\_product\_id} & 2 & 2 & 2 & 2 \\
+    \texttt{cart\_quantity} & 1 & 1 & 1 & 1 \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026), a partir de \texttt{data/ecommerce/ecommerce\_join.csv}.}
 \end{table}

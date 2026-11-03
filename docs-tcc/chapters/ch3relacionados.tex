@@ -129,21 +129,21 @@ parâmetro \texttt{-{}-file}.
 
 \subsection{Cassandra}
 
-A importação de dados CSV para o Cassandra utiliza o comando \texttt{sstableloader} e
-envolve vários passos \cite{cassandra_sstableloader}. Inicialmente, é necessário se certificar que o arquivo CSV está no
-formato adequado para o Cassandra. Isso geralmente envolve garantir que os tipos de dados
-e as colunas correspondem ao esquema da tabela no Cassandra.
-
-O \texttt{sstableloader} requer que os dados estejam em um formato específico chamado
-SSTable. Para converter o CSV em SSTables, você pode usar o comando \texttt{cqlsh}
-fornecido pelo Cassandra. Um exemplo de uso é o seguinte:
+A importação de dados CSV para o Cassandra pode ser feita de duas formas. A mais direta é
+o comando \texttt{COPY FROM} do \texttt{cqlsh}, o terminal de comandos CQL do Cassandra,
+que copia as linhas de um arquivo CSV para uma tabela já existente
+\cite{cassandra_cqlsh}. O arquivo precisa estar no formato adequado à tabela: os tipos
+de dados e as colunas devem corresponder ao esquema dela. Um exemplo de uso é o seguinte:
 
 \begin{lstlisting}[style=bashstyle]
-cqlsh -e "COPY keyspace_name.table_name TO 'output_directory';"
+cqlsh -e "COPY keyspace_name.table_name FROM 'arquivo.csv' WITH HEADER = true;"
 \end{lstlisting}
 
-Na sequência, é possível usar o \texttt{sstableloader} para carregar os dados. A sintaxe
-do comando é a seguinte:
+Para volumes maiores, o Cassandra oferece o \texttt{sstableloader}, que carrega dados já
+no seu formato interno de armazenamento, o SSTable \cite{cassandra_sstableloader}. Nesse
+caso, o CSV não é lido diretamente: ele precisa antes ser convertido em SSTables por um
+programa próprio, e só então os arquivos gerados são carregados. A sintaxe do comando é a
+seguinte:
 
 \begin{lstlisting}[style=bashstyle]
 sstableloader -d <hostname> -u <username> -pw <password> \
@@ -230,7 +230,7 @@ não funcionais de cada SGBD \cite{kiehn2022polyglot,glake2022towards}.
 \citeonline{royhubara2022selecting} tratam da \textbf{seleção de SGBDs} por fragmento de
 aplicação; \citeonline{silva2024modelagem} mapeiam o estado da arte em \textbf{modelagem
 poliglota}. Nenhum desses trabalhos implementa, contudo, um utilitário declarativo que
-receba um CSV operacional único e o materialize simultaneamente em cinco paradigmas
+receba um CSV operacional único e o grave simultaneamente em cinco paradigmas
 distintos com validação estática prévia.
 
 Abordagens recentes reforçam essa tendência. \citeonline{pereira2025transparent} propõem um
@@ -257,7 +257,7 @@ regras declarativas sobre entidades aninhadas, filtros por valor (\texttt{each})
 validação por JSON Schema antes de qualquer conexão com SGBDs.
 
 \textbf{Lacuna identificada:} a combinação de (i) um CSV largo como fonte operacional,
-(ii) configuração JSON validada estaticamente, (iii) materialização distinta por paradigma
+(ii) configuração JSON validada estaticamente, (iii) gravação distinta por paradigma
 (relacional, chave-valor, documento, colunar, grafo) e (iv) modo \textit{dry-run} para
 revisão prévia. O \textit{Polyglot Import CSV} ocupa essa lacuna como ferramenta de
 \textbf{bootstrap de persistência poliglota} --- carga inicial e reprodutível de dados ---

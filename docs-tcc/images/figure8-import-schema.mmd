@@ -1,40 +1,17 @@
-flowchart LR
-    ROOT["import_config (raiz)\nsources* (obrigatório)\nadditionalProperties: false"]
-    ROOT --> SRC["sources*\nnome -> CSV, ou\n{file, origin_column: true}"]
-    ROOT --> PG[postgres]
-    ROOT --> MG[mongodb]
-    ROOT --> CS[cassandra]
-    ROOT --> RD[redis]
-    ROOT --> NJ[neo4j]
+flowchart TB
+    ROOT["import_config (raiz)\nadditionalProperties: false"]
+    ROOT --> SRC["sources*\nnome → CSV, ou\n{file, origin_column: true}"]
+    ROOT --> DB["blocos de SGBD destino\npostgres · mongodb\ncassandra · redis · neo4j"]
 
-    PG --> PGE["entities*"]
-    PG --> PGR["relationships\nfrom*, to*, foreign_key*, references_key"]
-    MG --> MGE["entities*"]
-    CS --> CSE["entities*"]
-    RD --> RDE["entities*"]
-    NJ --> NJE["entities*"]
-    NJ --> NJR["relationships\nfrom*, to*, type*, columns -> columnSpec"]
+    DB -->|"entities*"| ENTITY["entity"]
+    DB --> REL["relationships\npostgres: from*, to*,\nforeign_key*, references_key\nneo4j: from*, to*, type*,\ncolumns (de columnSpec)"]
+    REL -.->|"from, to: nomes\nde entidade"| ENTITY
 
-    PGE --> ENTITY
-    PGR --> ENTITY
-    MGE --> ENTITY
-    CSE --> ENTITY
-    RDE --> ENTITY
-    NJE --> ENTITY
-    NJR --> ENTITY
+    ENTITY --> OPT["source (nome ou lista)\nauto_map, csv_columns\ncassandra_partition\ncassandra_cluster"]
+    ENTITY --> COLS["columns: columnEntry (oneOf)\nfolha, ou objeto aninhado\n(subdocumento, recursivo)"]
+    ENTITY --> FSPEC["filters: filter\ncolumn*, operator*,\nvalue, target_suffix\n(com {value})"]
 
-    ENTITY["entity\n(definição reutilizável)"]
-    ENTITY --> SRCF["source\n(string | lista de fontes)"]
-    ENTITY --> COLS["columns\n(mapa recursivo)"]
-    ENTITY --> AUTO["auto_map, csv_columns\n(mapeamento automático)"]
-    ENTITY --> FILT["filters: [filter]"]
-    ENTITY --> CPART["cassandra_partition / cluster: [string]"]
-
-    COLS --> CENTRY{"columnEntry\n(oneOf)"}
-    CENTRY --> CSPEC["columnSpec (folha)\ncsv_column, schema_column,\nis_key, db_type"]
-    CENTRY -->|"objeto aninhado\n(subdocumento MongoDB)\nrecursivo"| CENTRY
-
-    FILT --> FSPEC["filter\ncolumn*, operator*,\nvalue, target_suffix"]
+    COLS --> CSPEC["columnSpec (folha)\ncsv_column, schema_column,\nis_key, db_type"]
 
     style ROOT fill:#dbeafe,stroke:#2563eb,color:#1e293b
     style SRC fill:#fef3c7,stroke:#d97706,color:#1e293b

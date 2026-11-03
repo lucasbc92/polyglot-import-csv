@@ -83,7 +83,7 @@ de ambos é descrita nas seções~\ref{sec:arquivo-importacao} e~\ref{sec:arquiv
     },
     "filter": {
       "type": "object",
-      "description": "Row predicate applied to the full CSV before materialization.",
+      "description": "Row predicate applied to the rows of the CSV before they are written.",
       "required": ["column", "operator"],
       "properties": {
         "column": { "type": "string", "minLength": 1 },
@@ -94,7 +94,8 @@ de ambos é descrita nas seções~\ref{sec:arquivo-importacao} e~\ref{sec:arquiv
         "value": {},
         "target_suffix": {
           "type": "string",
-          "description": "With operator 'each', optional template; default is sanitized distinct value"
+          "pattern": "^[A-Za-z0-9_]*\\{value\\}[A-Za-z0-9_]*$",
+          "description": "With operator 'each', template for the suffix of each part's name: '{value}' (exactly once, with only letters, digits and '_' around it) is replaced by the sanitized distinct value, and the part is named <entity>_<suffix>. Default: the sanitized value itself."
         }
       },
       "additionalProperties": false
