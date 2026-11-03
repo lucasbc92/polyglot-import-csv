@@ -212,8 +212,8 @@
     padrão de 8~MB favorece a memória.\par
   \end{minipage}}\par
   \vfill
-  \avfonte{Tabelas 19 e 13 do relatório; tempos da campanha sem instrumentação de memória,
-    picos da campanha com instrumentação.}
+  \avfonte{Tabelas 19 e 13. Campanhas do bloco: em 8~MB, 204,00~s contra 209,51~s no
+    slide 19 (2,7\%).}
 \end{frame}
 
 % Slide 21: resultados históricos (relatório §5.3.5 e §5.3.6; Tabela 20 e Figura 19;
@@ -222,14 +222,16 @@
 % Figura 19 usa log): a razão de ~9x aparece na altura das barras. Escala log no de memória,
 % como na Figura 20; rótulos explícitos (nodes near coords mostraria o log).
 \begin{frame}{Resultados históricos (QP4, QP5, QP6)}
-  {\footnotesize\color{black!60}Medições com versões anteriores da ferramenta, que ainda
-   ofereciam a escrita ingênua e a materialização.\par}
+  % \begingroup, e não um grupo {...} logo após o título: o Beamer leria o grupo como
+  % subtítulo do frame, que o tema não desenha.
+  \begingroup\footnotesize\color{black!60}Medições com versões anteriores da ferramenta,
+  que ainda ofereciam a escrita ingênua e a materialização.\par\endgroup
   \smallskip
   \begin{minipage}[t]{0.47\textwidth}
     \vspace{0pt}
     {\footnotesize\bfseries\color{ufscazul}Em lote: cerca de 9$\times$ mais rápida\par}
     \begin{tikzpicture}
-      \begin{axis}[avgrafico, ybar, scale only axis, width=52mm, height=22mm,
+      \begin{axis}[avgrafico, ybar, scale only axis, width=52mm, height=19mm,
           bar width=18pt, symbolic x coords={multifonte, combinado}, xtick=data,
           enlarge x limits=0.5, ymin=0, ymax=175, ytick={0,50,100,150},
           ylabel={Tempo total (s)}, nodes near coords, point meta=explicit symbolic,
@@ -248,7 +250,7 @@
     {\footnotesize\bfseries\color{ufscazul}Leitura em blocos: 12,5$\times$ menos memória\par}
     \begin{tikzpicture}
       \begin{axis}[avgrafico, ybar, ymode=log, log origin=infty, scale only axis,
-          width=52mm, height=22mm, bar width=11pt,
+          width=52mm, height=19mm, bar width=11pt,
           symbolic x coords={1000, 10000, 100000}, xtick=data,
           xticklabels={\num{1000}, \num{10000}, \num{100000}}, enlarge x limits=0.25,
           ylabel={MB (log)}, ymin=1, ymax=50000,
@@ -265,6 +267,6 @@
     \end{tikzpicture}\par
     \avlegenda{Pico de memória por volume. Custo: $+10\%$ de tempo em \num{100000}
       linhas ($+61\%$ em mil).}
-    \avfonte{Tabelas 21 e 22 e Figura 20; pico com instrumentação.}
+    \avfonte{Tabela 21 e Figura 20 (pico, com instrumentação); Tabela 22 (tempo, sem).}
   \end{minipage}}
 \end{frame}

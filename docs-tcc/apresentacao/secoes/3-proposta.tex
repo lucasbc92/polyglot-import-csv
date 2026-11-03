@@ -182,6 +182,7 @@
     add\_to\_cart   & adição ao carrinho   & carrinho, produto e quantidade \\
     \bottomrule
   \end{tabular}\par
+  {\scriptsize\color{black!60}Fonte: Tabela 1 do relatório.\par}
   \smallskip
   \onslide<2->
   \begingroup\tcbset{equal height group=modos}
@@ -211,9 +212,11 @@
   Nos dois modos, o resto do arquivo de importação é igual. O exemplo usa o multifonte.\par
 \end{frame}
 
-% Slide 12: o mesmo cenário em cinco modelos de dados (relatório §4.3.3)
+% Slide 12: o mesmo cenário em cinco modelos de dados (relatório v2.4 §4.3.3)
 % Valores e nomes de campo copiados de tab:pg-inventory, lst:mongo-doc,
-% tab:cassandra-particao, lst:redis-pares e lst:neo4j-grafo; "..." marca o que foi omitido.
+% tab:cassandra-particao, lst:redis-pares e lst:neo4j-grafo, que a v2.4 leu de uma
+% importação real: números gravados como números (tipos da leitura de inferência) e o preço
+% do PostgreSQL com duas casas (NUMERIC); "..." marca o que foi omitido.
 % A linha de stock do Product2 não alimenta o Redis (tab:exemplo-ecommerce): cada painel
 % indica a fonte de onde veio. Corpo dos painéis em Helvetica Narrow: nomes como
 % quantity_available não cabem em mono \scriptsize num quinto da largura.
@@ -246,18 +249,18 @@
       quantity\_available & 2\\
       \multicolumn{2}{@{}l@{}}{last\_restock\_date}\\
       \multicolumn{2}{@{}r@{}}{02/11/2023 03:30}\\
-      price & 50.5
+      price & 50.50
     \end{tabular*}}\hfill
   \modelo{2}{MongoDB}{documento}{%
     \pfonte{stock}
     \pent{product\_catalog}
     \begin{tabular}{@{}l@{}}
-      \{"product\_id": "2",\\
+      \{"product\_id": 2,\\
       \pind ...,\\
       \pind "category": \{...\},\\
       \pind "stock": \{\\
       \pind\pind "quantity\_available":\\
-      \pind\pind\pind "2", ...\}\}
+      \pind\pind\pind 2, ...\}\}
     \end{tabular}}\hfill
   \modelo{3}{Cassandra}{colunar}{%
     \pfonte{as quatro fontes}
@@ -280,8 +283,8 @@
     \begin{tabular}{@{}l@{}}
       \prot{chave} user:7fd7...:cart\\
       \prot{valor} \{...,\\
-      "cart\_product\_id": "3",\\
-      "cart\_quantity": "1"\}
+      "cart\_product\_id": 3,\\
+      "cart\_quantity": 1\}
     \end{tabular}\par
     \smallskip
     \pfonte{select\_product}
@@ -301,7 +304,7 @@
       \pind order\_number:\\
       \pind\pind "ORD1", ...\}]->\\
       (:Product \{\\
-      \pind product\_id: "2", ...\})
+      \pind product\_id: 2, ...\})
     \end{tabular}}\par
   \endgroup
 \end{frame}
@@ -314,15 +317,16 @@
 % da 3.0.0: runner.py (load_config, validate_headers, _require_dbms) e stream_runner.py (as
 % três passagens; o --dry-run para depois da validação, com as contagens).
 \begin{frame}{Fluxo de execução}
-  Com as configurações validadas, a importação lê os dados \destaque{três vezes}:\par
-  \medskip
+  A importação valida as configurações e os cabeçalhos e lê os dados \destaque{três
+  vezes}:\par
+  \smallskip
   \centering
   \hyphenpenalty=10000 \exhyphenpenalty=10000
   \begin{tikzpicture}[x=1mm, y=1mm, font=\scriptsize,
       caixa/.style={draw=ufscborda, fill=white, rounded corners=0.6mm, inner sep=2pt,
                     align=center, text=ufsctexto},
       passo/.style={caixa, fill=ufscfundo, text width=36mm, minimum height=9mm},
-      leitura/.style={caixa, text width=40mm, minimum height=20mm},
+      leitura/.style={caixa, text width=40mm, minimum height=23mm},
       seta/.style={->, >=stealth, draw=ufscazul!70, thick},
       falha/.style={->, >=stealth, draw=red!55!black, thick}]
     % passos 1 a 3: antes de ler os dados
@@ -342,16 +346,18 @@
         {\footnotesize\textbf{4. Leitura de inferência}\\[2pt]
          percorre cada CSV inteiro, em blocos de \texttt{-{}-chunk-size}, e fixa o tipo de
          cada coluna};
-      \draw[seta] (p3.south) |- ++(0,-3) -| (l1.north);
+      \draw[seta] (p3.south) |- ++(0,-1.5) -| (l1.north);
     \end{scope}
     % passo 5: leitura de validação
     \begin{scope}[visivel em=<3->]
-      \node[leitura] (l2) at (71, -2)
+      \node[leitura, text width=46mm] (l2) at (71, -2)
         {\footnotesize\textbf{5. Leitura de validação}\\[2pt]
-         passa cada linha pelo código da gravação, sem gravar (etapa 3, dados)};
+         cada linha pelo código da gravação, sem gravar\\[2pt]
+         {\scriptsize aponta: valor que não converte ou que o \texttt{db\_type} recusa,
+          chave vazia, referência pendente}};
       \draw[seta] (l1.east) -- (l2.west);
       \node[caixa, draw=red!55!black, fill=red!6, text width=44mm, minimum height=8mm]
-        (erro) at (71, -20.5)
+        (erro) at (71, -22)
         {\textbf{erro:} código 1, \textbf{nada é gravado}\\
          {\color{black!60}\texttt{-{}-dry-run}: para aqui, com as contagens}};
       \draw[falha] (l2.south) -- (erro.north);
@@ -364,7 +370,7 @@
          de \texttt{-{}-batch-size}};
       \draw[seta] (l2.east) -- (l3.west);
       \node[caixa, fill=ufscfundo, text width=40mm, minimum height=8mm] (saida)
-        at (120, -20.5)
+        at (120, -22)
         {\textbf{Saída:} contagens por entidade e métricas por fase};
       \draw[seta] (l3.south) -- (saida.north);
     \end{scope}
@@ -398,7 +404,7 @@
   \end{tcolorbox}
   \onslide<2->
   \par\smallskip
-  \begingroup\footnotesize\bfseries\color{ufscazul} Linhas a gravar, segundo o
+  \par\vspace{-2mm}\begingroup\footnotesize\bfseries\color{ufscazul} Linhas a gravar, segundo o
   \texttt{-{}-dry-run}\hfill\scriptsize\mdseries\color{black!60}
   após os filtros, antes de eliminar duplicatas\par\endgroup
   \scriptsize
@@ -433,6 +439,7 @@
       \bottomrule
     \end{tabular}
   \end{minipage}\par
+  {\scriptsize\color{black!60}Fonte: Tabela 12 do relatório.\par}
 \end{frame}
 
 % Slide 15: estratégia de escrita e modelo de execução (relatório v2.4 §4.5, §4.5.1, §4.5.2)
