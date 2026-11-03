@@ -479,7 +479,8 @@
   \endgroup
 \end{frame}
 
-% Slide 16: interface gráfica (relatório §4.6; figure12-gui-ocioso a figure16-gui-verificacao)
+% Slide 16: interface gráfica (relatório v2.4 §4.6; figure12-gui-ocioso a figure16-gui-verificacao,
+% capturas da 3.0.0, com "Bloco em MB" e "Lote"; faixas medidas com pymupdf)
 % As capturas têm 1240 x 1020 px. Inteiras, o texto delas sairia com ~2 pt no slide; por
 % isso cada passo mostra recortes (coordenadas em px da captura original), ampliados até o
 % texto ficar legível. Legendas: as do relatório, encurtadas.
@@ -553,30 +554,32 @@
   {\scriptsize\color{black!60} recortes das capturas de tela}\par
   \smallskip
   \only<1>{\passogui{%
-    \recorte{figure12-gui-ocioso}{22}{180}{830}{345}{147}\vspace{1.5mm}
-    \comandogui{figure12-gui-ocioso}{646}{30}{155}{283}{801}{0.222}}{%
-    \textbf{Ocioso:} um controle para cada opção de uso cotidiano, com ícone de ajuda, e o
-    comando montado, colorido e somente leitura.}}
+    \recorte{figure12-gui-ocioso}{22}{208}{860}{376}{147}\vspace{1.5mm}
+    \comandogui{figure12-gui-ocioso}{676}{30}{155}{282}{785}{0.222}}{%
+    \textbf{Ocioso:} um controle para cada opção de uso cotidiano, com ícone de ajuda,
+    inclusive o bloco e o lote, e o comando montado, colorido e somente leitura.}}
   \only<2>{\passogui{%
-    \recorte{figure13-gui-executando}{22}{236}{600}{282}{116}\vspace{1.5mm}
-    \faixa{figure13-gui-executando}{735}{770}{16}{130}{700}{1230}{0.2}{guiconsole}\vspace{1.5mm}
-    \recorte{figure13-gui-executando}{22}{835}{700}{896}{136}}{%
+    \recorte{figure13-gui-executando}{22}{264}{600}{313}{116}\vspace{1.5mm}
+    \faixa{figure13-gui-executando}{763}{798}{16}{130}{700}{1230}{0.2}{guiconsole}\vspace{1.5mm}
+    \recorte{figure13-gui-executando}{22}{872}{700}{945}{136}}{%
     \textbf{Executando:} formulário bloqueado, botão de interrupção e saída colorida da CLI
     chegando ao console em tempo real.}}
   \only<3>{\passogui{%
-    \faixa{figure14-gui-sucesso}{735}{770}{16}{130}{700}{1230}{0.2}{guiconsole}\vspace{3mm}
-    \recorte{figure14-gui-sucesso}{22}{925}{700}{948}{147}\vspace{3mm}
+    \faixa{figure14-gui-sucesso}{763}{798}{16}{130}{700}{1230}{0.2}{guiconsole}\vspace{1.5mm}
+    \recorte{figure14-gui-sucesso}{22}{832}{700}{945}{128}\vspace{1.5mm}
     \faixa{figure14-gui-sucesso}{997}{1020}{0}{125}{780}{1240}{0.22}{guistatus}}{%
-    \textbf{Concluído:} desfecho e arquivo de log da sessão na barra de estado.}}
+    \textbf{Concluído:} métricas por fase, desfecho e arquivo de log da sessão na barra de
+    estado.}}
   \only<4>{\passogui{%
-    \recorte{figure15-gui-erro}{22}{40}{760}{112}{147}\vspace{1.5mm}
-    \recorte{figure15-gui-erro}{22}{139}{760}{160}{147}\vspace{1.5mm}
-    \faixa{figure15-gui-erro}{735}{770}{16}{130}{700}{1230}{0.2}{guiconsole}}{%
+    \recorte{figure15-gui-erro}{22}{42}{760}{114}{147}\vspace{1.5mm}
+    \recorte{figure15-gui-erro}{22}{140}{760}{158}{147}\vspace{1.5mm}
+    \faixa{figure15-gui-erro}{763}{798}{16}{130}{700}{1230}{0.2}{guiconsole}}{%
     \textbf{Erro antes de executar:} o arquivo de importação viola o \textit{JSON
-    Schema}; a mensagem é a da CLI e o botão Executar fica desabilitado.}}
+    Schema}; a mensagem da CLI cita o campo recusado, e o botão Executar fica
+    desabilitado.}}
   \only<5>{\passogui{%
-    \faixa{figure16-gui-verificacao}{735}{770}{16}{130}{700}{1230}{0.2}{guiconsole}\vspace{1.5mm}
-    \recorte{figure16-gui-verificacao}{22}{775}{770}{945}{130}}{%
-    \textbf{Verificação dos SGBDs:} MongoDB e Neo4j fora do ar e, abaixo da tabela de
+    \faixa{figure16-gui-verificacao}{763}{798}{16}{130}{700}{1230}{0.2}{guiconsole}\vspace{1.5mm}
+    \recorte{figure16-gui-verificacao}{22}{817}{770}{945}{130}}{%
+    \textbf{Verificação dos SGBDs:} Neo4j e MongoDB fora do ar e, abaixo da tabela de
     estados, os comandos que os iniciam.}}
 \end{frame}
