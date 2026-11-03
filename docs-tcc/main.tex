@@ -416,9 +416,10 @@
   métricas por fase de execução. Antes de gravar qualquer dado, a ferramenta confere as
   configurações e os dados em três etapas de validação, inclusive uma leitura completa dos
   dados pelo mesmo código da gravação, e interrompe a importação, sem gravar nada, diante de
-  qualquer problema. O desempenho apoia-se na escrita em lote, com conversão vetorizada de
-  tipos, e na leitura dos arquivos em blocos, de memória limitada, capaz de importar
-  arquivos maiores que a memória disponível. Uma avaliação empírica com dados sintéticos
+  qualquer problema que essas etapas encontrem. O desempenho apoia-se na escrita em lote,
+  com conversão vetorizada de tipos, e na leitura dos arquivos em blocos, cujo consumo de
+  memória acompanha o tamanho do bloco e o número de chaves distintas, e não o tamanho do
+  arquivo. Uma avaliação empírica com dados sintéticos
   mostrou que a validação prévia ocupa cerca de um quinto do tempo de uma importação de cem
   mil linhas, dominada pela escrita nos bancos; medições históricas mostraram que a escrita
   em lote acelerou a importação em cerca de nove vezes em relação à gravação linha a linha e
@@ -456,9 +457,10 @@
   and performs native type casting to each DBMS, with observability and per-phase execution
   metrics. Before writing any data, the tool checks the configuration and the data in three
   validation stages, including a full read of the data through the same code as the write,
-  and stops the import, writing nothing, at any problem. Performance rests on batch writing,
-  with vectorized type casting, and on reading the files in chunks, with bounded memory,
-  able to import files larger than available memory. An empirical evaluation with synthetic
+  and stops the import, writing nothing, at any problem these stages find. Performance rests
+  on batch writing, with vectorized type casting, and on reading the files in chunks, whose
+  memory use follows the chunk size and the number of distinct keys, not the file size. An
+  empirical evaluation with synthetic
   data showed that the prior validation takes about one fifth of the time of a
   100,000-row import, which is dominated by database writes; historical measurements showed
   that batch writing sped up the import by roughly nine times over row-by-row writing and

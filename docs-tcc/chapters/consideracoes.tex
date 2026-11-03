@@ -26,8 +26,9 @@ e a validação prévia dos dados, pelo quinto restante; em troca, nenhum proble
 detecta chega a uma gravação parcial. As medições históricas mostraram que a estratégia em
 lote acelerou a importação em cerca de nove vezes sobre a linha de base ingênua e que a
 leitura em blocos reduziu o pico de memória em mais de doze vezes no maior volume medido, em
-relação à carga do arquivo inteiro na memória --- o que habilita a importação de arquivos
-maiores que a memória disponível. A equivalência das contagens entre os dois modos de
+relação à carga do arquivo inteiro na memória --- o que habilita, pelo projeto, a importação
+de arquivos maiores que a memória disponível, desde que os conjuntos de chaves distintas
+caibam nela. A equivalência das contagens entre os dois modos de
 importação, conferida por testes automatizados, permite tratar a escolha entre eles como uma
 questão de organização e de custo, não de correção.
 

@@ -200,7 +200,7 @@ indica quais podem ser omitidas.
     columns & entidade & mapear as colunas & não; se omitido, todas as colunas da fonte \\
     auto\_map, csv\_columns & entidade & controlar o mapeamento automático & não \\
     filters & entidade & selecionar linhas & não \\
-    cassandra\_\allowbreak partition, cassandra\_\allowbreak cluster & entidade do Cassandra & definir a chave primária & não; sem a partição, a gravação falha \\
+    cassandra\_\allowbreak partition, cassandra\_\allowbreak cluster & entidade do Cassandra & definir a chave primária & a partição, sim; exigida pela etapa 3 de validação \\
     csv\_column, schema\_column, is\_key, db\_type & coluna & ligar uma coluna do CSV a um atributo & não \\
     \bottomrule
   \end{tabular}
@@ -609,10 +609,11 @@ Listagem~\ref{lst:each-orders}.
 \textbf{Apache Cassandra.} As entidades são tabelas com colunas simples, e a chave
 primária é definida por dois campos próprios: \texttt{cassandra\_\allowbreak partition},
 a lista de colunas da chave de partição, e \texttt{cassandra\_\allowbreak cluster}, as
-colunas de agrupamento. A partição é obrigatória na prática, pois a linguagem CQL requer
-ao menos uma coluna de partição na chave primária; a sua ausência, porém, não é apontada
-na validação nem pelo \texttt{-{}-dry-run}, e só interrompe a importação no momento da
-gravação no Cassandra. No Cassandra, \texttt{is\_key} não
+colunas de agrupamento. A partição é obrigatória, pois a linguagem CQL requer ao menos uma
+coluna de partição na chave primária. O JSON Schema não a exige, mas a etapa 3 de
+validação recusa uma entidade do Cassandra sem \texttt{cassandra\_\allowbreak partition}
+já na conferência dos cabeçalhos, inclusive no \texttt{-{}-dry-run}, antes de gravar
+qualquer dado (Seção~\ref{sec:validacao}). No Cassandra, \texttt{is\_key} não
 participa da chave primária. A Listagem~\ref{lst:cassandra-import} mostra uma entidade
 que \textbf{une} as quatro fontes em uma tabela de eventos.
 
@@ -901,8 +902,8 @@ e precisa restar ao menos um SGBD destino depois de aplicada a opção \texttt{-
 A \textbf{etapa 3 de validação} confronta o mapeamento com os CSVs, em duas partes. A
 primeira olha só os \textbf{cabeçalhos}: confere se os arquivos existem e se as colunas
 citadas no mapeamento estão neles, se os SGBDs de modelo plano (todos, exceto o MongoDB)
-não recebem colunas aninhadas, se as colunas de partição e de agrupamento do Cassandra
-existem, se os filtros são coerentes e se as chaves estrangeiras do PostgreSQL e as
+não recebem colunas aninhadas, se cada entidade do Cassandra declara a sua partição e se
+as colunas de partição e de agrupamento existem, se os filtros são coerentes e se as chaves estrangeiras do PostgreSQL e as
 arestas do Neo4j ligam entidades válidas, nenhuma delas dividida por \texttt{each}.
 
 A segunda parte olha os \textbf{dados}. Depois da verificação dos SGBDs destino
@@ -997,11 +998,13 @@ Em seguida, os valores são convertidos para os tipos nativos fixados no passo 4
 
 Depois, cada linha selecionada é \textbf{transformada} na estrutura do modelo de dados de
 destino, segundo os conceitos revisados no capítulo~2. Para os SGBDs de organização
-tabular (o relacional PostgreSQL e o colunar Cassandra), a transformação combina três
-operações também descritas pela álgebra relacional: \textit{projeção} (somente as colunas
-mapeadas em \texttt{columns} são mantidas), \textit{renomeação} (aplicação de
-\texttt{schema\_column}) e \textit{eliminação de duplicatas} com base nas colunas de chave
-(\texttt{is\_key}), detalhada na seção~\ref{sec:exemplo-uso}. Para o modelo de documentos
+tabular (o relacional PostgreSQL e o colunar Cassandra), a transformação combina operações
+também descritas pela álgebra relacional: \textit{projeção} (somente as colunas mapeadas em
+\texttt{columns} são mantidas) e \textit{renomeação} (aplicação de \texttt{schema\_column});
+no PostgreSQL, também a \textit{eliminação de duplicatas} com base nas colunas de chave
+(\texttt{is\_key}). No Cassandra, cuja chave vem de \texttt{cassandra\_partition} e
+\texttt{cassandra\_cluster}, uma linha com chave já existente substitui a anterior; a
+seção~\ref{sec:exemplo-uso} detalha o tratamento de duplicatas em cada SGBD. Para o modelo de documentos
 (MongoDB), os valores da linha são agregados em um documento cuja hierarquia reproduz o
 aninhamento declarado em \texttt{columns}, na representação desnormalizada característica
 desse modelo. Para o modelo chave-valor (Redis), cada linha dá origem a um par em que a
@@ -1015,7 +1018,7 @@ várias linhas. Por fim, os registros são \textbf{gravados em lotes} de até
 
 No \textbf{passo 9}, a ferramenta fecha a conexão com o SGBD; no PostgreSQL, recria
 antes as chaves estrangeiras removidas no passo 7. Concluídos todos os SGBDs destino, a
-\textbf{saída} da execução é um relatório com as contagens de registros gravados por
+\textbf{saída} da execução é um relatório com as contagens de linhas enviadas, por
 entidade e por SGBD e as métricas de cada fase (seção~\ref{sec:observabilidade}), que
 permite conferir o resultado da carga.
 
@@ -1105,7 +1108,7 @@ execução termina com código 1 e a mensagem \texttt{nothing was written}.
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=13cm]{images/figure11b-import-example}
+  \includegraphics[width=12.5cm]{images/figure11b-import-example}
   \caption{Caminho da primeira linha de \texttt{stock} no cenário exemplo, com três problemas induzidos em cópias alteradas dos arquivos.}
   \label{fig:import-example}
   \par\vspace{4pt}
@@ -1163,8 +1166,8 @@ seguir.
 projeta quatro colunas, com o \texttt{product\_id} como chave: o resultado é a relação da
 Tabela~\ref{tab:pg-inventory}, criada e gravada no banco \texttt{ecommerce} declarado
 no arquivo de conexão (Listagem~\ref{lst:conexao-exemplo}). As entidades \texttt{categories} e
-\texttt{products} também leem de \texttt{stock}, e a eliminação de duplicatas pela chave
-reduz o resultado aos oito produtos e oito categorias distintos; a entidade
+\texttt{products} também leem de \texttt{stock} e recebem os oito produtos e as oito
+categorias da fonte, todos distintos; a entidade
 \texttt{orders} lê da fonte \texttt{purchase} (as oito compras). As chaves estrangeiras
 declaradas em \texttt{relationships} ligam produtos a categorias e pedidos a produtos. Como
 a coluna \texttt{price} é declarada \texttt{NUMERIC(14,2)}, o PostgreSQL guarda os preços com
@@ -1396,9 +1399,9 @@ As contagens são de linhas depois dos filtros e da divisão por \texttt{each}, 
 qualquer eliminação de duplicatas, que acontece na gravação e varia por SGBD. No
 PostgreSQL, a ferramenta descarta, dentro de cada lote, as linhas com chave repetida,
 mantendo a última, e grava com \texttt{INSERT ... ON CONFLICT DO NOTHING}, de modo que,
-entre lotes diferentes, prevalece a primeira linha gravada. No Neo4j, prevalece a
-primeira linha de cada chave, e o \texttt{MERGE} não duplica nós nem arestas já
-existentes. No Cassandra e no Redis, uma escrita com chave já existente substitui o
+entre lotes diferentes, prevalece a primeira linha gravada. No Neo4j, o \texttt{MERGE} não
+duplica nós nem arestas já existentes: entre linhas com a mesma chave de nó, prevalece a
+primeira; numa aresta repetida, prevalecem as propriedades da última linha. No Cassandra e no Redis, uma escrita com chave já existente substitui o
 registro anterior. No MongoDB, não há eliminação de duplicatas: cada linha gera um
 documento. No cenário exemplo, nenhuma chave se repete --- as oito compras são de oito
 compradores e oito pedidos distintos ---, e o que é gravado coincide com as contagens da
@@ -1538,9 +1541,11 @@ ultrapassa o orçamento. Na gravação, as linhas de cada destino acumulam-se at
 
 O pico de memória acompanha, assim, o tamanho do bloco, e não o do arquivo. Além do
 bloco, a memória guarda os agregados por coluna da leitura de inferência, que resumem o
-necessário para decidir o tipo de cada coluna, e, na leitura de validação, os conjuntos de
-chaves das entidades referenciadas, usados para conferir as referências pendentes. Estes
-últimos crescem com o número de chaves distintas, e não com o número de linhas.
+necessário para decidir o tipo de cada coluna; na leitura de validação, os conjuntos de
+chaves das entidades referenciadas, usados para conferir as referências pendentes; e, na
+escrita no Neo4j, o conjunto das chaves de nós já gravadas, usado para não repeti-las.
+Esses conjuntos crescem com o número de chaves distintas, e não com o número de linhas;
+um arquivo maior que a memória disponível pode ser importado desde que eles caibam nela.
 
 A Tabela~\ref{tab:bloco} mostra o efeito do tamanho do bloco em uma importação de cem mil
 linhas no modo multifonte, medida nas campanhas do Capítulo~\ref{cap:avaliacao}.

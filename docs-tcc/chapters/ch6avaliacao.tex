@@ -188,18 +188,20 @@ de validação, juntas, respondem pelos $21{,}3\%$ restantes.
 
 Como a escrita concentra o custo, convém abri-la por SGBD. A
 Tabela~\ref{tab:escrita-sgbd} e a Figura~\ref{fig:throughput-sgbd} apresentam, para a
-importação multifonte, o número de linhas gravadas, o tempo de escrita e o
-\textit{throughput} resultante em cada um dos cinco bancos. Os valores variam por uma ordem
-de grandeza: o Redis grava a cerca de \num{9118}~linhas/s, enquanto o Cassandra fica em
-$901$~linhas/s.
+importação multifonte, o número de linhas processadas pela escrita, o tempo de escrita e o
+\textit{throughput} resultante, em linhas processadas por segundo, em cada um dos cinco
+bancos. As linhas processadas são as enviadas a cada SGBD antes da eliminação de duplicatas
+(seção~\ref{sec:exemplo-uso}); no PostgreSQL e no Neo4j, as linhas com chave repetida não
+geram registros novos. Os valores variam por uma ordem de grandeza: o Redis processa cerca
+de \num{9118}~linhas/s, enquanto o Cassandra fica em $901$~linhas/s.
 
 \begin{table}[H]
-  \caption{Escrita por SGBD em uma importação ($N = 100\,000$, multifonte, bloco de 8~MB). Campanha sem instrumentação de memória.}
+  \caption{Escrita por SGBD em uma importação ($N = 100\,000$, multifonte, bloco de 8~MB): linhas processadas pela escrita, antes da eliminação de duplicatas. Campanha sem instrumentação de memória.}
   \label{tab:escrita-sgbd}
   \centering
   \begin{tabular}{l r r r}
     \toprule
-    \textbf{SGBD} & \textbf{Linhas} & \textbf{Tempo (s)} & \textbf{Linhas/s} \\
+    \textbf{SGBD} & \textbf{Linhas processadas} & \textbf{Tempo (s)} & \textbf{Linhas/s} \\
     \midrule
     Cassandra  & \num{100000} & 110{,}96 &   $901$ \\
     Neo4j      &  \num{89275} &  27{,}10 & \num{3294} \\
@@ -221,7 +223,7 @@ $901$~linhas/s.
       bar width=14pt,
       symbolic y coords={Cassandra, Neo4j, PostgreSQL, MongoDB, Redis},
       ytick=data,
-      xlabel={\textit{Throughput} de escrita (linhas/s)},
+      xlabel={\textit{Throughput} de escrita (linhas processadas/s)},
       xmin=0, xmax=11000,
       scaled x ticks=false,
       xtick={0,2000,4000,6000,8000,10000},
@@ -242,9 +244,13 @@ O Cassandra sozinho responde por $110{,}96$~s dos $164{,}84$~s da fase de escrit
 de $67\%$ --- e por $53\%$ da importação inteira. Qualquer afirmação sobre ``o tempo de
 escrita'' é, portanto, em larga medida uma afirmação sobre o Cassandra neste ambiente, o que
 reforça a necessidade de abrir a fase por SGBD em vez de tratá-la como um bloco único. As
-linhas gravadas também diferem entre os SGBDs, porque cada um recebe as entidades do seu
+linhas processadas também diferem entre os SGBDs, porque cada um recebe as entidades do seu
 mapeamento: o MongoDB, por exemplo, grava o catálogo de produtos e os pedidos, e o
-Cassandra, os eventos das quatro fontes.
+Cassandra, os eventos das quatro fontes. Nem todas viram registros: no PostgreSQL, as
+\num{73660} linhas processadas resultam em \num{62167} linhas guardadas, pois a tabela
+\texttt{categories} recebe uma linha por produto do estoque, mas guarda só as 116 categorias
+distintas; no Neo4j, as \num{89275} linhas resultam em \num{51602} nós e arestas, pois os
+\num{38833} compradores das compras são apenas \num{1160} usuários distintos.
 
 \subsection{Modos de Importação: Multifonte \textit{versus} Combinado (QP2)}
 \label{sec:res-modos}
@@ -282,8 +288,8 @@ multifonte. Por isso, e porque a ferramenta separa o arquivo combinado por tipo 
 durante a leitura, as leituras de inferência e de validação do combinado levam cerca de
 $26\%$ mais tempo. A escrita também fica mais lenta, porque, na gravação, cada SGBD relê
 as fontes de que precisa (seção~\ref{sec:algoritmo}): no modo multifonte, o Redis, por
-exemplo, relê apenas os dois arquivos menores, de seleções e de carrinhos, enquanto no
-combinado todo SGBD relê o arquivo inteiro --- a escrita no Redis passa de $5{,}44$ para
+exemplo, relê apenas os arquivos de seleções e de carrinhos (cerca de 5{,}7~MB), enquanto no
+combinado todo SGBD relê o arquivo inteiro ($28{,}55$~MB) --- a escrita no Redis passa de $5{,}44$ para
 $12{,}61$~s (Tabela~\ref{tab:fases-100k}). No total, a importação combinada leva $13\%$
 mais tempo, diferença bem maior que a variação de $2{,}7\%$ observada entre campanhas. O
 pico de memória do combinado, por outro lado, é menor ($54{,}6$ contra $66{,}1$~MB); a
@@ -384,13 +390,15 @@ escrita ingênua e a materialização, que a versão final não oferece, sobre u
 coleção \texttt{orders}, e por isso não se comparam diretamente aos números das subseções
 anteriores.
 
-A Tabela~\ref{tab:naive-optimized} contrasta as duas estratégias de escrita no ponto
-$N = 10\,000$, com materialização. A estratégia em lote importa o mesmo conjunto de dados
---- as mesmas \num{27494} linhas gravadas --- entre $8{,}5$ e $9{,}3$ vezes mais rápido que
-a via ingênua. O ganho concentra-se, como esperado, nas duas fases que a estratégia em lote
-ataca: o mapeamento (conversão de tipos), acelerado cerca de $42\times$ pela vetorização, e
-a escrita, acelerada $7{,}7\times$ pela gravação em lote. A leitura e a seleção, que a
-estratégia não altera, permanecem estáveis.
+Nessas medições, a ferramenta registrava três fases: a \textbf{leitura} do arquivo inteiro,
+o \textbf{mapeamento}, que convertia os tipos e montava os registros de cada SGBD, e a
+\textbf{escrita}. A Tabela~\ref{tab:naive-optimized} contrasta as duas estratégias de
+escrita no ponto $N = 10\,000$, com materialização. A estratégia em lote importa o mesmo
+conjunto de dados --- as mesmas \num{27494} linhas gravadas --- entre $8{,}5$ e $9{,}3$
+vezes mais rápido que a via ingênua. O ganho concentra-se, como esperado, nas duas fases que
+a estratégia em lote ataca: o mapeamento, acelerado cerca de $42\times$ pela vetorização da
+conversão de tipos, e a escrita, acelerada $7{,}7\times$ pela gravação em lote. A leitura,
+que a estratégia não altera, leva menos de dois segundos nas duas.
 
 \begin{table}[H]
   \caption{Tempo total e das fases dominantes por estratégia de escrita, em segundos ($N = 10\,000$, materialização; medição histórica). Campanha sem instrumentação de memória.}
@@ -547,9 +555,9 @@ esse resultado que justificou manter a leitura em blocos como único modelo da v
       xtick=data,
       xlabel={Linhas},
       ylabel={Tempo total (s)},
-      ymin=0,
-      nodes near coords={\pgfmathprintnumber[fixed, precision=2]{\pgfplotspointmeta}},
-      nodes near coords style={font=\footnotesize},
+      ymin=0, ymax=230,
+      nodes near coords={\pgfmathprintnumber[fixed, fixed zerofill, precision=2]{\pgfplotspointmeta}},
+      nodes near coords style={font=\footnotesize, rotate=90, anchor=west},
       enlarge x limits=0.25,
       legend style={at={(0.5,-0.32)}, anchor=north, legend columns=-1},
       legend cell align=left,
@@ -634,7 +642,10 @@ $12{,}5\times$ em cem mil linhas (QP5), a um custo de tempo de apenas $+10\%$ ne
 e o achatamento do pico com o volume (QP6) mostra que ela importa com um pico que
 acompanha o bloco, e não o arquivo. É esse resultado que sustenta a principal afirmação de
 projeto da ferramenta: a de importar arquivos maiores que a memória disponível, algo
-impossível com a materialização.
+impossível com a materialização, desde que os conjuntos de chaves distintas que a validação
+e a escrita no Neo4j guardam (seção~\ref{sec:modelos-execucao}) caibam nela. Essa
+possibilidade decorre do projeto e não foi medida neste trabalho, cujo maior volume tem cem
+mil linhas.
 
 \subsection{Ameaças à Validade}
 \label{sec:ameacas-validade}
