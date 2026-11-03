@@ -14,56 +14,53 @@
 % Linha de fonte ou observação ao pé da carta.
 \newcommand{\bknota}[1]{{\scriptsize\raggedright\color{black!60}#1\par}}
 
-% B1: falha no meio da importação. Conferido no código (relatório da Tarefa 6):
-% runner._require_dbms (verificação antes de ler os CSVs); validation.py (tupla com a ordem);
-% stream_runner.run_stream_import e runner._run (um SGBD por vez, sem try/finally nem
-% desfazer); sinks/postgres_sink.py e importers/postgres_importer.py (autocommit = True);
-% importers/cassandra_importer._write_batched (WRITE_RETRIES = 3); build_insert_sql
-% (ON CONFLICT DO NOTHING com chave), INSERT do Cassandra (upsert), SET do Redis, MERGE do
-% Neo4j, insert_many do MongoDB (sem _id derivado da chave; com um _id mapeado, a
-% reexecução para na chave repetida). Coerente com o slide 23. O reenvio do Cassandra
-% (WRITE_RETRIES) saiu do slide na rodada de correção: detalhe, fica para a fala.
+% B1: falha no meio da importação. Conferido no código da 3.0.0: runner.py (etapas 1 e 2,
+% cabeçalhos e _require_dbms antes de ler as linhas de dados); stream_runner.py (leituras de
+% inferência e de validação antes da primeira gravação; depois, um SGBD por vez, na ordem de
+% validation.DBMS_NAMES, sem desfazer; uma falha na gravação termina com código 1 e a mensagem
+% "already written: ..."); sinks: ON CONFLICT DO NOTHING com chave no PostgreSQL, INSERT do
+% Cassandra (upsert), SET do Redis, MERGE do Neo4j, insert_many do MongoDB (sem _id derivado
+% da chave; com um _id mapeado, a reexecução para na chave repetida). Coerente com o slide 23.
 \begin{frame}{Falha no meio da importação}
   \small
   \begin{itemize}
     \setlength{\itemsep}{5pt}
-    \item \destaque{Antes de ler os CSVs}, verifica se todos os SGBDs de destino respondem.
-          Um fora do ar interrompe tudo.
+    \item \destaque{Antes de gravar}, as três etapas de validação conferem configuração e
+          dados, e todos os SGBDs destino precisam responder. Qualquer falha: nada é gravado.
     \item \destaque{Um SGBD por vez}, em lotes: PostgreSQL, MongoDB, Cassandra, Redis, Neo4j.
     \item \destaque{Sem atomicidade entre SGBDs} (em aberto, slide 23): não há transação
           comum nem desfazer (\textit{rollback}).
-    \item \destaque{Falha no meio}: os SGBDs anteriores ficam gravados, o que falhou fica
-          parcial, os seguintes ficam vazios.
+    \item \destaque{Falha durante a gravação}, como a queda de um SGBD: os anteriores ficam
+          gravados, o atual fica parcial, os seguintes ficam vazios; a saída lista os já
+          gravados.
     \item \destaque{Reexecução} com \texttt{-{}-only}: com chave, PostgreSQL, Cassandra, Redis
           e Neo4j não duplicam. No MongoDB, sem \texttt{\_id} mapeado, duplica documentos;
           com \texttt{\_id}, para na chave repetida.
   \end{itemize}
 \end{frame}
 
-% B2: coerção de tipos. Conferido no código: csv_reader.read_csv (tudo como texto, vazio
-% preservado); csv_reader.infer_column_kinds (ordem: booleano, número, data e hora com
-% limiar de 85%, texto); casting.cast_frame/_cast_column_vectorized (vazio -> None; número
-% inválido fica texto e data inválida vira None, com aviso no log; booleano diferente de
-% "true" vira False, sem aviso; colunas de texto não passam pela conversão, e o vazio fica
-% ""); stream_runner + stream_binding.bind_entity_from_sample (tipos inferidos do 1.º
-% bloco, READ_CHUNK = 8192); mapping_resolver.expand_entity_columns e schema_generator
-% (db_type só entra na DDL); materialize.flatten_entity_dataframe e
-% postgres_importer.build_insert_sql (PostgreSQL: chave vazia descartada; chave repetida
-% eliminada no lote e por ON CONFLICT DO NOTHING entre lotes). Futuro: "políticas de
-% coerção configuráveis" (Cap. 6).
+% B2: coerção de tipos. Conferido no código da 3.0.0: csv_reader (tudo lido como texto; a
+% leitura de inferência agrega cada coluna sobre o arquivo inteiro, em blocos; ordem:
+% booleano, número, data e hora acima de 85% dos não vazios, texto; vazia sem valor; um
+% valor só de dígitos nunca conta como data, para que uma coluna de IDs não vire data);
+% casting.cast_frame (vazio -> None nos tipos convertidos; colunas de texto mantêm o valor
+% bruto, e o vazio fica ""); leitura de validação (relatório §4.2.4: valor que não converte,
+% valor que o db_type recusaria, chave vazia e referência pendente são apontados, com
+% contagem e exemplos, e nada é gravado). Futuro: "políticas de coerção configuráveis"
+% (Cap. 6).
 % Minipage [c]: as setas ficam na altura do meio dos painéis.
 \newcommand{\bktipo}[2]{% #1 tipo, #2 regra
   \begin{minipage}[c]{0.215\textwidth}\begin{painel}{#1}{}\raggedright #2\end{painel}%
   \end{minipage}}
 \newcommand{\bkseta}{\hfill{\color{ufscazul}$\rightarrow$}\hfill}
 \begin{frame}{Coerção de tipos}
-  \small O CSV é lido como \destaque{texto}. O tipo de cada coluna é \destaque{inferido} dos
-  próprios valores, nesta ordem:\par
+  \small O CSV é lido como \destaque{texto}. A \destaque{leitura de inferência} percorre o
+  arquivo inteiro e classifica cada coluna, nesta ordem:\par
   \medskip
   \begingroup\footnotesize\tcbset{equal height group=b2}%
-  \bktipo{1. Booleano}{todos os valores são \texttt{true} ou \texttt{false}}\bkseta
+  \bktipo{1. Booleano}{todos os valores não vazios são \texttt{true} ou \texttt{false}}\bkseta
   \bktipo{2. Número}{todos são inteiros ou reais}\bkseta
-  \bktipo{3. Data e hora}{mais de 85\% são datas}\bkseta
+  \bktipo{3. Data e hora}{mais de 85\% dos não vazios são datas}\bkseta
   \bktipo{4. Texto}{nenhum dos casos anteriores}\par
   \endgroup
   \medskip
@@ -71,12 +68,11 @@
   \begin{itemize}
     \setlength{\itemsep}{2pt}
     \item Célula vazia vira nulo em número, booleano e data; em texto, fica vazia.
-    \item Numa coluna de datas, valor inválido vira nulo, com aviso no log.
-    \item Em fluxo, o tipo sai do primeiro bloco (\num{8192} linhas). Depois dele, número
-          inválido fica texto, com aviso; booleano inválido vira falso, sem aviso.
-    \item O tipo declarado (\texttt{db\_type}) cria a coluna, mas não converte o valor. Uma
-          coluna \texttt{BIGINT} do PostgreSQL pode recusar um texto e parar a importação.
-    \item No PostgreSQL, linha com chave vazia é descartada, e chave repetida não duplica.
+    \item Valor só com dígitos nunca conta como data: uma coluna de IDs não vira data.
+    \item A \destaque{leitura de validação} aponta, com arquivo, linha, coluna e valor, o
+          valor que não converte para o tipo da coluna e o que o tipo declarado
+          (\texttt{db\_type}) recusaria. Nada é gravado.
+    \item No PostgreSQL, chave repetida não duplica; chave vazia é apontada na validação.
   \end{itemize}
   \vfill
   \bknota{Política de coerção configurável: trabalho futuro (Cap.~6 do relatório).}
@@ -146,14 +142,16 @@
     relatório.}
 \end{frame}
 
-% B5: Cassandra e o ambiente (relatório §5.2; tab:escrita-sgbd = Tabela 16, N = 100 000,
-% multifonte, materialização, em lote, campanha sem instrumentação de memória; §5.3.2:
-% 109,6 s dos 136,3 s da escrita, cerca de 80%; §5.4.1: restrição de ambiente; Cap. 6:
-% SGBDs dedicados e o caminho de escrita do Cassandra além da concorrência atual).
+% B5: Cassandra e o ambiente (relatório v2.4 §5.2; tab:escrita-sgbd = Tabela 16,
+% N = 100 000, multifonte, bloco de 8 MB, campanha sem instrumentação de memória; linhas
+% processadas pela escrita, antes da eliminação de duplicatas; §5.3.1: 110,96 s dos
+% 164,84 s da escrita, cerca de 67%; §5.4.1: restrição de ambiente; Cap. 6: SGBDs dedicados
+% e o caminho de escrita do Cassandra além da concorrência atual).
 \begin{frame}{Cassandra e o ambiente}
   \begin{minipage}[t]{0.5\textwidth}
     \vspace{0pt}
-    \begingroup\footnotesize\bfseries\color{ufscazul} Escrita por SGBD\par\endgroup
+    \begingroup\footnotesize\bfseries\color{ufscazul} Escrita por SGBD\hfill
+    \scriptsize\mdseries\color{black!60}linhas processadas\par\endgroup
     \smallskip
     \footnotesize
     \setlength{\tabcolsep}{4pt}
@@ -162,30 +160,30 @@
       \toprule
       \bfseries SGBD & \bfseries Linhas & \bfseries Tempo (s) & \bfseries Linhas/s \\
       \midrule
-      \destaque{Cassandra} & \destaque{\num{100000}} & \destaque{109{,}61}
-        & \destaque{912} \\
-      Neo4j      &  \num{51602} &  13{,}23 & \num{3901} \\
-      PostgreSQL &  \num{62167} &   8{,}13 & \num{7644} \\
-      Redis      &  \num{49558} &   4{,}56 & \num{10865} \\
-      MongoDB    &  \num{11609} &   0{,}80 & \num{14431} \\
+      \destaque{Cassandra} & \destaque{\num{100000}} & \destaque{110{,}96}
+        & \destaque{901} \\
+      Neo4j      &  \num{89275} &  27{,}10 & \num{3294} \\
+      PostgreSQL &  \num{73660} &  12{,}72 & \num{5793} \\
+      MongoDB    &  \num{50442} &   8{,}63 & \num{5845} \\
+      Redis      &  \num{49558} &   5{,}44 & \num{9118} \\
       \bottomrule
     \end{tabular}\par
     \medskip
     \raggedright
-    O Cassandra grava mais linhas e mais devagar: \destaque{109,6~s dos 136,3~s} da escrita,
-    cerca de 80\%.\par
+    O Cassandra processa mais linhas e mais devagar: \destaque{110,96~s dos 164,84~s} da
+    escrita, cerca de 67\%.\par
     \medskip
-    \bknota{Fonte: Tabela 16 do relatório; $N = \num{100000}$, multifonte, materialização,
-      em lote; campanha sem instrumentação de memória.}
+    \bknota{Fonte: Tabela 16 do relatório; $N = \num{100000}$, multifonte, bloco de 8~MB;
+      sem instrumentação de memória.}
   \end{minipage}\hfill
   \begin{minipage}[t]{0.46\textwidth}
     \vspace{0pt}\footnotesize\tcbset{halign=flush left, before skip=0pt, after skip=1.5mm}
     \begin{painel}{Ambiente (§5.2)}{}
-      Uma máquina, 8~GB de memória, os cinco SGBDs em contêineres Docker. Cassandra:
-      \textit{heap} de 1~GB numa máquina virtual Docker de cerca de 3,8~GB.
+      Uma máquina, 8~GB de memória, os cinco SGBDs em contêineres Docker. Cassandra: um
+      nó, \textit{heap} de 1~GB numa máquina virtual Docker de 3,88~GiB.
     \end{painel}
     \begin{painel}{Leitura do relatório (§5.4.1)}{}
-      As 912~linhas/s refletem o \textit{heap} pequeno: restrição do ambiente, não do SGBD.
+      As 901~linhas/s refletem o \textit{heap} pequeno: restrição do ambiente, não do SGBD.
     \end{painel}
     \begin{painel}{Escala: trabalho futuro}{}
       SGBDs dedicados e ajustados; escrita do Cassandra além da concorrência atual.
@@ -193,16 +191,16 @@
   \end{minipage}
 \end{frame}
 
-% B6: ameaças à validade (relatório §5.4.1, sec:ameacas-validade; dados sintéticos: §5.1.1).
+% B6: ameaças à validade (relatório v2.4 §5.4.1, sec:ameacas-validade; dados sintéticos:
+% §5.1.1; precisão: §5.1.2).
 \begin{frame}{Ameaças à validade}
   \begingroup\footnotesize\tcbset{equal height group=b6, halign=flush left}%
   \begin{minipage}[t]{0.32\textwidth}\vspace{0pt}
     \begin{painel}{De construção}{mede o que se quer?}
       \begin{bklista}
-        \item Tempo com incerteza de cerca de 20\%: diferenças menores não são
-              interpretadas.
-        \item Memória estável: variação abaixo de 0,1\%.
-        \item Tempo e memória vêm de campanhas separadas.
+        \item Tempo: 2,7\% entre campanhas, numa só célula (históricas: cerca de 20\%).
+        \item Memória estável: menos de 0,2\%.
+        \item Tempo e memória de campanhas separadas; cargas diferentes nas históricas.
       \end{bklista}
     \end{painel}
   \end{minipage}\hfill
@@ -210,7 +208,8 @@
     \begin{painel}{Interna}{o efeito vem do fator?}
       \begin{bklista}
         \item Gerador determinístico e SGBDs limpos antes de cada repetição.
-        \item Volume moderado: até \num{100000} linhas.
+        \item Volume moderado: até \num{100000} linhas; o bloco de 256~MB já lê cada fonte
+              inteira.
         \item Sem caches quentes nem execuções concorrentes.
       \end{bklista}
     \end{painel}
