@@ -22,8 +22,8 @@ from polyglotimportcsv.stream_binding import EntityBinding
 class RedisSink:
     """Streams cast batches into Redis keys, one pipeline per ``write_batch``."""
 
-    def __init__(self, backend_cfg: Dict[str, Any], *, client_factory=_default_redis_client):
-        conn = backend_cfg.get("connection") or {}
+    def __init__(self, dbms_cfg: Dict[str, Any], *, client_factory=_default_redis_client):
+        conn = dbms_cfg.get("connection") or {}
         self._client = client_factory(conn)
         try:
             self._client.ping()

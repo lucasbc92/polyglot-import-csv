@@ -6,7 +6,7 @@ class BusinessException(Exception):
 
 
 class ConfigError(BusinessException):
-    """Invalid JSON, JSON Schema violation, or backend without declared connection."""
+    """Invalid JSON, JSON Schema violation, or DBMS without declared connection."""
 
 
 class SourceError(BusinessException):

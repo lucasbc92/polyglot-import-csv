@@ -21,7 +21,7 @@ def _labeled(size, mode, chunk_mb, repetition, *, seconds=1.0):
         "size": size, "mode": mode,
         "chunk_mb": chunk_mb, "repetition": repetition,
         "peak_memory_mb": 1.0,
-        "records": [{"backend": "postgres", "entity": "products",
+        "records": [{"dbms": "postgres", "entity": "products",
                      "phase": "write", "rows": 10, "seconds": seconds}],
     }
 
@@ -210,7 +210,7 @@ def test_an_old_results_csv_is_refused_before_the_matrix_runs(tmp_path, monkeypa
     out = tmp_path / "out"
     out.mkdir()
     old = out / "benchmark_results.csv"
-    content = ("timestamp,size,mode,strategy,execution,backend,entity,phase,rows,"
+    content = ("timestamp,size,mode,strategy,execution,dbms,entity,phase,rows,"
                "median_seconds,rows_per_second,peak_memory_mb\n")
     old.write_text(content, encoding="utf-8")
 

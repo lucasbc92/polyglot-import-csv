@@ -23,7 +23,7 @@ _run_example_completion() {
     --log-file --no-log
     -h --help
   )
-  local backends=(postgres mongodb cassandra redis neo4j)
+  local dbms_names=(postgres mongodb cassandra redis neo4j)
 
   case "${prev}" in
     --config|--dbms-config)
@@ -59,7 +59,7 @@ _run_example_completion() {
         prefix="${cur%,*},"
       fi
       candidates=""
-      for b in "${backends[@]}"; do
+      for b in "${dbms_names[@]}"; do
         selected=false
         local word
         for word in "${COMP_WORDS[@]}"; do

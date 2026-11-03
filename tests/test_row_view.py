@@ -5,7 +5,7 @@ frame-wide iteration underneath them is only safe if each helper produces
 byte-identical output -- same values AND same Python types, since a np.int64
 leaking where an int used to be would reach the DB drivers (and json.dumps).
 This runs all four over the committed data/benchmark/ reference for every entity
-of every backend, in both multi and combined mode.
+of every DBMS, in both multi and combined mode.
 """
 
 import json
@@ -55,19 +55,19 @@ def _bound(mode):
     else:
         ov = {s: str(_REF / f"ecommerce_{s}.csv")
               for s in ("stock", "purchase", "select_product", "add_to_cart")}
-    backends = [b for b in ("postgres", "mongodb", "cassandra", "redis", "neo4j") if b in cfg]
-    plan = plan_import(cfg, ".", dbms_names=backends, overrides=ov)
+    dbms_names = [b for b in ("postgres", "mongodb", "cassandra", "redis", "neo4j") if b in cfg]
+    plan = plan_import(cfg, ".", dbms_names=dbms_names, overrides=ov)
     out = {}
-    for backend in backends:
-        out[backend] = {}
-        for ename, binding in plan.bindings[backend].items():
-            names = entity_source_names(ename, cfg[backend]["entities"][ename])
+    for dbms in dbms_names:
+        out[dbms] = {}
+        for ename, binding in plan.bindings[dbms].items():
+            names = entity_source_names(ename, cfg[dbms]["entities"][ename])
             columns = list(binding.kinds)  # the data columns of the union, then _source
             frame = pd.concat(
                 [_read(plan.profiles[n]).reindex(columns=columns, fill_value="") for n in names],
                 ignore_index=True,
             )
-            out[backend][ename] = BoundEntity(
+            out[dbms][ename] = BoundEntity(
                 name=ename, cfg=binding.cfg, df=cast_frame(frame, binding.kinds),
                 kinds=binding.kinds,
             )

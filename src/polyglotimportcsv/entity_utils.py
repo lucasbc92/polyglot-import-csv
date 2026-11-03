@@ -10,7 +10,7 @@ COLUMN_SPEC_KEYS = frozenset(
     {"is_key", "db_type", "csv_column", "schema_column"}
 )
 
-FLAT_BACKENDS = frozenset({"postgres", "redis", "cassandra", "neo4j"})
+FLAT_DBMS = frozenset({"postgres", "redis", "cassandra", "neo4j"})
 
 
 def is_column_spec(node: Any) -> bool:
@@ -107,7 +107,7 @@ def flat_leaf_columns(
 ) -> Iterator[Tuple[str, str, Dict[str, Any]]]:
     """
     Yields (field_key, resolved_source_placeholder, spec) for top-level leaves only.
-    Used by flat backends after validation ensures no nesting.
+    Used by flat DBMS after validation ensures no nesting.
     """
     for field_key, node in (entity_cfg.get("columns") or {}).items():
         if is_column_spec(node):

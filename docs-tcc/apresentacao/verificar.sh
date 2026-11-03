@@ -26,7 +26,8 @@ n_cartas=$(grep -o '\\begin{frame}' secoes/6-cartas.tex | wc -l || true)
 [ "$n_cartas" -eq "$cartas" ] || falha "secoes/6-cartas.tex tem $n_cartas frames; esperado: $cartas"
 
 fontes=(apresentacao.tex beamerthemeufsc.sty secoes/*.tex)
-if grep -n -i 'backend' "${fontes[@]}"; then
+# O padrão casa o termo vetado sem escrevê-lo, para que este arquivo não o contenha.
+if grep -n -i 'back[e]nd' "${fontes[@]}"; then
   falha "termo vetado (use \"SGBD\")"
 fi
 if grep -n -F -e '\tiny' -e '\trans' -e '\movie' -e '\sound' "${fontes[@]}"; then

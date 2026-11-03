@@ -2,7 +2,7 @@
 """CLI: run the import benchmark matrix over live databases (spec §3).
 
 Prerequisite: the databases must already be up (e.g. `docker compose up --wait`
-or via run_example.sh). This script cleans each backend before every import so
+or via run_example.sh). This script cleans each DBMS before every import so
 each measurement is a cold load.
 """
 
@@ -27,7 +27,7 @@ from polyglotimportcsv.reporting import kv, setup_reporting
 from polyglotimportcsv.runner import run_import
 from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB
 
-_ALL_BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
+_ALL_DBMS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
 
 CHECKPOINT_NAME = "benchmark_checkpoint.json"
 
@@ -106,7 +106,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--repetitions", type=int, default=3,
                         help="Runs per (size, mode); the median is reported (default: 3).")
     parser.add_argument("--only", default="",
-                        help=f"Comma-separated backends (default: all). Choices: {', '.join(_ALL_BACKENDS)}.")
+                        help=f"Comma-separated DBMS (default: all). Choices: {', '.join(_ALL_DBMS)}.")
     parser.add_argument("--chunk-sizes", default=str(DEFAULT_CHUNK_MB),
                         help=f"Comma-separated read-block sizes in MB, each from {MIN_CHUNK_MB} to "
                              f"{MAX_CHUNK_MB} (default: {DEFAULT_CHUNK_MB}). Use '8,64,256' to "

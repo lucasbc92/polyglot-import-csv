@@ -266,7 +266,7 @@ It runs the same cell with and without tracing, interleaving the two arms pass b
 pass so both share the warm-up, and prints the overhead per chunk size.
 
 Results land in `benchmarks/`: a `benchmark_run_<timestamp>.json` plus an
-append-only `benchmark_results.csv` (`timestamp,size,mode,chunk_mb,backend,entity,
+append-only `benchmark_results.csv` (`timestamp,size,mode,chunk_mb,dbms,entity,
 phase,rows,median_seconds,rows_per_second,peak_memory_mb`) for the report graphs.
 The `phase` column holds `infer` and `validate`, once per import, and `write`, once
 per DBMS.
@@ -542,7 +542,7 @@ cada passada (para que ambos dividam o aquecimento), e imprime o custo por taman
 de bloco.
 
 Os resultados vão para `benchmarks/`: um `benchmark_run_<timestamp>.json` e um
-`benchmark_results.csv` append-only (`timestamp,size,mode,chunk_mb,backend,entity,
+`benchmark_results.csv` append-only (`timestamp,size,mode,chunk_mb,dbms,entity,
 phase,rows,median_seconds,rows_per_second,peak_memory_mb`) para os gráficos do relatório.
 A coluna `phase` traz `infer` e `validate`, uma vez por importação, e `write`, uma
 vez por SGBD.

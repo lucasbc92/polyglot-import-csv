@@ -1,4 +1,4 @@
-timestamp,size,mode,strategy,execution,backend,entity,phase,rows,median_seconds,rows_per_second,peak_memory_mb
+timestamp,size,mode,strategy,execution,dbms,entity,phase,rows,median_seconds,rows_per_second,peak_memory_mb
 2026-08-01T11:04:20,10000,multi,naive,materialize,(sources),*,read,10000,8.452347700018436,1183.1032459748656,14.429119110107422
 2026-08-01T11:04:20,10000,multi,naive,materialize,postgres,*,map,7367,31.78711179998936,231.760596758667,14.429119110107422
 2026-08-01T11:04:20,10000,multi,naive,materialize,postgres,categories,write,11,0.006392700015567243,1720.7126837194373,14.429119110107422

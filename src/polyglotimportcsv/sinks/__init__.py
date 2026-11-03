@@ -20,7 +20,7 @@ from polyglotimportcsv.sinks.redis_sink import RedisSink
 def default_sink_factories() -> Dict[str, SinkFactory]:
     """Wired defaults (production CLI).
 
-    Each factory receives the DBMS's ``backend_cfg`` (``config[dbms]``) and
+    Each factory receives the DBMS's ``dbms_cfg`` (``config[dbms]``) and
     builds the adapter with its real driver; tests inject fakes instead. Only
     the DBMS present in the config are ever constructed (``run_stream_import``
     calls a factory once per configured DBMS)."""

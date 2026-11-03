@@ -15,7 +15,7 @@ import benchmark_tracemalloc_ab as ab  # noqa: E402
 def _run(chunk_mb, seconds, *, phase="write"):
     return {
         "chunk_mb": chunk_mb,
-        "records": [{"backend": "postgres", "entity": "products",
+        "records": [{"dbms": "postgres", "entity": "products",
                      "phase": phase, "rows": 10, "seconds": seconds}],
     }
 

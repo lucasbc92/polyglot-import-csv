@@ -2,7 +2,7 @@
 
 ``validate_headers`` is the header-level check shared by the CLI and the GUI
 preflight: it binds every entity to header-only sources and runs
-``validate_backend_entities`` over them.
+``validate_dbms_entities`` over them.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import pandas as pd
 
 from polyglotimportcsv.business_exception import MappingError
 from polyglotimportcsv.entity_utils import (
-    FLAT_BACKENDS,
+    FLAT_DBMS,
     entity_has_nested_branches,
     iter_leaf_columns,
     resolve_csv_column,
@@ -27,19 +27,19 @@ from polyglotimportcsv.mapping_resolver import (
 )
 from polyglotimportcsv.sources import SOURCE_COLUMN, SourceData
 
-BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
+DBMS_NAMES = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
 
 
 def _validate_filters(
-    ename: str, backend: str, filters: List[Dict[str, Any]], columns: Set[str]
+    ename: str, dbms: str, filters: List[Dict[str, Any]], columns: Set[str]
 ) -> None:
     for flt in filters or []:
         c = flt.get("column")
         if not c:
-            raise MappingError(f"Entity '{ename}' in '{backend}': filter missing 'column'.")
+            raise MappingError(f"Entity '{ename}' in '{dbms}': filter missing 'column'.")
         if c not in columns:
             raise MappingError(
-                f"Entity '{ename}' in '{backend}': Filter column not found in source: {c}"
+                f"Entity '{ename}' in '{dbms}': Filter column not found in source: {c}"
             )
         op = flt.get("operator")
         if op not in ("==", "!=", ">", "<", ">=", "<=", "in", "not_in", "each"):
@@ -75,33 +75,33 @@ def _check_endpoints_have_no_each(
             )
 
 
-def validate_backend_entities(
-    backend: str, backend_cfg: Dict[str, Any], bound: Dict[str, BoundEntity]
+def validate_dbms_entities(
+    dbms: str, dbms_cfg: Dict[str, Any], bound: Dict[str, BoundEntity]
 ) -> None:
-    """Validate every bound entity (and relationships) of one backend."""
+    """Validate every bound entity (and relationships) of one DBMS."""
     for ename, be in bound.items():
         cols = list(be.df.columns)
         colset = set(cols)
-        if backend in FLAT_BACKENDS and entity_has_nested_branches(be.cfg):
+        if dbms in FLAT_DBMS and entity_has_nested_branches(be.cfg):
             raise MappingError(
-                f"Entity '{ename}' in '{backend}' uses nested columns; "
-                f"only flat column mappings are allowed for this backend."
+                f"Entity '{ename}' in '{dbms}' uses nested columns; "
+                f"only flat column mappings are allowed for this DBMS."
             )
         for _, field_key, spec in iter_leaf_columns(be.cfg):
             try:
                 resolved = resolve_csv_column(field_key, spec, cols)
             except ValueError as e:
-                raise MappingError(f"Entity '{ename}' in '{backend}': {e}") from e
+                raise MappingError(f"Entity '{ename}' in '{dbms}': {e}") from e
             if resolved not in colset:
                 raise MappingError(
-                    f"Entity '{ename}' in '{backend}' references unknown column: {resolved}"
+                    f"Entity '{ename}' in '{dbms}' references unknown column: {resolved}"
                 )
-        _validate_filters(ename, backend, be.cfg.get("filters") or [], colset)
-        if backend in ("redis", "neo4j") and len(_key_leaves(be.cfg)) != 1:
+        _validate_filters(ename, dbms, be.cfg.get("filters") or [], colset)
+        if dbms in ("redis", "neo4j") and len(_key_leaves(be.cfg)) != 1:
             raise MappingError(
-                f"Entity '{ename}' in '{backend}' must have exactly one is_key column."
+                f"Entity '{ename}' in '{dbms}' must have exactly one is_key column."
             )
-        if backend == "cassandra" and not be.cfg.get("cassandra_partition"):
+        if dbms == "cassandra" and not be.cfg.get("cassandra_partition"):
             raise MappingError(
                 f"Entity '{ename}' in 'cassandra' must declare a non-empty cassandra_partition."
             )
@@ -116,8 +116,8 @@ def validate_backend_entities(
                     f"Cassandra cluster column '{ck}' not in source (entity {ename})."
                 )
 
-    if backend == "postgres":
-        for rname, rspec in (backend_cfg.get("relationships") or {}).items():
+    if dbms == "postgres":
+        for rname, rspec in (dbms_cfg.get("relationships") or {}).items():
             fr, to = rspec.get("from"), rspec.get("to")
             if fr not in bound or to not in bound:
                 raise MappingError(
@@ -143,8 +143,8 @@ def validate_backend_entities(
                     f"must reference the primary key of the 'to' entity."
                 )
 
-    if backend == "neo4j":
-        for rname, rspec in (backend_cfg.get("relationships") or {}).items():
+    if dbms == "neo4j":
+        for rname, rspec in (dbms_cfg.get("relationships") or {}).items():
             if rspec.get("from") not in bound or rspec.get("to") not in bound:
                 raise MappingError(
                     f"Neo4j relationship '{rname}' references unknown node entity."
@@ -229,4 +229,4 @@ def validate_headers(
             for key in ("source", "csv_columns", "auto_map"):
                 cfg.pop(key, None)
             bound[ename] = BoundEntity(name=ename, cfg=cfg, df=src.df, kinds=src.kinds)
-        validate_backend_entities(dbms, config[dbms], bound)
+        validate_dbms_entities(dbms, config[dbms], bound)

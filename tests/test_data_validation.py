@@ -26,7 +26,7 @@ from polyglotimportcsv.data_validation import (
 from polyglotimportcsv.import_plan import plan_import
 from polyglotimportcsv.sinks.neo4j_sink import Neo4jSink
 from polyglotimportcsv.stream_runner import run_stream_import
-from polyglotimportcsv.validation import BACKENDS
+from polyglotimportcsv.validation import DBMS_NAMES
 
 ROOT = Path(__file__).resolve().parents[1]
 ECOM = ROOT / "data" / "ecommerce"
@@ -47,7 +47,7 @@ def _validate(tmp_path, config, dbms_names=None, kinds=None):
     """Validate ``config`` over the CSVs in ``tmp_path``. ``kinds`` forces the kind of
     columns the inference would not give that kind, to reach the casts that can fail."""
     plan = plan_import(config, tmp_path, dbms_names=dbms_names or [
-        b for b in BACKENDS if b in config
+        b for b in DBMS_NAMES if b in config
     ])
     for entities in plan.bindings.values():
         for binding in entities.values():
@@ -595,7 +595,7 @@ def _report_text(report):
 
 
 def _all_dbms(config):
-    return [b for b in BACKENDS if b in config]
+    return [b for b in DBMS_NAMES if b in config]
 
 
 @pytest.mark.parametrize("cfg_name", ["import_config.json", "import_config_combined.json"])

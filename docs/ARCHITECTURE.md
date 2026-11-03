@@ -26,7 +26,7 @@ This document reflects the **Software Architecture** skill: separate parsing fro
 ## SOLID mapping
 
 - **SRP**: `schema_generator` only emits SQL DDL; each `*_sink` module handles one DBMS.
-- **OCP**: A new DBMS is added with a key in `validation.BACKENDS`, a sink in `sinks/` and its entry in `default_sink_factories()` (plus a schema branch if needed); the engine does not change.
+- **OCP**: A new DBMS is added with a key in `validation.DBMS_NAMES`, a sink in `sinks/` and its entry in `default_sink_factories()` (plus a schema branch if needed); the engine does not change.
 - **DIP**: The runner and the engine depend on the `DbmsSink` protocol and on sink factories, not on `psycopg2` or `redis` types.
 
 ## Testing (TDD skill)

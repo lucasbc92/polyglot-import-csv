@@ -1,4 +1,4 @@
-timestamp,size,mode,chunk_mb,backend,entity,phase,rows,median_seconds,rows_per_second,peak_memory_mb
+timestamp,size,mode,chunk_mb,dbms,entity,phase,rows,median_seconds,rows_per_second,peak_memory_mb
 2026-11-02T02:56:46,100000,multi,8,(sources),*,infer,100000,106.67723470000783,937.4071260959735,66.16980648040771
 2026-11-02T02:56:46,100000,multi,8,(all),*,validate,100000,127.60530349999317,783.666487655079,66.16980648040771
 2026-11-02T02:56:46,100000,multi,8,postgres,*,write,73660,47.76411819999339,1542.1618314312393,66.16980648040771

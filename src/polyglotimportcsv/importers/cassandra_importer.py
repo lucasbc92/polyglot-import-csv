@@ -12,7 +12,7 @@ import pandas as pd
 
 try:
     # cassandra.concurrent transitively imports cassandra.cluster, which fails to
-    # load on Python 3.12+ without a reactor backend (see the guarded lazy import
+    # load on Python 3.12+ without a reactor implementation (see the guarded lazy import
     # in _default_cassandra_session below). Guarding this module-level import too
     # keeps the module importable even when the driver/reactor is unavailable —
     # required so fake-session tests can still collect this module.
@@ -169,7 +169,7 @@ def _default_cassandra_session(conn: Dict[str, Any]):
     # Force the driver to bypass compiling or searching for legacy C extensions on Windows
     os.environ["CASS_DRIVER_NO_EXTENSIONS"] = "1"
     try:
-        # cassandra.cluster fails to import on Python 3.12+ unless a reactor backend
+        # cassandra.cluster fails to import on Python 3.12+ unless a reactor implementation
         # is available (no gevent/eventlet, no compiled libev, and stdlib asyncore was
         # removed). The "pyasyncore" package restores a working asyncore module so the
         # import succeeds; we then switch to AsyncioConnection below instead of the

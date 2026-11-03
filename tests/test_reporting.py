@@ -85,8 +85,8 @@ def test_dump_rows_empty(capsys):
     assert "0 row(s)" in out and "(empty)" in out
 
 
-def test_backend_text_styles_known_backend():
-    text = reporting.backend_text("[postgres] inserted 8 row(s) into public.products")
+def test_dbms_text_styles_known_dbms():
+    text = reporting.dbms_text("[postgres] inserted 8 row(s) into public.products")
     assert text.plain.startswith("[postgres]")
     assert "inserted 8 row(s)" in text.plain
 
@@ -156,7 +156,7 @@ def test_metrics_table_never_uses_heavy_box_glyphs():
     ``legacy_windows``.
     """
     table = reporting.metrics_table(
-        [{"backend": "postgres", "entity": "items", "phase": "write", "rows": 100, "seconds": 2.0,
+        [{"dbms": "postgres", "entity": "items", "phase": "write", "rows": 100, "seconds": 2.0,
           "rows_per_second": 50.0}]
     )
     console = Console(file=io.StringIO(), force_terminal=True, legacy_windows=False, width=100)

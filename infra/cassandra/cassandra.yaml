@@ -126,7 +126,7 @@ auto_hints_cleanup_enabled: false
 # Min unit: KiB
 batchlog_replay_throttle: 1024KiB
 
-# Authentication backend, implementing IAuthenticator; used to identify users
+# Authentication provider, implementing IAuthenticator; used to identify users
 # Out of the box, Cassandra provides org.apache.cassandra.auth.{AllowAllAuthenticator,
 # PasswordAuthenticator}.
 #
@@ -137,7 +137,7 @@ batchlog_replay_throttle: 1024KiB
 #   If using PasswordAuthenticator, CassandraRoleManager must also be used (see below)
 authenticator: PasswordAuthenticator
 
-# Authorization backend, implementing IAuthorizer; used to limit access/provide permissions
+# Authorization provider, implementing IAuthorizer; used to limit access/provide permissions
 # Out of the box, Cassandra provides org.apache.cassandra.auth.{AllowAllAuthorizer,
 # CassandraAuthorizer}.
 #
@@ -146,7 +146,7 @@ authenticator: PasswordAuthenticator
 #   increase system_auth keyspace replication factor if you use this authorizer.
 authorizer: CassandraAuthorizer
 
-# Part of the Authentication & Authorization backend, implementing IRoleManager; used
+# Part of the Authentication & Authorization provider, implementing IRoleManager; used
 # to maintain grants and memberships between roles.
 # Out of the box, Cassandra provides org.apache.cassandra.auth.CassandraRoleManager,
 # which stores role information in the system_auth keyspace. Most functions of the
@@ -157,7 +157,7 @@ authorizer: CassandraAuthorizer
 #   increase system_auth keyspace replication factor if you use this role manager.
 role_manager: CassandraRoleManager
 
-# Network authorization backend, implementing INetworkAuthorizer; used to restrict user
+# Network authorization provider, implementing INetworkAuthorizer; used to restrict user
 # access to certain DCs
 # Out of the box, Cassandra provides org.apache.cassandra.auth.{AllowAllNetworkAuthorizer,
 # CassandraNetworkAuthorizer}.
@@ -784,7 +784,7 @@ broadcast_address: 172.21.0.4
 # routes  between the public and private networks such as EC2.
 # listen_on_broadcast_address: false
 
-# Internode authentication backend, implementing IInternodeAuthenticator;
+# Internode authentication provider, implementing IInternodeAuthenticator;
 # used to allow/disallow connections from peer nodes.
 # internode_authenticator: org.apache.cassandra.auth.AllowAllInternodeAuthenticator
 

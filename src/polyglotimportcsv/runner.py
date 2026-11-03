@@ -36,7 +36,7 @@ from polyglotimportcsv.stream_binding import entity_source_names
 from polyglotimportcsv.stream_runner import StreamCounts, run_stream_import
 from polyglotimportcsv.reporting import (
     DEFAULT_SAMPLE_SIZE,
-    backend_text,
+    dbms_text,
     banner,
     kv,
     metrics_table,
@@ -52,14 +52,14 @@ from polyglotimportcsv.stream_source import (
     check_source_overrides,
     read_source_headers,
 )
-from polyglotimportcsv.validation import BACKENDS, validate_headers
+from polyglotimportcsv.validation import DBMS_NAMES, validate_headers
 
 logger = logging.getLogger(__name__)
 
 
-def _print_backend_line(line: str) -> None:
+def _print_dbms_line(line: str) -> None:
     out = Text("  ")
-    out.append_text(backend_text(line))
+    out.append_text(dbms_text(line))
     print_rich(out)
 
 
@@ -69,11 +69,11 @@ _STATE_STYLE = {UP: "green", DOWN: "red", INVALID: "red"}
 def _dbms_targets(config: Dict, only: Optional[Iterable[str]]) -> List[str]:
     """The DBMS the import would write to: those configured, narrowed by --only."""
     only_set = {x.strip().lower() for x in only if x and str(x).strip()} if only else set()
-    return [b for b in BACKENDS if b in config and (not only_set or b in only_set)]
+    return [b for b in DBMS_NAMES if b in config and (not only_set or b in only_set)]
 
 
 def _no_target_dbms_message(config: Dict, only: Optional[Iterable[str]]) -> str:
-    declared = [b for b in BACKENDS if b in config]
+    declared = [b for b in DBMS_NAMES if b in config]
     msg = f"No target DBMS to check: the import configuration declares {', '.join(declared) or 'none'}"
     if only:
         selected = [str(x).strip() for x in only if x and str(x).strip()]
@@ -237,7 +237,7 @@ def _print_summary(
     plan: ImportPlan,
 ) -> None:
     for line in lines:
-        _print_backend_line(line)
+        _print_dbms_line(line)
     print_rich(metrics_table(collector.to_records()))
     if benchmark:
         meta = metrics.environment_metadata(
@@ -289,7 +289,7 @@ def run_import(
 
     step("Load config", str(config_path))
     config = load_config(config_path, dbms_config_path)
-    declared = [b for b in BACKENDS if b in config]
+    declared = [b for b in DBMS_NAMES if b in config]
     note(f"{len(declared)} DBMS configured: {', '.join(declared)}")
     dbms_names = _dbms_targets(config, only)
     if not dbms_names:

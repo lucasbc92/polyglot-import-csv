@@ -148,7 +148,7 @@ def print_rich(renderable: Any, *, level: int = logging.INFO) -> None:
             _file_handle.flush()
 
 
-_BACKEND_STYLE: Dict[str, str] = {
+_DBMS_STYLE: Dict[str, str] = {
     "postgres": "cyan",
     "mongodb": "green",
     "cassandra": "yellow",
@@ -156,7 +156,7 @@ _BACKEND_STYLE: Dict[str, str] = {
     "neo4j": "magenta",
 }
 
-_BACKEND_LINE = re.compile(r"^\[(\w+)\]\s*(.*)$", re.IGNORECASE)
+_DBMS_LINE = re.compile(r"^\[(\w+)\]\s*(.*)$", re.IGNORECASE)
 
 
 def banner(title: str, *, subtitle: str = "") -> None:
@@ -259,7 +259,7 @@ def metrics_table(records: Sequence[Dict[str, Any]]) -> Table:
     for it directly avoids the substitution question entirely.
     """
     table = Table(title="Import metrics", header_style="bold", box=box.SQUARE)
-    table.add_column("backend")
+    table.add_column("dbms")
     table.add_column("entity")
     table.add_column("phase")
     table.add_column("rows", justify="right")
@@ -268,7 +268,7 @@ def metrics_table(records: Sequence[Dict[str, Any]]) -> Table:
     for rec in records:
         rate = rec.get("rows_per_second")
         table.add_row(
-            str(rec.get("backend", "")),
+            str(rec.get("dbms", "")),
             str(rec.get("entity", "")),
             str(rec.get("phase", "")),
             str(rec.get("rows", 0)),
@@ -278,16 +278,16 @@ def metrics_table(records: Sequence[Dict[str, Any]]) -> Table:
     return table
 
 
-def backend_text(line: str) -> Text:
+def dbms_text(line: str) -> Text:
     """Style an importer log line ('[postgres] inserted ...') for the terminal."""
-    m = _BACKEND_LINE.match(line.strip())
+    m = _DBMS_LINE.match(line.strip())
     if not m:
         if line.startswith("  "):
             return Text(line, style="dim")
         return Text(line)
-    backend, rest = m.group(1).lower(), m.group(2)
-    style = _BACKEND_STYLE.get(backend, "white")
-    out = Text(f"[{backend}]", style=f"bold {style}")
+    dbms, rest = m.group(1).lower(), m.group(2)
+    style = _DBMS_STYLE.get(dbms, "white")
+    out = Text(f"[{dbms}]", style=f"bold {style}")
     if "dry-run" in rest or rest.startswith("would "):
         out.append(f" {rest}", style="yellow")
     elif "inserted" in rest or "merged" in rest or "SET " in rest:

@@ -162,7 +162,7 @@ def test_on_run_fires_after_each_import_and_survives_a_crash(tmp_path):
                       only, source_overrides, chunk_size_mb):
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
         if len(seen) == 2:
-            raise RuntimeError("backend blew up")
+            raise RuntimeError("DBMS blew up")
         return []
 
     with pytest.raises(RuntimeError, match="blew up"):

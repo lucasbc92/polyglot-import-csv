@@ -13,7 +13,7 @@ def _run(size, mode, rep, seconds, peak=12.5):
         "size": size, "mode": mode,
         "chunk_mb": 8, "peak_memory_mb": peak, "repetition": rep,
         "records": [{
-            "backend": "postgres", "entity": "products", "phase": "write",
+            "dbms": "postgres", "entity": "products", "phase": "write",
             "rows": 100, "seconds": seconds, "rows_per_second": 100 / seconds,
         }],
     }
@@ -25,7 +25,7 @@ def test_median_across_repetitions():
     assert len(results) == 1
     r = results[0]
     assert r["size"] == 1000 and r["mode"] == "multi"
-    assert r["backend"] == "postgres" and r["entity"] == "products" and r["phase"] == "write"
+    assert r["dbms"] == "postgres" and r["entity"] == "products" and r["phase"] == "write"
     assert r["rows"] == 100
     assert r["median_seconds"] == 0.3
     assert abs(r["rows_per_second"] - 100 / 0.3) < 1e-9
@@ -96,16 +96,16 @@ def test_group_order_preserved():
         "size": 1000, "mode": "multi",
         "chunk_mb": 8, "peak_memory_mb": 8.0, "repetition": 0,
         "records": [
-            {"backend": "redis", "entity": "orders", "phase": "write",
+            {"dbms": "redis", "entity": "orders", "phase": "write",
              "rows": 50, "seconds": 0.1, "rows_per_second": 500.0},
-            {"backend": "postgres", "entity": "products", "phase": "write",
+            {"dbms": "postgres", "entity": "products", "phase": "write",
              "rows": 100, "seconds": 0.2, "rows_per_second": 500.0},
-            {"backend": "redis", "entity": "customers", "phase": "read",
+            {"dbms": "redis", "entity": "customers", "phase": "read",
              "rows": 20, "seconds": 0.05, "rows_per_second": 400.0},
         ],
     }
     results = br.median_results([run])
-    order = [(r["backend"], r["entity"], r["phase"]) for r in results]
+    order = [(r["dbms"], r["entity"], r["phase"]) for r in results]
     assert order == [
         ("redis", "orders", "write"),
         ("postgres", "products", "write"),
@@ -119,10 +119,10 @@ def test_result_fields_have_no_strategy_column():
 
 @pytest.mark.parametrize("header", [
     # before the strategy column was removed
-    "timestamp,size,mode,strategy,execution,backend,entity,phase,rows,"
+    "timestamp,size,mode,strategy,execution,dbms,entity,phase,rows,"
     "median_seconds,rows_per_second,peak_memory_mb",
     # before the execution column became chunk_mb
-    "timestamp,size,mode,execution,backend,entity,phase,rows,"
+    "timestamp,size,mode,execution,dbms,entity,phase,rows,"
     "median_seconds,rows_per_second,peak_memory_mb",
 ])
 def test_appending_to_a_csv_with_the_old_header_is_refused_and_leaves_it_intact(

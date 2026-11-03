@@ -31,7 +31,7 @@ import pandas as pd
 from polyglotimportcsv import stream_source, validation
 from polyglotimportcsv.business_exception import BusinessException, SourceError
 from polyglotimportcsv.config_parser import (
-    BACKENDS,
+    DBMS_NAMES,
     DEFAULT_DBMS_CONFIG_NAME,
     load_import_config,
     load_dbms_config,
@@ -253,7 +253,7 @@ def _read_and_validate_headers(
         headers[name] = header
 
     only = set(options.only) if options.only else None
-    dbms_names = [b for b in BACKENDS if b in import_cfg and (only is None or b in only)]
+    dbms_names = [b for b in DBMS_NAMES if b in import_cfg and (only is None or b in only)]
     try:
         validation.validate_headers(import_cfg, headers, combined_names, dbms_names)
     except BusinessException as exc:

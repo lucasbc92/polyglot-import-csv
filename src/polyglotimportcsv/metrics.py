@@ -20,7 +20,7 @@ PHASES = ("infer", "validate", "write")
 
 @dataclass
 class PhaseMetric:
-    backend: str
+    dbms: str
     entity: str
     phase: str
     rows: int
@@ -34,7 +34,7 @@ class PhaseMetric:
 
     def to_record(self) -> Dict[str, object]:
         return {
-            "backend": self.backend,
+            "dbms": self.dbms,
             "entity": self.entity,
             "phase": self.phase,
             "rows": self.rows,
@@ -48,9 +48,9 @@ class MetricsCollector:
         self._entries: List[PhaseMetric] = []
 
     def record(
-        self, backend: str, entity: str, phase: str, *, rows: int, seconds: float
+        self, dbms: str, entity: str, phase: str, *, rows: int, seconds: float
     ) -> None:
-        self._entries.append(PhaseMetric(backend, entity, phase, rows, seconds))
+        self._entries.append(PhaseMetric(dbms, entity, phase, rows, seconds))
 
     def entries(self) -> List[PhaseMetric]:
         return list(self._entries)
@@ -59,7 +59,7 @@ class MetricsCollector:
         return [m.to_record() for m in self._entries]
 
 
-_CSV_FIELDS = ("timestamp", "backend", "entity", "phase", "rows", "seconds", "rows_per_second")
+_CSV_FIELDS = ("timestamp", "dbms", "entity", "phase", "rows", "seconds", "rows_per_second")
 
 
 def environment_metadata(

@@ -16,7 +16,7 @@ from polyglotimportcsv.config_parser import (
 
 
 def test_import_schema_rejects_unknown_top_level_key():
-    data = {"sources": {"s": "s.csv"}, "not_a_backend": {}}
+    data = {"sources": {"s": "s.csv"}, "not_a_dbms": {}}
     with pytest.raises(BusinessException):
         validate_import_config_schema(data)
 
@@ -77,7 +77,7 @@ def test_dbms_schema_rejects_entities_block():
         validate_dbms_config(data)
 
 
-def test_merge_requires_backend_in_dbms_config():
+def test_merge_requires_dbms_in_dbms_config():
     import_cfg = {
         "sources": {"s": "s.csv"},
         "redis": {"entities": {"x": {"columns": {"k": {}}}}},

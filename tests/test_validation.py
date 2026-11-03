@@ -1,11 +1,11 @@
-"""validate_backend_entities: per-entity columns, filters, keys, relationships."""
+"""validate_dbms_entities: per-entity columns, filters, keys, relationships."""
 
 import pandas as pd
 import pytest
 
 from polyglotimportcsv.business_exception import MappingError
 from polyglotimportcsv.mapping_resolver import BoundEntity
-from polyglotimportcsv.validation import validate_backend_entities, validate_headers
+from polyglotimportcsv.validation import validate_dbms_entities, validate_headers
 
 
 def _be(name, cfg, columns):
@@ -17,7 +17,7 @@ def _be(name, cfg, columns):
 def test_unknown_column_raises():
     be = _be("t", {"columns": {"nope": {}}}, ["a", "_source"])
     with pytest.raises(MappingError, match="unknown column"):
-        validate_backend_entities("redis", {}, {"t": be})
+        validate_dbms_entities("redis", {}, {"t": be})
 
 
 def test_source_pseudo_column_is_valid():
@@ -26,36 +26,36 @@ def test_source_pseudo_column_is_valid():
         {"columns": {"a": {"is_key": True}, "_source": {"schema_column": "event_type"}}},
         ["a", "_source"],
     )
-    validate_backend_entities("redis", {}, {"t": be})
+    validate_dbms_entities("redis", {}, {"t": be})
 
 
-def test_nested_columns_rejected_for_flat_backend():
+def test_nested_columns_rejected_for_flat_dbms():
     be = _be("t", {"columns": {"outer": {"inner": {}}}}, ["inner", "_source"])
     with pytest.raises(MappingError, match="nested"):
-        validate_backend_entities("postgres", {}, {"t": be})
+        validate_dbms_entities("postgres", {}, {"t": be})
 
 
 def test_filter_on_unknown_column_raises():
     be = _be("t", {"columns": {"a": {}}, "filters": [{"column": "x", "operator": "==", "value": 1}]},
              ["a", "_source"])
     with pytest.raises(MappingError, match="Filter column"):
-        validate_backend_entities("redis", {}, {"t": be})
+        validate_dbms_entities("redis", {}, {"t": be})
 
 
 def test_cassandra_partition_must_exist():
     be = _be("t", {"columns": {"a": {}}, "cassandra_partition": ["missing"]}, ["a", "_source"])
     with pytest.raises(MappingError, match="partition"):
-        validate_backend_entities("cassandra", {}, {"t": be})
+        validate_dbms_entities("cassandra", {}, {"t": be})
 
 
 def test_postgres_relationship_targets_checked():
     frm = _be("orders", {"columns": {"product_id": {}}}, ["product_id", "_source"])
     to = _be("products", {"columns": {"product_id": {"is_key": True}}}, ["product_id", "_source"])
     bcfg = {"relationships": {"r": {"from": "orders", "to": "products", "foreign_key": "product_id"}}}
-    validate_backend_entities("postgres", bcfg, {"orders": frm, "products": to})
+    validate_dbms_entities("postgres", bcfg, {"orders": frm, "products": to})
     bad = {"relationships": {"r": {"from": "orders", "to": "products", "foreign_key": "zzz"}}}
     with pytest.raises(MappingError, match="foreign_key"):
-        validate_backend_entities("postgres", bad, {"orders": frm, "products": to})
+        validate_dbms_entities("postgres", bad, {"orders": frm, "products": to})
 
 
 def _fk_to_email(users_columns):
@@ -74,7 +74,7 @@ def _fk_to_email(users_columns):
 def test_a_postgres_foreign_key_must_reference_the_key_of_the_to_entity(users_columns, actual_key):
     bcfg, bound = _fk_to_email(users_columns)
     with pytest.raises(MappingError) as exc:
-        validate_backend_entities("postgres", bcfg, bound)
+        validate_dbms_entities("postgres", bcfg, bound)
     message = str(exc.value)
     for part in ("Relationship 'r'", "references_key 'email'", "entity 'users'",
                  f"(key: {actual_key})"):
@@ -83,12 +83,12 @@ def test_a_postgres_foreign_key_must_reference_the_key_of_the_to_entity(users_co
 
 def test_a_postgres_foreign_key_to_the_key_of_the_to_entity_is_valid():
     bcfg, bound = _fk_to_email({"email": {"is_key": True}, "uid": {}})
-    validate_backend_entities("postgres", bcfg, bound)
+    validate_dbms_entities("postgres", bcfg, bound)
     # references_key names the target column, which schema_column may rename
     frm = _be("orders", {"columns": {"user": {}}}, ["user", "_source"])
     to = _be("users", {"columns": {"id": {"is_key": True, "schema_column": "uid"}}}, ["id", "_source"])
     rel = {"from": "orders", "to": "users", "foreign_key": "user", "references_key": "uid"}
-    validate_backend_entities("postgres", {"relationships": {"r": rel}}, {"orders": frm, "users": to})
+    validate_dbms_entities("postgres", {"relationships": {"r": rel}}, {"orders": frm, "users": to})
 
 
 # -- header-level validation shared by the CLI and the GUI ---------------------
@@ -180,12 +180,12 @@ def test_validate_headers_only_checks_the_requested_dbms():
 def test_kv_and_graph_entities_need_exactly_one_key(dbms):
     none = _be("t", {"columns": {"a": {}}}, ["a", "_source"])
     with pytest.raises(MappingError, match="Entity 't' in '%s' must have exactly one is_key column" % dbms):
-        validate_backend_entities(dbms, {}, {"t": none})
+        validate_dbms_entities(dbms, {}, {"t": none})
     two = _be("t", {"columns": {"a": {"is_key": True}, "b": {"is_key": True}}}, ["a", "b", "_source"])
     with pytest.raises(MappingError, match="exactly one is_key"):
-        validate_backend_entities(dbms, {}, {"t": two})
+        validate_dbms_entities(dbms, {}, {"t": two})
     one = _be("t", {"columns": {"a": {"is_key": True}, "b": {}}}, ["a", "b", "_source"])
-    validate_backend_entities(dbms, {}, {"t": one})
+    validate_dbms_entities(dbms, {}, {"t": one})
 
 
 @pytest.mark.parametrize("dbms", ["postgres", "mongodb", "cassandra"])
@@ -193,18 +193,18 @@ def test_other_dbms_do_not_need_a_key_column(dbms):
     cfg = {"columns": {"a": {}}}
     if dbms == "cassandra":
         cfg["cassandra_partition"] = ["a"]
-    validate_backend_entities(dbms, {}, {"t": _be("t", cfg, ["a", "_source"])})
+    validate_dbms_entities(dbms, {}, {"t": _be("t", cfg, ["a", "_source"])})
 
 
 def test_cassandra_entity_needs_a_partition():
     missing = _be("t", {"columns": {"a": {}}}, ["a", "_source"])
     with pytest.raises(MappingError, match="cassandra_partition"):
-        validate_backend_entities("cassandra", {}, {"t": missing})
+        validate_dbms_entities("cassandra", {}, {"t": missing})
     empty = _be("t", {"columns": {"a": {}}, "cassandra_partition": []}, ["a", "_source"])
     with pytest.raises(MappingError, match="cassandra_partition"):
-        validate_backend_entities("cassandra", {}, {"t": empty})
+        validate_dbms_entities("cassandra", {}, {"t": empty})
     ok = _be("t", {"columns": {"a": {}}, "cassandra_partition": ["a"]}, ["a", "_source"])
-    validate_backend_entities("cassandra", {}, {"t": ok})
+    validate_dbms_entities("cassandra", {}, {"t": ok})
 
 
 def _each(column):
@@ -220,7 +220,7 @@ def test_postgres_relationship_endpoint_cannot_use_each(end):
     to = _be("products", to_cfg, ["product_id", "_source"])
     bcfg = {"relationships": {"r": {"from": "orders", "to": "products", "foreign_key": "product_id"}}}
     with pytest.raises(MappingError, match="'each' filter"):
-        validate_backend_entities("postgres", bcfg, {"orders": frm, "products": to})
+        validate_dbms_entities("postgres", bcfg, {"orders": frm, "products": to})
 
 
 @pytest.mark.parametrize("end", ["from", "to"])
@@ -232,17 +232,17 @@ def test_neo4j_relationship_endpoint_cannot_use_each(end):
     to = _be("Product", to_cfg, ["product_id", "_source"])
     bcfg = {"relationships": {"r": {"from": "User", "to": "Product"}}}
     with pytest.raises(MappingError, match="'each' filter"):
-        validate_backend_entities("neo4j", bcfg, {"User": frm, "Product": to})
+        validate_dbms_entities("neo4j", bcfg, {"User": frm, "Product": to})
 
 
 def test_neo4j_relationship_needs_both_key_columns_in_the_from_source():
     to = _be("Product", {"columns": {"product_id": {"is_key": True}}}, ["product_id", "_source"])
     bcfg = {"relationships": {"r": {"from": "User", "to": "Product"}}}
     ok = _be("User", {"columns": {"user_id": {"is_key": True}}}, ["user_id", "product_id", "_source"])
-    validate_backend_entities("neo4j", bcfg, {"User": ok, "Product": to})
+    validate_dbms_entities("neo4j", bcfg, {"User": ok, "Product": to})
     no_to_key = _be("User", {"columns": {"user_id": {"is_key": True}}}, ["user_id", "_source"])
     with pytest.raises(MappingError, match="product_id"):
-        validate_backend_entities("neo4j", bcfg, {"User": no_to_key, "Product": to})
+        validate_dbms_entities("neo4j", bcfg, {"User": no_to_key, "Product": to})
 
 
 def test_neo4j_relationship_resolves_a_csv_column_key_in_the_from_source():
@@ -251,8 +251,8 @@ def test_neo4j_relationship_resolves_a_csv_column_key_in_the_from_source():
     to = _be("Product", {"columns": {"id": {"is_key": True, "csv_column": "product_id"}}},
              ["product_id", "_source"])
     bcfg = {"relationships": {"r": {"from": "User", "to": "Product"}}}
-    validate_backend_entities("neo4j", bcfg, {"User": frm, "Product": to})
+    validate_dbms_entities("neo4j", bcfg, {"User": frm, "Product": to})
     frm_missing = _be("User", {"columns": {"id": {"is_key": True, "csv_column": "user_id"}}},
                       ["user_id", "_source"])
     with pytest.raises(MappingError, match="product_id"):
-        validate_backend_entities("neo4j", bcfg, {"User": frm_missing, "Product": to})
+        validate_dbms_entities("neo4j", bcfg, {"User": frm_missing, "Product": to})

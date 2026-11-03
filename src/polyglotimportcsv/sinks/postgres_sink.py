@@ -29,11 +29,11 @@ from polyglotimportcsv.stream_binding import EntityBinding
 class PostgresSink:
     """Streams cast batches into PostgreSQL tables, one table per partition."""
 
-    def __init__(self, backend_cfg: Dict[str, Any], *, connection_factory=None):
-        self.schema = backend_cfg.get("schema") or "public"
-        self.relationships = backend_cfg.get("relationships") or {}
+    def __init__(self, dbms_cfg: Dict[str, Any], *, connection_factory=None):
+        self.schema = dbms_cfg.get("schema") or "public"
+        self.relationships = dbms_cfg.get("relationships") or {}
         factory = connection_factory or _connect
-        self._cx = factory(backend_cfg.get("connection") or {})
+        self._cx = factory(dbms_cfg.get("connection") or {})
         self._cx.autocommit = True
         self._cur = self._cx.cursor()
         # partition_name -> binding.cfg, kept for building FKs once every
