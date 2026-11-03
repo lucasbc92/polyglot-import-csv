@@ -41,7 +41,7 @@ o trabalho é feito. Por isso:
 
 Legenda de figura abaixo, de tabela acima; "Fonte:" sempre abaixo; toda listagem
 com frase de introdução que a nomeie ("Listagem~\ref{...}"); `...` em fragmentos
-truncados, citado na prosa; nada de "backend" (sempre SGBD); nenhuma prosa sobre
+truncados, citado na prosa; sempre SGBD, nunca o termo em inglês que o orientador rejeitou; nenhuma prosa sobre
 versões anteriores do relatório ou da ferramenta; não envolver `tabular` em
 grupo de tamanho de fonte (mata os struts); listagens com trechos fiéis dos
 arquivos reais de `data/ecommerce/`, exceto onde o exemplo é declaradamente
@@ -249,5 +249,5 @@ Conferir com grep em `docs-tcc/chapters/` antes e no log do LaTeX depois
 ## Fora de escopo
 
 Capítulos e seções posteriores à §4.2 (exceto ajustes de referência); renomear
-"backend" no código legado; mudar padrões de conexão dos importadores; versão
+o termo antigo no código legado; mudar padrões de conexão dos importadores; versão
 nova da ferramenta ou release.

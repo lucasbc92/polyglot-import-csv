@@ -290,8 +290,8 @@ ausente ou inconsistente não impede a escolha de fontes.
 
 - `RunOptions` manteve `show_data: Optional[bool]` (tri-estado da CLI) em vez
   de `data_mode: str`: o mesmo comportamento com uma mudança menor.
-- A validação por cabeçalho usa `resolve_backend_entities` +
-  `validate_backend_entities` sobre fontes de zero linhas, não
+- A validação por cabeçalho usa `resolve_dbms_entities` +
+  `validate_dbms_entities` sobre fontes de zero linhas, não
   `stream_binding`: verificado em 26/09, isso reproduz a mensagem exata da CLI
   ("references unknown column"), e `stream_binding` sozinho não a produz.
 - A linha selecionada na tabela de fontes tem fundo de destaque, sem borda à

@@ -35,7 +35,7 @@ from polyglotimportcsv.reporting import print_rich, setup_reporting
 from polyglotimportcsv.runner import run_import
 from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB
 
-_ALL_BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
+_ALL_DBMS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
 
 #: The imports themselves are noisy, so this script runs at a quiet log level.
 #: Its own progress and result are the point of running it, so they print above
@@ -121,7 +121,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--repetitions", type=int, default=3,
                         help="Passes per arm; the median is reported (default: 3).")
     parser.add_argument("--only", default="",
-                        help=f"Comma-separated backends (default: all). Choices: {', '.join(_ALL_BACKENDS)}.")
+                        help=f"Comma-separated DBMS (default: all). Choices: {', '.join(_ALL_DBMS)}.")
     parser.add_argument("--seed", type=int, default=42, help="Generator seed (default: 42).")
     parser.add_argument("--dbms-config", type=Path, default=Path("data/ecommerce/dbms_config.json"))
     parser.add_argument("--config-dir", type=Path, default=Path("data/ecommerce"))

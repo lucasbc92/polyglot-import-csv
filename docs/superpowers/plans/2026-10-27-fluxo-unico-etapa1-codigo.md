@@ -25,7 +25,7 @@ As regras de cabeçalho ficam em `validation.py`, e a CLI e a GUI usam essa mesm
 - **Idioma:**
   - código, mensagens da CLI e logs em inglês;
   - textos da GUI em português;
-  - em texto em português, sempre "SGBD", nunca "backend";
+  - em texto em português, sempre "SGBD", nunca o termo em inglês que o orientador rejeitou;
   - READMEs bilíngues (inglês e português).
 - **`--chunk-size`:**
   - inteiro em MB (2^20 bytes), padrão 8, mínimo 8, máximo 256;
@@ -183,8 +183,8 @@ rtk git push
 - Produces:
   - `stream_source.check_source_overrides(sources_cfg: Dict[str, Any], overrides: Optional[Dict[str, str]]) -> None`. Lança `SourceError` com a mesma mensagem de hoje em `sources.load_sources` para nomes de `--source` não declarados.
   - `stream_source.read_source_headers(sources_cfg, base_dir, overrides) -> Dict[str, List[str]]`. Devolve o cabeçalho de dados de cada fonte declarada, sem a coluna de origem nos arquivos combinados, lido com as opções de `_read_chunks` e `nrows=0`. Lança `SourceError` para arquivo ausente e para arquivo combinado com menos de 2 colunas, com as mensagens de hoje.
-  - `validation.validate_headers(config: Dict[str, Any], headers: Dict[str, List[str]], combined: Collection[str], dbms_names: Sequence[str]) -> None`. Monta um registro só de cabeçalhos (`SourceData` com DataFrame vazio e tipos `"string"`). Se houver fontes combinadas, cada nome de origem desconhecido recebe a união dos cabeçalhos combinados, como a GUI já faz. Para cada SGBD, vincula as entidades com `bind_entity_source` e `expand_entity_columns`, monta `BoundEntity` e chama `validate_backend_entities`.
-  - Regras novas em `validate_backend_entities`, todas com `MappingError`:
+  - `validation.validate_headers(config: Dict[str, Any], headers: Dict[str, List[str]], combined: Collection[str], dbms_names: Sequence[str]) -> None`. Monta um registro só de cabeçalhos (`SourceData` com DataFrame vazio e tipos `"string"`). Se houver fontes combinadas, cada nome de origem desconhecido recebe a união dos cabeçalhos combinados, como a GUI já faz. Para cada SGBD, vincula as entidades com `bind_entity_source` e `expand_entity_columns`, monta `BoundEntity` e chama `validate_dbms_entities`.
+  - Regras novas em `validate_dbms_entities`, todas com `MappingError`:
     - entidade do `redis` ou do `neo4j` sem exatamente uma coluna folha `is_key` (`"Entity '{e}' in '{b}' must have exactly one is_key column."`);
     - entidade do `cassandra` sem `cassandra_partition` ou com a lista vazia;
     - relacionamento do `postgres` ou do `neo4j` cujo `from` ou `to` tem filtro `each`;
@@ -220,17 +220,17 @@ Em `tests/test_gui_preflight.py`, acrescente um teste que verifica que `prefligh
 
 - [ ] **Step 2: Rodar e confirmar que falham.** Run: `.venv/Scripts/python.exe -m pytest tests/test_validation.py tests/test_stream_source.py tests/test_gui_preflight.py -v`. Expected: FAIL (as funções novas não existem).
 
-- [ ] **Step 3: Implementar.** Em `gui/preflight.py`, `_bind_and_validate_headers` continua lendo os arquivos com cache e com as mensagens em português. O bloco que monta o registro e chama `resolve_backend_entities` e `validate_backend_entities` passa a ser uma única chamada `validate_headers(import_cfg, headers, combined_names, dbms_names)`, com captura de `BusinessException` e `ValueError` como hoje. Atualize a docstring do módulo, que não deve mais citar a materialização.
+- [ ] **Step 3: Implementar.** Em `gui/preflight.py`, `_bind_and_validate_headers` continua lendo os arquivos com cache e com as mensagens em português. O bloco que monta o registro e chama `resolve_dbms_entities` e `validate_dbms_entities` passa a ser uma única chamada `validate_headers(import_cfg, headers, combined_names, dbms_names)`, com captura de `BusinessException` e `ValueError` como hoje. Atualize a docstring do módulo, que não deve mais citar a materialização.
 
 - [ ] **Step 4: Rodar e confirmar que passam.** Mesmo comando do Step 2. Expected: PASS.
 
 - [ ] **Step 5: Conferir os exemplos.** Run:
 
 ```bash
-.venv/Scripts/python.exe -c "import json;from pathlib import Path;from polyglotimportcsv.stream_source import read_source_headers;from polyglotimportcsv.validation import validate_headers,BACKENDS
+.venv/Scripts/python.exe -c "import json;from pathlib import Path;from polyglotimportcsv.stream_source import read_source_headers;from polyglotimportcsv.validation import validate_headers,DBMS_NAMES
 for f in ['import_config.json','import_config_combined.json']:
     c=json.loads(Path('data/ecommerce/'+f).read_text(encoding='utf-8'));s=c['sources']
-    validate_headers(c,read_source_headers(s,Path('data/ecommerce'),{}),[n for n,d in s.items() if isinstance(d,dict)],[b for b in BACKENDS if b in c]);print(f,'ok')"
+    validate_headers(c,read_source_headers(s,Path('data/ecommerce'),{}),[n for n,d in s.items() if isinstance(d,dict)],[b for b in DBMS_NAMES if b in c]);print(f,'ok')"
 ```
 
 Expected: `import_config.json ok` e `import_config_combined.json ok`. Se falhar, siga a anti-meta: pare e reporte.
@@ -751,7 +751,7 @@ def test_resume_refuses_a_checkpoint_with_other_chunk_sizes(tmp_path): ...
   - as funções `run_postgres_import`, `run_redis_import`, `run_cassandra_import` e `run_neo4j_import`, junto com os *imports* que só elas usavam;
   - em `importers/__init__.py`, o registro (`default_importer_registry`); fica só a docstring;
   - `sources.load_sources` e `sources._register`. Ficam `SOURCE_COLUMN`, `SourceData` e `_resolve_path`;
-  - `mapping_resolver.resolve_backend_entities` e `_binding_cache_key`;
+  - `mapping_resolver.resolve_dbms_entities` e `_binding_cache_key`;
   - `reporting.dump_entity_frame` e `reporting.entity_progress`, se `grep` não achar outro uso;
   - `metrics.timed_phase`, `metrics.EXCLUDED_PHASES` e o código que exclui fases em `reporting.metrics_table` e `benchmark_results`;
   - `csv_reader.read_csv`, se `grep` não achar outro uso.
@@ -762,12 +762,12 @@ def test_resume_refuses_a_checkpoint_with_other_chunk_sizes(tmp_path): ...
   - `tests/test_importer_write_batching.py`: mantenha apenas os testes de funções auxiliares que continuam existindo (`_write_batched`, `_merge_nodes_batched`, `_merge_rels_batched`, `_dedupe_props`) e apague os que chamam `run_*_import`, inclusive `test_importers_have_no_strategy_and_no_row_at_a_time_writers`;
   - `tests/test_sources.py`: os testes de `--source`, arquivo ausente, origem vazia e colisão migram para `tests/test_stream_source.py` e `tests/test_source_profile.py`, se ainda não estiverem cobertos pelas Tasks 2 e 3;
   - `tests/test_pipeline_logging.py`: fica só `test_cast_frame_warns_on_text_fallback`;
-  - `tests/test_row_view.py`: monte os quadros com `pd.read_csv` e `cast_frame` direto, no lugar de `load_sources` e `resolve_backend_entities`;
+  - `tests/test_row_view.py`: monte os quadros com `pd.read_csv` e `cast_frame` direto, no lugar de `load_sources` e `resolve_dbms_entities`;
   - `tests/test_materialize.py` vira `tests/test_row_shaping.py`.
 
 - [ ] **Step 1: Apagar e renomear** conforme a lista acima.
 
-- [ ] **Step 2: Conferir que não sobrou nada.** Run: `rtk grep -n -i "materializ\|execution\|load_sources\|resolve_backend_entities\|ImporterRegistry\|run_postgres_import" src scripts tests`. Expected: nenhuma ocorrência. As exceções são os nomes de teste já convertidos e a palavra "execution" em `ImportExecutionError`, que deve permanecer.
+- [ ] **Step 2: Conferir que não sobrou nada.** Run: `rtk grep -n -i "materializ\|execution\|load_sources\|resolve_dbms_entities\|ImporterRegistry\|run_postgres_import" src scripts tests`. Expected: nenhuma ocorrência. As exceções são os nomes de teste já convertidos e a palavra "execution" em `ImportExecutionError`, que deve permanecer.
 
 - [ ] **Step 3: Rodar a suíte inteira.** Run: `.venv/Scripts/python.exe -m pytest -q`. Expected: tudo passa.
 

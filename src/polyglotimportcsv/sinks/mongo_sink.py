@@ -29,8 +29,8 @@ def _connect(conn: Dict[str, Any]):
 class MongoSink:
     """Streams cast batches into MongoDB collections, one collection per partition."""
 
-    def __init__(self, backend_cfg: Dict[str, Any], *, client_factory=None):
-        conn = backend_cfg.get("connection") or {}
+    def __init__(self, dbms_cfg: Dict[str, Any], *, client_factory=None):
+        conn = dbms_cfg.get("connection") or {}
         database = conn.get("database", "test")
         factory = client_factory or _connect
         self._client = factory(conn)

@@ -101,7 +101,7 @@ def _factories(written=None, built=None):
     written = [] if written is None else written
 
     def factory(dbms):
-        def build(backend_cfg):
+        def build(dbms_cfg):
             if built is not None:
                 built.append(dbms)
             return _FakeSink(dbms, written)
@@ -207,7 +207,7 @@ def test_a_write_failure_of_the_first_dbms_says_nothing_was_written_before(tmp_p
 def test_a_business_error_of_a_sink_is_not_wrapped(tmp_path):
     cfg = _events(tmp_path)
 
-    def refusing(backend_cfg):
+    def refusing(dbms_cfg):
         raise ImportExecutionError("Redis connection failed: refused")
 
     with pytest.raises(ImportExecutionError) as exc:
@@ -355,7 +355,7 @@ def test_metrics_have_infer_validate_and_one_write_per_dbms(tmp_path):
 
     run_import(cfg, sink_factories=_factories(), collector=collector)
 
-    assert [(m.backend, m.entity, m.phase, m.rows) for m in collector.entries()] == [
+    assert [(m.dbms, m.entity, m.phase, m.rows) for m in collector.entries()] == [
         ("(sources)", "*", "infer", 10),
         ("(all)", "*", "validate", 10),
         ("postgres", "*", "write", 10),

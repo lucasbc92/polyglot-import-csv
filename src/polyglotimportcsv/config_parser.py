@@ -26,7 +26,7 @@ import jsonschema
 
 from polyglotimportcsv.business_exception import ConfigError
 
-BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
+DBMS_NAMES = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
 
 #: Default name of the DBMS configuration file, looked up next to the import
 #: configuration when an explicit path is not provided.
@@ -94,29 +94,29 @@ def validate_import_config_schema(data: Dict[str, Any]) -> None:
 def merge_configs(
     import_cfg: Dict[str, Any], dbms_cfg: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """Combine mapping and connection configs into one backend structure.
+    """Combine mapping and connection configs into one structure per DBMS.
 
-    Every backend present in the import configuration must also be declared in
+    Every DBMS present in the import configuration must also be declared in
     the DBMS configuration, otherwise a :class:`BusinessException` is raised.
     """
-    import_backends = [b for b in BACKENDS if b in import_cfg]
-    missing = [b for b in import_backends if b not in dbms_cfg]
+    import_dbms = [b for b in DBMS_NAMES if b in import_cfg]
+    missing = [b for b in import_dbms if b not in dbms_cfg]
     if missing:
         raise ConfigError(
-            "Import config targets backend(s) not declared in the DBMS config: "
+            "Import config targets DBMS not declared in the DBMS config: "
             f"{', '.join(missing)}. Add them to dbms_config.json or remove them "
             "from import_config.json."
         )
 
     merged: Dict[str, Any] = {"sources": copy.deepcopy(import_cfg.get("sources") or {})}
-    for backend in import_backends:
-        backend_cfg = copy.deepcopy(import_cfg[backend])
-        dbms_backend = dbms_cfg.get(backend) or {}
+    for dbms in import_dbms:
+        entry = copy.deepcopy(import_cfg[dbms])
+        dbms_entry = dbms_cfg.get(dbms) or {}
         # Connection settings (and postgres 'schema') come from the DBMS config.
         for key in ("connection", "schema"):
-            if key in dbms_backend:
-                backend_cfg[key] = copy.deepcopy(dbms_backend[key])
-        merged[backend] = backend_cfg
+            if key in dbms_entry:
+                entry[key] = copy.deepcopy(dbms_entry[key])
+        merged[dbms] = entry
     return merged
 
 

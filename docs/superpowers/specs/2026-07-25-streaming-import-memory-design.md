@@ -40,7 +40,7 @@ Magazine Luiza: ler em lotes, converter, gravar e descartar.
 
 **Não-objetivos (YAGNI):** concorrência/threads (GIL; eixo à parte; Cassandra já
 é concorrente dentro do lote), COPY/bulk-load, paralelismo entre DBMSs, alterar o
-baseline de materialização, renomear os identificadores "backend" legados.
+baseline de materialização, renomear os identificadores legados com o termo antigo.
 
 ## 3. Decisões
 
@@ -57,7 +57,7 @@ baseline de materialização, renomear os identificadores "backend" legados.
   **`db_type` declarado no config sempre vence**. Documentar: para arquivos
   gigantes/heterogêneos, declare `db_type` para garantir o tipo.
 - **Nomenclatura:** o protocolo de escrita chama-se **`DbmsSink`** (não
-  "Backend"); adaptadores mantêm nomes de produto (`PostgresSink`, `MongoSink`,
+  o termo antigo); adaptadores mantêm nomes de produto (`PostgresSink`, `MongoSink`,
   `CassandraSink`, `RedisSink`, `Neo4jSink`).
 
 ## 4. Arquitetura (portas e adaptadores)

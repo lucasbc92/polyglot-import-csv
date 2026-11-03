@@ -15,7 +15,7 @@
 - **Interpretador e suíte:** `PY=./.venv/Scripts/python.exe`, a partir da raiz do repositório. Suíte: `$PY -m pytest tests -q -p no:cacheprovider`. Referência antes deste plano: **634 passed, 1 skipped**. Cada tarefa termina com a suíte verde e com a contagem lida por inteiro: o `python` do sistema não tem `pytest-qt`, e o filtro do `rtk` esconde testes com erro.
 - **Python mínimo:** 3.9. Sem `X | Y` em anotações de tempo de execução, sem `match`. Todo módulo novo começa com `from __future__ import annotations`.
 - **Núcleo da GUI sem Qt:** `gui/state.py`, `gui/command.py`, `gui/launcher.py`, `gui/ansi.py` e `gui/preflight.py` não importam PySide6. `reporting.py` não importa `dbms_check` (a GUI importa `reporting` e não deve carregar pymongo/neo4j por isso).
-- **Regra SGBD/DBMS:** "DBMS" em nomes de arquivo, identificadores, opções da CLI, JSON Schemas, mensagens da CLI (inglês), docstrings/comentários e seções EN dos READMEs. "SGBD" só em texto em português visível ao usuário (GUI, seções PT dos READMEs) e no texto corrido do relatório. Nunca "backend" em código novo.
+- **Regra SGBD/DBMS:** "DBMS" em nomes de arquivo, identificadores, opções da CLI, JSON Schemas, mensagens da CLI (inglês), docstrings/comentários e seções EN dos READMEs. "SGBD" só em texto em português visível ao usuário (GUI, seções PT dos READMEs) e no texto corrido do relatório. Nunca o termo em inglês que o orientador rejeitou em código novo.
 - **Troca de nome limpa:** nenhum alias para `--sgbd-config` ou `sgbd_config.json`.
 - **A ferramenta nunca executa o comando de `start`.** Só o exibe.
 - **Endereços:** nenhum analisador de URI próprio (spec §5.1). Uma configuração que o driver aceita nunca vira `invalid`; exceção única, já decidida: porta do Neo4j que nem é número em 1–65535 nem nome de serviço conhecido, que o driver aceita na construção mas com a qual nunca conecta.
@@ -1359,7 +1359,7 @@ from polyglotimportcsv.dbms_check import (
 )
 ```
 
-(b) Depois de `_print_backend_line`, acrescente:
+(b) Depois de `_print_dbms_line`, acrescente:
 
 ```python
 _STATE_STYLE = {UP: "green", DOWN: "red", INVALID: "red"}
@@ -1368,7 +1368,7 @@ _STATE_STYLE = {UP: "green", DOWN: "red", INVALID: "red"}
 def _dbms_targets(config: Dict, only: Optional[Iterable[str]]) -> List[str]:
     """The DBMS the import would write to: those configured, narrowed by --only."""
     only_set = {x.strip().lower() for x in only if x and str(x).strip()} if only else set()
-    return [b for b in BACKENDS if b in config and (not only_set or b in only_set)]
+    return [b for b in DBMS_NAMES if b in config and (not only_set or b in only_set)]
 
 
 def _print_command(line: str) -> None:
@@ -1443,7 +1443,7 @@ def run_check(
 
 O arquivo já tem `from __future__ import annotations`, então `Optional[str | Path]` é válido em 3.9, como no resto do runner.
 
-(c) Em `_run_stream`, logo depois de `note(f"{len(backends_in_cfg)} backend(s) configured: ...")`:
+(c) Em `_run_stream`, logo depois de `note(f"{len(dbms_in_cfg)} DBMS configured: ...")`:
 
 ```python
     _require_dbms(config_path, dbms_config_path, config, only)

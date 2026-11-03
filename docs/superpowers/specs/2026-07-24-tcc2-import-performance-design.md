@@ -37,8 +37,8 @@ cast_frame (célula a célula):  34,44 s para 10.000 linhas  ->    290 linhas/s
 somente datetime, vetorizado:   0,067 s                    ->  517x mais rápido
 ```
 
-O custo é cobrado do primeiro backend que vincula cada fonte, porque
-`runner._run` compartilha `cast_cache` entre backends (`runner.py:136`). Daí a
+O custo é cobrado do primeiro SGBD que vincula cada fonte, porque
+`runner._run` compartilha `cast_cache` entre SGBDs (`runner.py:136`). Daí a
 fase `map` do MongoDB aparecer com 7,5 M linhas/s: é acerto de cache, não
 velocidade. Extrapolando para 100k, a fase `map` do Postgres sozinha responde por
 ~98 dos ~104 minutos estimados da execução — a conversão custa mais que todas as
@@ -106,7 +106,7 @@ Cada importador ganha um parâmetro opcional de fábrica de cliente, com o drive
 real como padrão:
 
 ```python
-def run_redis_import(backend_cfg, entities, *, dry_run, create_schema,
+def run_redis_import(dbms_cfg, entities, *, dry_run, create_schema,
                      strategy="optimized", client_factory=_default_client):
 ```
 
@@ -115,7 +115,7 @@ dry-run, e é exatamente por isso que estes defeitos sobreviveram. A fábrica
 injetável é a menor mudança que torna a escrita testável sem bancos vivos, e
 preserva a forma e o layout de arquivos que o Capítulo 4 do TCC já documenta.
 
-Alternativas descartadas: classes `Writer` por backend em `importers/writers/`
+Alternativas descartadas: classes `Writer` por SGBD em `importers/writers/`
 (separação mais limpa, mas reestrutura os cinco importadores e obriga a reescrever
 o Capítulo 4); e monkeypatch dos módulos de driver nos testes (zero mudança em
 produção, mas o seam fica implícito e os testes passam a depender do nome do
@@ -182,7 +182,7 @@ agrupamento, mantendo o comportamento e a contagem do aviso.
 ### 4.5 Fronteiras de fase consistentes
 
 A construção de payload do MongoDB passa para dentro do cronômetro `write`, de
-modo que os cinco backends meçam o mesmo intervalo: transformar as linhas
+modo que os cinco SGBDs meçam o mesmo intervalo: transformar as linhas
 vinculadas em payload do driver, mais a escrita. O número do MongoDB vai **piorar**
 e ficar honesto.
 
@@ -225,7 +225,7 @@ interrompida pelo erro de tipo no Postgres, já corrigido em `csv_reader.py`.
 
 Todos sem bancos vivos, na suíte de CI.
 
-- **`tests/test_importer_write_batching.py`** (novo): um cliente falso por backend,
+- **`tests/test_importer_write_batching.py`** (novo): um cliente falso por SGBD,
   afirmando as duas direções — `optimized` emite ⌈n/lote⌉ chamadas em bloco e zero
   chamadas por linha; `naive` emite n chamadas por linha. É a primeira cobertura
   que o caminho de escrita recebe.
@@ -234,7 +234,7 @@ Todos sem bancos vivos, na suíte de CI.
   inconversíveis e a contagem do aviso.
 - **Neo4j**: a constraint é emitida sob `create_schema`; a deduplicação
   primeiro-vence sobrevive ao agrupamento.
-- **Fronteiras de fase**: teste fixando que os cinco backends constroem payload
+- **Fronteiras de fase**: teste fixando que os cinco SGBDs constroem payload
   dentro do cronômetro `write`.
 - **`tests/test_benchmark_runner.py`**: atualizado para o eixo `strategies`.
 - **`benchmark_io`**: cabeçalho incompatível falha com erro explícito em vez de
@@ -250,7 +250,7 @@ com `optimized`.
 
 - **`COPY` no Postgres**: mais rápido que `execute_values`, mas não expressa
   `ON CONFLICT DO NOTHING`, o que mudaria a semântica de deduplicação.
-- **Paralelizar backends**: destruiria o isolamento das medições por SGBD.
+- **Paralelizar SGBDs**: destruiria o isolamento das medições por SGBD.
 - **`clean_postgres` com TRUNCATE em vez de DROP**
   (`scripts/inspect_persisted_data.py:252`): questão separada, já registrada.
 - Novos conectores, formatos além de CSV, interface gráfica.

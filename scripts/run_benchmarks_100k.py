@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""CLI: run the 100k benchmark for the backends that sustain a usable rate.
+"""CLI: run the 100k benchmark for the DBMS that sustain a usable rate.
 
 Same matrix engine as ``run_benchmarks.py`` — this only changes the defaults
-(one size, a subset of backends, its own output directory) and prints a rough
-wall-clock estimate first, because a 100k run over the slowest backends
+(one size, a subset of DBMS, its own output directory) and prints a rough
+wall-clock estimate first, because a 100k run over the slowest DBMS
 takes hours rather than minutes.
 
 Cassandra, Redis and Neo4j are the slowest writers at 100k, so they are excluded
@@ -24,11 +24,11 @@ from typing import Dict, List, Optional, Sequence
 import run_benchmarks
 
 #: The fastest writers; safe to run at 100k.
-FAST_BACKENDS = ("postgres", "mongodb")
+FAST_DBMS = ("postgres", "mongodb")
 
 #: The slowest writers at 100k. Kept out of the default selection: at 100k
 #: they dominate the matrix wall clock.
-SLOW_BACKENDS = ("cassandra", "redis", "neo4j")
+SLOW_DBMS = ("cassandra", "redis", "neo4j")
 
 #: Median rows/s measured per phase on the 1k+10k matrix (benchmark.log,
 #: 12 runs). Used only for the pre-run estimate below, never for reporting.
@@ -46,7 +46,7 @@ MEASURED_ROWS_PER_S: Dict[str, Dict[str, float]] = {
 #: total-rows --sizes semantics, 8000 total rows == the old 1000-product point.
 _REFERENCE_TOTAL_ROWS = 8000
 
-#: Rows each backend handled per phase at _REFERENCE_TOTAL_ROWS total rows, from
+#: Rows each DBMS handled per phase at _REFERENCE_TOTAL_ROWS total rows, from
 #: the same log. Row counts scale about linearly with size, so
 #: size/_REFERENCE_TOTAL_ROWS scales these.
 ROWS_AT_1K: Dict[str, Dict[str, int]] = {
@@ -58,8 +58,8 @@ ROWS_AT_1K: Dict[str, Dict[str, int]] = {
 }
 
 
-def estimate_seconds(backends: Sequence[str], size: int, runs: int) -> Dict[str, float]:
-    """Rough per-backend wall clock for the whole matrix, from measured rates.
+def estimate_seconds(dbms_names: Sequence[str], size: int, runs: int) -> Dict[str, float]:
+    """Rough per-DBMS wall clock for the whole matrix, from measured rates.
 
     Linear extrapolation from small sizes: it ignores DB-side effects that grow
     with the dataset (index maintenance, Neo4j's unindexed MERGE scans), so it
@@ -67,7 +67,7 @@ def estimate_seconds(backends: Sequence[str], size: int, runs: int) -> Dict[str,
     """
     scale = size / _REFERENCE_TOTAL_ROWS
     out: Dict[str, float] = {}
-    for b in backends:
+    for b in dbms_names:
         rates = MEASURED_ROWS_PER_S.get(b)
         rows = ROWS_AT_1K.get(b)
         if not rates or not rows:
@@ -77,8 +77,8 @@ def estimate_seconds(backends: Sequence[str], size: int, runs: int) -> Dict[str,
     return out
 
 
-def _report_estimate(backends: Sequence[str], size: int, runs: int) -> None:
-    est = estimate_seconds(backends, size, runs)
+def _report_estimate(dbms_names: Sequence[str], size: int, runs: int) -> None:
+    est = estimate_seconds(dbms_names, size, runs)
     if not est:
         return
     print(f"Estimated wall clock for {runs} run(s) at size {size:,}:")
@@ -89,14 +89,14 @@ def _report_estimate(backends: Sequence[str], size: int, runs: int) -> None:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Run the import benchmark at 100k for the fastest backends.",
+        description="Run the import benchmark at 100k for the fastest DBMS.",
         epilog="Unrecognised flags are forwarded to run_benchmarks.py unchanged.",
     )
     parser.add_argument("--size", type=int, default=100000,
                         help="Total dataset size in rows (default: 100000).")
-    parser.add_argument("--only", default=",".join(FAST_BACKENDS),
-                        help=f"Comma-separated backends (default: {','.join(FAST_BACKENDS)}). "
-                             f"Slow at 100k: {', '.join(SLOW_BACKENDS)}.")
+    parser.add_argument("--only", default=",".join(FAST_DBMS),
+                        help=f"Comma-separated DBMS (default: {','.join(FAST_DBMS)}). "
+                             f"Slow at 100k: {', '.join(SLOW_DBMS)}.")
     parser.add_argument("--modes", default="multi,combined",
                         help="Comma-separated input modes (default: multi,combined).")
     parser.add_argument("--repetitions", type=int, default=3,
@@ -108,11 +108,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help="Print the wall-clock estimate and exit without importing.")
     args, passthrough = parser.parse_known_args(argv)
 
-    backends = [b.strip() for b in args.only.split(",") if b.strip()]
+    dbms_names = [b.strip() for b in args.only.split(",") if b.strip()]
     modes = [m.strip() for m in args.modes.split(",") if m.strip()]
     runs = len(modes) * args.repetitions
 
-    _report_estimate(backends, args.size, runs)
+    _report_estimate(dbms_names, args.size, runs)
     if args.estimate_only:
         return 0
 
@@ -120,7 +120,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "--sizes", str(args.size),
         "--modes", ",".join(modes),
         "--repetitions", str(args.repetitions),
-        "--only", ",".join(backends),
+        "--only", ",".join(dbms_names),
         "--out", args.out,
         *passthrough,
     ]

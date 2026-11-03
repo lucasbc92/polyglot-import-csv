@@ -28,7 +28,7 @@ def test_write_benchmark_files(tmp_path):
     assert data["metadata"]["source_rows"] == {"stock": 10}
     assert data["metrics"][0]["phase"] == "write"
     lines = csv_path.read_text(encoding="utf-8").strip().splitlines()
-    assert lines[0] == "timestamp,backend,entity,phase,rows,seconds,rows_per_second"
+    assert lines[0] == "timestamp,dbms,entity,phase,rows,seconds,rows_per_second"
     assert len(lines) == 2
 
 

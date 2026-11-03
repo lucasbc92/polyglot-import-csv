@@ -605,7 +605,7 @@ Cada comando roda com `run_in_background` e o executor espera a notificação, s
 Um script descartável no *scratchpad* (não versionado) confere:
 - um só `benchmark_results.csv`, um só `benchmark_run_*.json` e nenhum `benchmark_checkpoint.json`;
 - um só `timestamp` no CSV, e o número de linhas do CSV igual ao de `results` no JSON;
-- nenhuma chave `(size, mode, chunk_mb, backend, entity, phase)` repetida;
+- nenhuma chave `(size, mode, chunk_mb, dbms, entity, phase)` repetida;
 - `peak_memory_mb` preenchido em todas as linhas de `memory` e `chunks-memory`, e vazio em todas as de `timings` e `chunks-timings`;
 - as linhas `infer` e `validate` com `rows` igual a `size`;
 - a soma de `rows` das linhas `write` do `mongodb` igual a `stock + purchase` de `benchmark_data._split_rows(size, 42)` (o `product_catalog` mais o `orders`). Isso prova que a coleção nova entrou na carga medida e que o limpador deixou cada repetição a frio;

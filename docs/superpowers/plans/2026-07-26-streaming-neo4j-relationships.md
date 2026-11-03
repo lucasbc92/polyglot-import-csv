@@ -12,7 +12,7 @@
 
 - No new third-party dependencies. Edges reuse `importers.neo4j_importer` helpers.
 - `BATCH = 1000` (DBMS flush granularity); streaming is always vectorized cast + batched writes (no "naive streaming").
-- The write port is **`DbmsSink`** (never "Backend"); `write_relationships` is a Neo4j-only capability method, NOT added to the `DbmsSink` Protocol.
+- The write port is **`DbmsSink`** (never the term the advisor rejected); `write_relationships` is a Neo4j-only capability method, NOT added to the `DbmsSink` Protocol.
 - Missing-endpoint edges are **silently skipped** (Cypher `MATCH` matches nothing), exactly as materialize does — no warning, no count. Do not add divergent logging.
 - `materialize` path stays byte-for-byte unchanged; this plan only touches the streaming path and `Neo4jSink`.
 - All new tests run without live databases (injected fake driver / fake sink / dry-run).
@@ -301,7 +301,7 @@ Expected: FAIL — the constructor still logs "streaming imports nodes only".
 In `sinks/neo4j_sink.py` `Neo4jSink.__init__`, delete:
 
 ```python
-        if backend_cfg.get("relationships"):
+        if dbms_cfg.get("relationships"):
             logger.warning(
                 "[neo4j] streaming imports nodes only; relationships require --execution materialize"
             )
@@ -503,7 +503,7 @@ git commit -m "feat(stream): relationship second pass (bounded re-stream of rel 
 
 - [ ] **Step 1: Write the equivalence test**
 
-Add to `tests/test_stream_memory.py` (it already imports `sr`, `apply_filters`, `resolve_backend_entities`, `load_sources`, `SOURCE_COLUMN`, and has `_ecommerce_config_and_overrides`, `_RecordingSink`, `_compare_columns`). The stream side needs a recording sink that captures `write_relationships` frames; add a small subclass inline, and reproduce the materialize edge shaping with the importer's own helper:
+Add to `tests/test_stream_memory.py` (it already imports `sr`, `apply_filters`, `resolve_dbms_entities`, `load_sources`, `SOURCE_COLUMN`, and has `_ecommerce_config_and_overrides`, `_RecordingSink`, `_compare_columns`). The stream side needs a recording sink that captures `write_relationships` frames; add a small subclass inline, and reproduce the materialize edge shaping with the importer's own helper:
 
 ```python
 def test_stream_union_and_rel_purchased_matches_materialize():
@@ -536,7 +536,7 @@ def test_stream_union_and_rel_purchased_matches_materialize():
 
     # --- Materialize edge rows for PURCHASED ---
     sources = load_sources(config["sources"], base_dir, overrides)
-    bound = resolve_backend_entities(config[dbms], sources, {}, strategy="optimized")
+    bound = resolve_dbms_entities(config[dbms], sources, {}, strategy="optimized")
     rspec = config[dbms]["relationships"]["PURCHASED"]
     from_be = bound[rspec["from"]]
     f1 = [x for x in (from_be.cfg.get("filters") or []) if x.get("operator") != "each"]

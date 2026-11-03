@@ -124,8 +124,8 @@ subir/derrubar o Docker é pré-requisito documentado (`docker compose up --wait
 
 - `polyglotimportcsv.runner.run_import(config, sgbd_config_path=..., collector=...,
   show_data=False, ...)` para importar e medir;
-- os limpadores por backend de `scripts/inspect_persisted_data.py` (dispatch
-  `CLEANERS[backend](sgbd_cfg)`), para esvaziar cada backend antes de cada repetição
+- os limpadores por SGBD de `scripts/inspect_persisted_data.py` (dispatch
+  `CLEANERS[dbms](sgbd_cfg)`), para esvaziar cada SGBD antes de cada repetição
   (medição "a frio").
 
 ### 3.2 Laço de execução
@@ -137,20 +137,20 @@ para cada size em --sizes:
     escolher config (import_config.json vs import_config_combined.json)
     montar overrides --source apontando para os CSVs gerados
     para cada rep em range(--repetitions):
-      para cada backend selecionado:
-        CLEANERS[backend](sgbd_cfg)            # esvazia
+      para cada SGBD selecionado:
+        CLEANERS[dbms](sgbd_cfg)            # esvazia
       collector = MetricsCollector()
       run_import(config, sgbd_config_path, collector=collector,
-                 only=backends, show_data=False, create_schema=True)
+                 only=dbms_names, show_data=False, create_schema=True)
       guardar collector.to_records() rotulado com (size, mode, rep)
-    consolidar: mediana de `seconds` por (backend, entidade, fase) entre as R repetições
+    consolidar: mediana de `seconds` por (dbms, entidade, fase) entre as R repetições
 ```
 
 Observações:
 
-- **Uma importação por repetição** cobre todos os backends selecionados (o `run_import`
-  já itera os SGBDs); o `clean` de todos os backends acontece antes de cada importação.
-- **Mediana**: para cada chave `(backend, entity, phase)`, a mediana de `seconds` entre
+- **Uma importação por repetição** cobre todos os SGBDs selecionados (o `run_import`
+  já itera os SGBDs); o `clean` de todos os SGBDs acontece antes de cada importação.
+- **Mediana**: para cada chave `(dbms, entity, phase)`, a mediana de `seconds` entre
   as R repetições; `rows` é constante entre repetições (mesmo dataset), e `rows_per_second`
   é recomputado a partir da mediana de `seconds`.
 
@@ -159,7 +159,7 @@ Observações:
 - `--sizes 1000,10000,100000` — lista de N (produtos). 1M é opcional/pesado, não default.
 - `--modes multi,combined` (default ambos).
 - `--repetitions 3` (default).
-- `--only postgres,redis,...` — restringe backends (repassado ao `run_import`).
+- `--only postgres,redis,...` — restringe SGBDs (repassado ao `run_import`).
 - `--seed S` — semente do gerador.
 - `--sgbd-config PATH` (default `data/ecommerce/sgbd_config.json`).
 - `--data-dir DIR` (default `data/benchmark/generated`) — onde gerar/achar os grandes.
@@ -170,10 +170,10 @@ Observações:
 Dois artefatos em `--out`, reaproveitando o formato do Plano 2 quando possível:
 
 - **JSON** `benchmark_run_<timestamp>.json`: `{ "metadata": {...ambiente, seed, sizes,
-  modes, repetitions...}, "results": [ {size, mode, backend, entity, phase, rows,
+  modes, repetitions...}, "results": [ {size, mode, dbms, entity, phase, rows,
   median_seconds, rows_per_second} ] }`.
 - **CSV** consolidável `benchmark_results.csv` (append-only, cabeçalho na criação):
-  `timestamp,size,mode,backend,entity,phase,rows,median_seconds,rows_per_second` —
+  `timestamp,size,mode,dbms,entity,phase,rows,median_seconds,rows_per_second` —
   base direta para os gráficos do relatório (size × modo × SGBD × fase).
 
 `metadata` inclui versão do Python, plataforma, semente, e a lista de tamanhos/modos/
@@ -205,7 +205,7 @@ Unitários (sem bancos, entram na suíte de CI):
 - **Equivalência de modos**: `run_import` dry-run sobre o dataset versionado, em multi e
   combinado, produz contagens por entidade idênticas.
 - **Mediana do runner**: a função de agregação, alimentada por coletores stub (sem DB),
-  devolve a mediana correta por `(backend, entity, phase)`.
+  devolve a mediana correta por `(dbms, entity, phase)`.
 - **Smoke do gerador**: dry-run de `run_import` sobre o dataset versionado gerado
   (1k linhas) executa sem erro.
 

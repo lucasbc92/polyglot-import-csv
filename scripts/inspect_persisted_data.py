@@ -27,9 +27,9 @@ from rich.text import Text
 
 DEFAULT_CONFIG = Path("data/ecommerce/import_config.json")
 DEFAULT_DBMS_CONFIG = Path("data/ecommerce/dbms_config.json")
-BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
+DBMS_NAMES = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
 
-_BACKEND_LABEL = {
+_DBMS_LABEL = {
     "postgres": "PostgreSQL",
     "mongodb": "MongoDB",
     "cassandra": "Cassandra",
@@ -39,7 +39,7 @@ _BACKEND_LABEL = {
 
 
 def _load_config(path: Path, dbms_path: Optional[Path] = None) -> Dict[str, Any]:
-    """Load and merge the import + DBMS configs into one backend structure."""
+    """Load and merge the import + DBMS configs into one structure per DBMS."""
     from polyglotimportcsv.config_parser import load_config
 
     return load_config(path, dbms_path)
@@ -47,11 +47,11 @@ def _load_config(path: Path, dbms_path: Optional[Path] = None) -> Dict[str, Any]
 
 def _parse_only(raw: str) -> List[str]:
     if not raw.strip():
-        return list(BACKENDS)
+        return list(DBMS_NAMES)
     chosen = [b.strip().lower() for b in raw.split(",") if b.strip()]
-    unknown = [b for b in chosen if b not in BACKENDS]
+    unknown = [b for b in chosen if b not in DBMS_NAMES]
     if unknown:
-        raise SystemExit(f"Unknown backend(s): {', '.join(unknown)}. Use: {', '.join(BACKENDS)}")
+        raise SystemExit(f"Unknown DBMS: {', '.join(unknown)}. Use: {', '.join(DBMS_NAMES)}")
     return chosen
 
 
@@ -399,23 +399,23 @@ CLEANERS: Dict[str, Callable[[Dict[str, Any]], None]] = {
 }
 
 
-def _run_backends(
+def _run_dbms(
     cfg: Dict[str, Any],
     selected: List[str],
     handlers: Dict[str, Callable[[Dict[str, Any]], None]],
     action_label: str,
 ) -> int:
     failures = 0
-    for backend in selected:
-        block = cfg.get(backend)
+    for dbms in selected:
+        block = cfg.get(dbms)
         if not block:
-            warn(f"skipping {backend} (not in config)")
+            warn(f"skipping {dbms} (not in config)")
             continue
         try:
-            handlers[backend](block)
+            handlers[dbms](block)
         except Exception as e:
             failures += 1
-            section(f"{_BACKEND_LABEL.get(backend, backend)} · ERROR ({action_label})")
+            section(f"{_DBMS_LABEL.get(dbms, dbms)} · ERROR ({action_label})")
             error(f"{type(e).__name__}: {e}")
     return failures
 
@@ -436,7 +436,7 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--only",
         default="",
-        help=f"Comma-separated backends (default: all). Choices: {', '.join(BACKENDS)}",
+        help=f"Comma-separated DBMS (default: all). Choices: {', '.join(DBMS_NAMES)}",
     )
 
 
@@ -474,16 +474,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     title = "Inspect persisted data" if args.command == "inspect" else "Clean databases"
     banner(f"Polyglot Import CSV · {title}", subtitle=str(config_path))
-    step("Backends", ", ".join(selected))
+    step("DBMS", ", ".join(selected))
 
     handlers = INSPECTORS if args.command == "inspect" else CLEANERS
-    failures = _run_backends(cfg, selected, handlers, args.command)
+    failures = _run_dbms(cfg, selected, handlers, args.command)
 
     if failures:
-        error(f"Finished with {failures} backend error(s). Is docker compose up?")
+        error(f"Finished with {failures} DBMS error(s). Is docker compose up?")
         return 1
 
-    success(f"{args.command.capitalize()} completed for {len(selected)} backend(s)")
+    success(f"{args.command.capitalize()} completed for {len(selected)} DBMS")
     return 0
 
 

@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **Compilação:** `cd docs-tcc && latexmk -pdf -interaction=nonstopmode main.tex`. Depois, `grep -n "^!" main.log` e `grep -n "undefined" main.log` precisam voltar vazios. `main.pdf` e os artefatos de build são ignorados pelo git; não os adicione.
-- **Preferências do orientador (obrigatórias):** legenda de figura **abaixo** da figura, com `\caption` e `\label` depois do `\includegraphics`, e a linha `Fonte:` depois da legenda; legenda de tabela acima; toda listagem com frase de introdução; nunca "backend", sempre "SGBD"; **nenhuma prosa sobre versões anteriores do próprio relatório** ("antes o texto dizia…"). A menção ao TCC1 na Tarefa 1 é sobre a história da **ferramenta**, pedida pelo orientador, e não sobre o texto.
+- **Preferências do orientador (obrigatórias):** legenda de figura **abaixo** da figura, com `\caption` e `\label` depois do `\includegraphics`, e a linha `Fonte:` depois da legenda; legenda de tabela acima; toda listagem com frase de introdução; sempre "SGBD", nunca o termo em inglês que o orientador rejeitou; **nenhuma prosa sobre versões anteriores do próprio relatório** ("antes o texto dizia…"). A menção ao TCC1 na Tarefa 1 é sobre a história da **ferramenta**, pedida pelo orientador, e não sobre o texto.
 - **Redação:** português acadêmico do Brasil, sem marcas de texto gerado ("é importante notar", "vale ressaltar", "em suma"). Siga a pontuação e os travessões `---` já usados no capítulo.
 - **Um único domínio de exemplo:** o e-commerce. Nenhum texto novo sugere outros domínios ou cenários.
 - **Não mexer** em números, tabelas ou figuras do Capítulo 6; a Tarefa 1 só acrescenta meia frase ali.

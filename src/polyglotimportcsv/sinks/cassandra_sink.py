@@ -29,8 +29,8 @@ from polyglotimportcsv.row_view import iter_rows
 class CassandraSink:
     """Streams cast batches into Cassandra tables, one table per partition."""
 
-    def __init__(self, backend_cfg: Dict[str, Any], *, session_factory=_default_cassandra_session):
-        conn = backend_cfg.get("connection") or {}
+    def __init__(self, dbms_cfg: Dict[str, Any], *, session_factory=_default_cassandra_session):
+        conn = dbms_cfg.get("connection") or {}
         self.keyspace = conn.get("keyspace", "ecommerce")
         try:
             self._cluster, self._session = session_factory(conn)

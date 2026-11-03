@@ -86,7 +86,7 @@ class BusinessException(Exception):
 
 
 class ConfigError(BusinessException):
-    """Invalid JSON, JSON Schema violation, or backend without declared connection."""
+    """Invalid JSON, JSON Schema violation, or DBMS without declared connection."""
 
 
 class SourceError(BusinessException):
@@ -630,7 +630,7 @@ git commit -m "feat: named source loading with combined-CSV origin slicing"
 
 **Interfaces:**
 - Consumes: `SourceData`/`SOURCE_COLUMN` (Task 4), `select_columns` (Task 3), `cast_frame`/`KIND_TO_DB_TYPE` (Task 2), `MappingError` (Task 1).
-- Produces: `mapping_resolver.BoundEntity` dataclass (`name: str`, `cfg: Dict[str, Any]` with EXPANDED `columns` and without `source`/`csv_columns`/`auto_map` keys, `df: pd.DataFrame` cast to native values, `kinds: Dict[str, str]`); `mapping_resolver.bind_entity_source(entity_name, entity_cfg, sources) -> SourceData`; `mapping_resolver.expand_entity_columns(entity_name, entity_cfg, source) -> Dict[str, Any]`; `mapping_resolver.resolve_backend_entities(backend_cfg, sources, cast_cache=None) -> Dict[str, BoundEntity]`.
+- Produces: `mapping_resolver.BoundEntity` dataclass (`name: str`, `cfg: Dict[str, Any]` with EXPANDED `columns` and without `source`/`csv_columns`/`auto_map` keys, `df: pd.DataFrame` cast to native values, `kinds: Dict[str, str]`); `mapping_resolver.bind_entity_source(entity_name, entity_cfg, sources) -> SourceData`; `mapping_resolver.expand_entity_columns(entity_name, entity_cfg, source) -> Dict[str, Any]`; `mapping_resolver.resolve_dbms_entities(dbms_cfg, sources, cast_cache=None) -> Dict[str, BoundEntity]`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -646,7 +646,7 @@ from polyglotimportcsv.business_exception import MappingError
 from polyglotimportcsv.mapping_resolver import (
     bind_entity_source,
     expand_entity_columns,
-    resolve_backend_entities,
+    resolve_dbms_entities,
 )
 from polyglotimportcsv.sources import SOURCE_COLUMN, SourceData
 
@@ -725,10 +725,10 @@ def test_csv_columns_with_manual_only_raises(sources):
         expand_entity_columns("stock", ecfg, sources["stock"])
 
 
-def test_resolve_backend_entities_casts_and_strips_keys(sources):
+def test_resolve_dbms_entities_casts_and_strips_keys(sources):
     bcfg = {"entities": {"inventory": {"source": "stock", "auto_map": True,
                                        "columns": {"product_id": {"is_key": True}}}}}
-    bound = resolve_backend_entities(bcfg, sources)
+    bound = resolve_dbms_entities(bcfg, sources)
     be = bound["inventory"]
     assert be.name == "inventory"
     assert "source" not in be.cfg and "auto_map" not in be.cfg
@@ -837,15 +837,15 @@ def expand_entity_columns(
     return expanded
 
 
-def resolve_backend_entities(
-    backend_cfg: Dict[str, Any],
+def resolve_dbms_entities(
+    dbms_cfg: Dict[str, Any],
     sources: Dict[str, SourceData],
     cast_cache: Optional[Dict[str, pd.DataFrame]] = None,
 ) -> Dict[str, BoundEntity]:
-    """Bind every entity of one backend and cast its frame to native values."""
+    """Bind every entity of one DBMS and cast its frame to native values."""
     cast_cache = cast_cache if cast_cache is not None else {}
     out: Dict[str, BoundEntity] = {}
-    for ename, ecfg in (backend_cfg.get("entities") or {}).items():
+    for ename, ecfg in (dbms_cfg.get("entities") or {}).items():
         src = bind_entity_source(ename, ecfg, sources)
         cfg = dict(ecfg)
         cfg["columns"] = expand_entity_columns(ename, ecfg, src)
@@ -1044,7 +1044,7 @@ git commit -m "feat: import config schema v2 (sources block, no version field)"
 
 **Interfaces:**
 - Consumes: `BoundEntity` (Task 5), `MappingError` (Task 1).
-- Produces: `validation.BACKENDS` (unchanged tuple) and `validation.validate_backend_entities(backend: str, backend_cfg: Dict[str, Any], bound: Dict[str, BoundEntity]) -> None`. The old `validate_import_config(config, df, kinds)` is DELETED.
+- Produces: `validation.DBMS_NAMES` (unchanged tuple) and `validation.validate_dbms_entities(dbms: str, dbms_cfg: Dict[str, Any], bound: Dict[str, BoundEntity]) -> None`. The old `validate_import_config(config, df, kinds)` is DELETED.
 
 - [ ] **Step 1: Make `resolve_csv_column` 1-based**
 
@@ -1066,14 +1066,14 @@ Update the docstring to `"Resolve csv_column (name or 1-based index) to the actu
 Create `tests/test_validation.py`:
 
 ```python
-"""validate_backend_entities: per-entity columns, filters, keys, relationships."""
+"""validate_dbms_entities: per-entity columns, filters, keys, relationships."""
 
 import pandas as pd
 import pytest
 
 from polyglotimportcsv.business_exception import MappingError
 from polyglotimportcsv.mapping_resolver import BoundEntity
-from polyglotimportcsv.validation import validate_backend_entities
+from polyglotimportcsv.validation import validate_dbms_entities
 
 
 def _be(name, cfg, columns):
@@ -1085,47 +1085,47 @@ def _be(name, cfg, columns):
 def test_unknown_column_raises():
     be = _be("t", {"columns": {"nope": {}}}, ["a", "_source"])
     with pytest.raises(MappingError, match="unknown column"):
-        validate_backend_entities("redis", {}, {"t": be})
+        validate_dbms_entities("redis", {}, {"t": be})
 
 
 def test_source_pseudo_column_is_valid():
     be = _be("t", {"columns": {"_source": {"schema_column": "event_type"}}}, ["a", "_source"])
-    validate_backend_entities("redis", {}, {"t": be})
+    validate_dbms_entities("redis", {}, {"t": be})
 
 
-def test_nested_columns_rejected_for_flat_backend():
+def test_nested_columns_rejected_for_flat_dbms():
     be = _be("t", {"columns": {"outer": {"inner": {}}}}, ["inner", "_source"])
     with pytest.raises(MappingError, match="nested"):
-        validate_backend_entities("postgres", {}, {"t": be})
+        validate_dbms_entities("postgres", {}, {"t": be})
 
 
 def test_filter_on_unknown_column_raises():
     be = _be("t", {"columns": {"a": {}}, "filters": [{"column": "x", "operator": "==", "value": 1}]},
              ["a", "_source"])
     with pytest.raises(MappingError, match="Filter column"):
-        validate_backend_entities("redis", {}, {"t": be})
+        validate_dbms_entities("redis", {}, {"t": be})
 
 
 def test_cassandra_partition_must_exist():
     be = _be("t", {"columns": {"a": {}}, "cassandra_partition": ["missing"]}, ["a", "_source"])
     with pytest.raises(MappingError, match="partition"):
-        validate_backend_entities("cassandra", {}, {"t": be})
+        validate_dbms_entities("cassandra", {}, {"t": be})
 
 
 def test_postgres_relationship_targets_checked():
     frm = _be("orders", {"columns": {"product_id": {}}}, ["product_id", "_source"])
     to = _be("products", {"columns": {"product_id": {"is_key": True}}}, ["product_id", "_source"])
     bcfg = {"relationships": {"r": {"from": "orders", "to": "products", "foreign_key": "product_id"}}}
-    validate_backend_entities("postgres", bcfg, {"orders": frm, "products": to})
+    validate_dbms_entities("postgres", bcfg, {"orders": frm, "products": to})
     bad = {"relationships": {"r": {"from": "orders", "to": "products", "foreign_key": "zzz"}}}
     with pytest.raises(MappingError, match="foreign_key"):
-        validate_backend_entities("postgres", bad, {"orders": frm, "products": to})
+        validate_dbms_entities("postgres", bad, {"orders": frm, "products": to})
 ```
 
 - [ ] **Step 3: Run to verify it fails**
 
 Run: `./.venv/Scripts/python.exe -m pytest tests/test_validation.py -q`
-Expected: FAIL — `ImportError: cannot import name 'validate_backend_entities'`
+Expected: FAIL — `ImportError: cannot import name 'validate_dbms_entities'`
 
 - [ ] **Step 4: Rewrite `src/polyglotimportcsv/validation.py`**
 
@@ -1140,7 +1140,7 @@ from typing import Any, Dict, List, Set
 
 from polyglotimportcsv.business_exception import MappingError
 from polyglotimportcsv.entity_utils import (
-    FLAT_BACKENDS,
+    FLAT_DBMS,
     entity_has_nested_branches,
     iter_leaf_columns,
     resolve_csv_column,
@@ -1148,19 +1148,19 @@ from polyglotimportcsv.entity_utils import (
 )
 from polyglotimportcsv.mapping_resolver import BoundEntity
 
-BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
+DBMS_NAMES = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
 
 
 def _validate_filters(
-    ename: str, backend: str, filters: List[Dict[str, Any]], columns: Set[str]
+    ename: str, dbms: str, filters: List[Dict[str, Any]], columns: Set[str]
 ) -> None:
     for flt in filters or []:
         c = flt.get("column")
         if not c:
-            raise MappingError(f"Entity '{ename}' in '{backend}': filter missing 'column'.")
+            raise MappingError(f"Entity '{ename}' in '{dbms}': filter missing 'column'.")
         if c not in columns:
             raise MappingError(
-                f"Entity '{ename}' in '{backend}': Filter column not found in source: {c}"
+                f"Entity '{ename}' in '{dbms}': Filter column not found in source: {c}"
             )
         op = flt.get("operator")
         if op not in ("==", "!=", ">", "<", ">=", "<=", "in", "not_in", "each"):
@@ -1177,28 +1177,28 @@ def _entity_targets(cfg: Dict[str, Any]) -> Set[str]:
     return {target_field_name(fk, spec) for _, fk, spec in iter_leaf_columns(cfg)}
 
 
-def validate_backend_entities(
-    backend: str, backend_cfg: Dict[str, Any], bound: Dict[str, BoundEntity]
+def validate_dbms_entities(
+    dbms: str, dbms_cfg: Dict[str, Any], bound: Dict[str, BoundEntity]
 ) -> None:
-    """Validate every bound entity (and relationships) of one backend."""
+    """Validate every bound entity (and relationships) of one DBMS."""
     for ename, be in bound.items():
         cols = list(be.df.columns)
         colset = set(cols)
-        if backend in FLAT_BACKENDS and entity_has_nested_branches(be.cfg):
+        if dbms in FLAT_DBMS and entity_has_nested_branches(be.cfg):
             raise MappingError(
-                f"Entity '{ename}' in '{backend}' uses nested columns; "
-                f"only flat column mappings are allowed for this backend."
+                f"Entity '{ename}' in '{dbms}' uses nested columns; "
+                f"only flat column mappings are allowed for this DBMS."
             )
         for _, field_key, spec in iter_leaf_columns(be.cfg):
             try:
                 resolved = resolve_csv_column(field_key, spec, cols)
             except ValueError as e:
-                raise MappingError(f"Entity '{ename}' in '{backend}': {e}") from e
+                raise MappingError(f"Entity '{ename}' in '{dbms}': {e}") from e
             if resolved not in colset:
                 raise MappingError(
-                    f"Entity '{ename}' in '{backend}' references unknown column: {resolved}"
+                    f"Entity '{ename}' in '{dbms}' references unknown column: {resolved}"
                 )
-        _validate_filters(ename, backend, be.cfg.get("filters") or [], colset)
+        _validate_filters(ename, dbms, be.cfg.get("filters") or [], colset)
         for pk in be.cfg.get("cassandra_partition") or []:
             if pk not in colset:
                 raise MappingError(
@@ -1210,8 +1210,8 @@ def validate_backend_entities(
                     f"Cassandra cluster column '{ck}' not in source (entity {ename})."
                 )
 
-    if backend == "postgres":
-        for rname, rspec in (backend_cfg.get("relationships") or {}).items():
+    if dbms == "postgres":
+        for rname, rspec in (dbms_cfg.get("relationships") or {}).items():
             fr, to = rspec.get("from"), rspec.get("to")
             if fr not in bound or to not in bound:
                 raise MappingError(
@@ -1228,8 +1228,8 @@ def validate_backend_entities(
                     f"Relationship '{rname}': references_key '{refk}' not mapped in entity '{to}'."
                 )
 
-    if backend == "neo4j":
-        for rname, rspec in (backend_cfg.get("relationships") or {}).items():
+    if dbms == "neo4j":
+        for rname, rspec in (dbms_cfg.get("relationships") or {}).items():
             if rspec.get("from") not in bound or rspec.get("to") not in bound:
                 raise MappingError(
                     f"Neo4j relationship '{rname}' references unknown node entity."
@@ -1274,7 +1274,7 @@ git commit -m "feat: per-entity validation over bound sources; 1-based csv_colum
 - Modify: `tests/test_runner_registry.py`
 
 **Interfaces:**
-- Produces: `BackendImporterFn.__call__(backend_cfg: Dict[str, Any], entities: Dict[str, BoundEntity], *, dry_run: bool, create_schema: bool) -> List[str]`; `runner.run_import(config_path, *, sgbd_config_path=None, dry_run=False, create_schema=True, only=None, importers=None, source_overrides=None) -> List[str]` — NOTE: no `csv_path` parameter anymore.
+- Produces: `DbmsImporterFn.__call__(dbms_cfg: Dict[str, Any], entities: Dict[str, BoundEntity], *, dry_run: bool, create_schema: bool) -> List[str]`; `runner.run_import(config_path, *, sgbd_config_path=None, dry_run=False, create_schema=True, only=None, importers=None, source_overrides=None) -> List[str]` — NOTE: no `csv_path` parameter anymore.
 
 - [ ] **Step 1: Update the registry test first**
 
@@ -1327,7 +1327,7 @@ NOTE: this passes only after Task 13 migrates `import_config.json`; until then m
 
 ```python
 """
-Backend importer contract (Interface Segregation / Dependency Inversion).
+DBMS importer contract (Interface Segregation / Dependency Inversion).
 
 Concrete importers live in sibling modules; the runner depends only on this
 protocol-shaped callable, not on driver-specific types.
@@ -1340,12 +1340,12 @@ from typing import Any, Dict, List, Protocol
 from polyglotimportcsv.mapping_resolver import BoundEntity
 
 
-class BackendImporterFn(Protocol):
-    """Each backend exposes a module-level ``run_*_import`` matching this shape."""
+class DbmsImporterFn(Protocol):
+    """Each DBMS exposes a module-level ``run_*_import`` matching this shape."""
 
     def __call__(
         self,
-        backend_cfg: Dict[str, Any],
+        dbms_cfg: Dict[str, Any],
         entities: Dict[str, BoundEntity],
         *,
         dry_run: bool,
@@ -1354,13 +1354,13 @@ class BackendImporterFn(Protocol):
         ...
 
 
-ImporterRegistry = Dict[str, BackendImporterFn]
+ImporterRegistry = Dict[str, DbmsImporterFn]
 ```
 
 - [ ] **Step 3: Rewrite `src/polyglotimportcsv/runner.py`**
 
 ```python
-"""Orchestrate source loading, entity resolution, validation, and per-backend import."""
+"""Orchestrate source loading, entity resolution, validation, and per-DBMS import."""
 
 from __future__ import annotations
 
@@ -1372,7 +1372,7 @@ import pandas as pd
 from polyglotimportcsv.config_parser import load_config
 from polyglotimportcsv.console import (
     banner,
-    color_backend_line,
+    color_dbms_line,
     note,
     section,
     step,
@@ -1380,9 +1380,9 @@ from polyglotimportcsv.console import (
 )
 from polyglotimportcsv.importers import default_importer_registry
 from polyglotimportcsv.importers.base import ImporterRegistry
-from polyglotimportcsv.mapping_resolver import resolve_backend_entities
+from polyglotimportcsv.mapping_resolver import resolve_dbms_entities
 from polyglotimportcsv.sources import load_sources
-from polyglotimportcsv.validation import BACKENDS, validate_backend_entities
+from polyglotimportcsv.validation import DBMS_NAMES, validate_dbms_entities
 
 
 def run_import(
@@ -1396,7 +1396,7 @@ def run_import(
     source_overrides: Optional[Dict[str, str]] = None,
 ) -> List[str]:
     """
-    Load config and sources, bind entities, validate, then run configured backends.
+    Load config and sources, bind entities, validate, then run configured DBMS.
 
     Data comes from the config's ``sources`` block (one CSV per entity, or a
     combined CSV with the origin in column 0). ``source_overrides`` remaps a
@@ -1409,8 +1409,8 @@ def run_import(
 
     step("Load config", str(config_path))
     config = load_config(config_path, sgbd_config_path)
-    backends_in_cfg = [b for b in BACKENDS if b in config]
-    note(f"{len(backends_in_cfg)} backend(s) configured: {', '.join(backends_in_cfg)}")
+    dbms_in_cfg = [b for b in DBMS_NAMES if b in config]
+    note(f"{len(dbms_in_cfg)} DBMS configured: {', '.join(dbms_in_cfg)}")
 
     step("Load sources")
     sources = load_sources(
@@ -1436,22 +1436,22 @@ def run_import(
 
     cast_cache: Dict[str, pd.DataFrame] = {}
     log_lines: List[str] = []
-    for backend in BACKENDS:
-        if backend not in config:
+    for dbms in DBMS_NAMES:
+        if dbms not in config:
             continue
-        if only_set and backend not in only_set:
+        if only_set and dbms not in only_set:
             continue
-        fn = registry.get(backend)
+        fn = registry.get(dbms)
         if fn is None:
             continue
-        section(f"Backend · {backend}")
-        bcfg = config[backend]
-        bound = resolve_backend_entities(bcfg, sources, cast_cache)
-        validate_backend_entities(backend, bcfg, bound)
-        backend_lines = fn(bcfg, bound, dry_run=dry_run, create_schema=create_schema)
-        log_lines.extend(backend_lines)
-        for line in backend_lines:
-            print(f"  {color_backend_line(line)}")
+        section(f"DBMS · {dbms}")
+        bcfg = config[dbms]
+        bound = resolve_dbms_entities(bcfg, sources, cast_cache)
+        validate_dbms_entities(dbms, bcfg, bound)
+        dbms_lines = fn(bcfg, bound, dry_run=dry_run, create_schema=create_schema)
+        log_lines.extend(dbms_lines)
+        for line in dbms_lines:
+            print(f"  {color_dbms_line(line)}")
 
     success(f"Finished {mode} — {len(log_lines)} log line(s) from importer(s)")
     return log_lines
@@ -1479,7 +1479,7 @@ git commit -m "feat: sources-driven runner and BoundEntity importer contract"
 
 **Interfaces:**
 - Consumes: `BoundEntity` (Task 5). `flatten_entity_dataframe`, `apply_filters`, `expand_each`, `schema_generator` are all unchanged.
-- Produces: `run_postgres_import(backend_cfg, entities: Dict[str, BoundEntity], *, dry_run, create_schema) -> List[str]` — connection failures raise `ImportExecutionError`.
+- Produces: `run_postgres_import(dbms_cfg, entities: Dict[str, BoundEntity], *, dry_run, create_schema) -> List[str]` — connection failures raise `ImportExecutionError`.
 
 - [ ] **Step 1: Write the failing dry-run test**
 
@@ -1512,7 +1512,7 @@ def test_dry_run_counts_per_entity():
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `./.venv/Scripts/python.exe -m pytest tests/test_postgres_importer_dry_run.py -q`
-Expected: FAIL — current signature takes `(backend_cfg, df, column_kinds, ...)`.
+Expected: FAIL — current signature takes `(dbms_cfg, df, column_kinds, ...)`.
 
 - [ ] **Step 3: Rewrite `run_postgres_import`**
 
@@ -1520,7 +1520,7 @@ Keep imports, `_DEFAULT_INSERT_ORDER`, and `_connect`; add `from polyglotimportc
 
 ```python
 def run_postgres_import(
-    backend_cfg: Dict[str, Any],
+    dbms_cfg: Dict[str, Any],
     entities: Dict[str, "BoundEntity"],
     *,
     dry_run: bool,
@@ -1528,9 +1528,9 @@ def run_postgres_import(
 ) -> List[str]:
     """Execute Postgres import; return log lines."""
     lines: List[str] = []
-    conn_cfg = backend_cfg.get("connection") or {}
-    schema = backend_cfg.get("schema") or "public"
-    relationships = backend_cfg.get("relationships") or {}
+    conn_cfg = dbms_cfg.get("connection") or {}
+    schema = dbms_cfg.get("schema") or "public"
+    relationships = dbms_cfg.get("relationships") or {}
     entity_cfgs = {name: be.cfg for name, be in entities.items()}
 
     if dry_run:
@@ -1626,7 +1626,7 @@ git commit -m "feat: postgres importer consumes BoundEntity frames"
 - Test: `tests/test_doc_kv_importers_dry_run.py` (create)
 
 **Interfaces:**
-- Same pattern as Task 9: `run_mongodb_import(backend_cfg, entities, *, dry_run, create_schema)`, `run_redis_import(...)`; connection failures raise `ImportExecutionError`.
+- Same pattern as Task 9: `run_mongodb_import(dbms_cfg, entities, *, dry_run, create_schema)`, `run_redis_import(...)`; connection failures raise `ImportExecutionError`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1675,14 +1675,14 @@ Expected: FAIL (old signatures).
 
 ```python
 def run_mongodb_import(
-    backend_cfg: Dict[str, Any],
+    dbms_cfg: Dict[str, Any],
     entities: Dict[str, "BoundEntity"],
     *,
     dry_run: bool,
     create_schema: bool,
 ) -> List[str]:
     lines: List[str] = []
-    conn = backend_cfg.get("connection") or {}
+    conn = dbms_cfg.get("connection") or {}
     _ = create_schema
 
     if dry_run:
@@ -1719,14 +1719,14 @@ def run_mongodb_import(
 
 ```python
 def run_redis_import(
-    backend_cfg: Dict[str, Any],
+    dbms_cfg: Dict[str, Any],
     entities: Dict[str, "BoundEntity"],
     *,
     dry_run: bool,
     create_schema: bool,
 ) -> List[str]:
     lines: List[str] = []
-    conn = backend_cfg.get("connection") or {}
+    conn = dbms_cfg.get("connection") or {}
     _ = create_schema  # Redis has no DDL
 
     if dry_run:
@@ -1790,7 +1790,7 @@ git commit -m "feat: mongodb and redis importers consume BoundEntity frames"
 - Test: `tests/test_graph_wide_importers_dry_run.py` (create)
 
 **Interfaces:**
-- `run_cassandra_import(backend_cfg, entities, *, dry_run, create_schema)`; `run_neo4j_import(...)`. Neo4j relationships read rows from the FROM entity's `BoundEntity.df`. Driver/connection failures raise `ImportExecutionError`. `_cassandra_type_for` gains `BOOLEAN -> boolean`.
+- `run_cassandra_import(dbms_cfg, entities, *, dry_run, create_schema)`; `run_neo4j_import(...)`. Neo4j relationships read rows from the FROM entity's `BoundEntity.df`. Driver/connection failures raise `ImportExecutionError`. `_cassandra_type_for` gains `BOOLEAN -> boolean`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1864,14 +1864,14 @@ Replace the function body pattern — signature and every `entities.items()` loo
 
 ```python
 def run_cassandra_import(
-    backend_cfg: Dict[str, Any],
+    dbms_cfg: Dict[str, Any],
     entities: Dict[str, "BoundEntity"],
     *,
     dry_run: bool,
     create_schema: bool,
 ) -> List[str]:
     lines: List[str] = []
-    conn = backend_cfg.get("connection") or {}
+    conn = dbms_cfg.get("connection") or {}
     hosts = conn.get("hosts") or ["127.0.0.1"]
     port = int(conn.get("port", 9042))
     keyspace = conn.get("keyspace", "ecommerce")
@@ -1937,7 +1937,7 @@ then keep the driver-loading block unchanged (only the two `raise BusinessExcept
 
 - [ ] **Step 4: Rewrite `run_neo4j_import`**
 
-Same import swaps. Signature `(backend_cfg, entities, *, dry_run, create_schema)`. In the dry-run block and node loop, swap to `be.df`/`be.kinds`/`be.cfg` exactly as in Step 3. In the relationships loop, the source frame comes from the FROM entity:
+Same import swaps. Signature `(dbms_cfg, entities, *, dry_run, create_schema)`. In the dry-run block and node loop, swap to `be.df`/`be.kinds`/`be.cfg` exactly as in Step 3. In the relationships loop, the source frame comes from the FROM entity:
 
 ```python
         for rname, rspec in (relationships or {}).items():
@@ -1964,7 +1964,7 @@ Same import swaps. Signature `(backend_cfg, entities, *, dry_run, create_schema)
 
 (the inner per-row MERGE loop is unchanged from the current file). Note `to_src` resolves against the FROM frame — the relationship row carries both endpoint ids, as in v1.
 
-Also update `entities = backend_cfg.get("entities") or {}` occurrences: delete them; `entities` is now the parameter, and `relationships = backend_cfg.get("relationships") or {}` stays.
+Also update `entities = dbms_cfg.get("entities") or {}` occurrences: delete them; `entities` is now the parameter, and `relationships = dbms_cfg.get("relationships") or {}` stays.
 
 - [ ] **Step 5: Run tests**
 
@@ -2102,7 +2102,7 @@ def _parse_source_overrides(pairs: Tuple[str, ...]) -> Dict[str, str]:
 @click.option(
     "--only",
     default="",
-    help="Comma-separated backends to run (postgres,redis,mongodb,cassandra,neo4j). Empty = all configured.",
+    help="Comma-separated DBMS to run (postgres,redis,mongodb,cassandra,neo4j). Empty = all configured.",
 )
 @click.option(
     "--source",
@@ -2438,8 +2438,8 @@ def test_dry_run_smoke():
     assert any("postgres" in L for L in lines)
 
 
-def test_dry_run_all_backends():
-    """All 5 backends appear in dry-run output with expected row counts."""
+def test_dry_run_all_dbms():
+    """All 5 DBMS appear in dry-run output with expected row counts."""
     lines = run_import(CFG, dry_run=True)
     text = "\n".join(lines)
     assert "entity orders: 8 row(s)" in text
@@ -2534,7 +2534,7 @@ Expected: ALL tests pass, no xfails left related to the migration.
 
 - [ ] **Step 11: End-to-end check (optional if Docker available)**
 
-Run: `./run_example.sh --dry-run` — expect the banner, per-source row counts (8/8/8/8), and the same entity counts as `test_dry_run_all_backends`. If Docker is running, `./run_example.sh` for the full flow.
+Run: `./run_example.sh --dry-run` — expect the banner, per-source row counts (8/8/8/8), and the same entity counts as `test_dry_run_all_dbms`. If Docker is running, `./run_example.sh` for the full flow.
 
 - [ ] **Step 12: Commit**
 
@@ -2609,5 +2609,5 @@ git commit -m "docs: v2 sources format in READMEs; drop version field from repor
 ## Self-review notes (already applied)
 
 - **Spec coverage:** §2.1→Task 6; §2.2→Task 4; §2.3→Tasks 5/13; §2.4→Tasks 3/5/6; §2.5→Task 2; §2.6→Tasks 4/5/7/13 (cassandra `_source` mapping); §2.7→filters kept in importers, `sgbd_config` untouched; §3 table→Tasks 2/4/5/7/8/9-11; §3.1→Task 12 (`--log-level`, `--show-data`, `--benchmark` belong to Plans 2/3, NOT here); §3.2→Task 1; §6→Task 13; §7→Tasks 1-13 tests + equivalence; §8→Task 14. §4 (rich logging) and §5 (benchmarks) are Plans 2 and 3.
-- **Type consistency:** `BoundEntity(name, cfg, df, kinds)` used identically in Tasks 5, 7, 8, 9, 10, 11; `SourceData(name, df, kinds, file_header)` in Tasks 4, 5; importer signature `(backend_cfg, entities, *, dry_run, create_schema)` in Tasks 8-11; `run_import(config_path, *, ..., source_overrides)` in Tasks 8, 12, 13.
+- **Type consistency:** `BoundEntity(name, cfg, df, kinds)` used identically in Tasks 5, 7, 8, 9, 10, 11; `SourceData(name, df, kinds, file_header)` in Tasks 4, 5; importer signature `(dbms_cfg, entities, *, dry_run, create_schema)` in Tasks 8-11; `run_import(config_path, *, ..., source_overrides)` in Tasks 8, 12, 13.
 - **Known intentional behavior changes vs v1:** `csv_column` integer indices are now 1-based; postgres FK validation checks mapped target names instead of raw CSV headers; MongoDB/Redis/Neo4j receive native-typed values; the CLI lost its positional CSV argument.

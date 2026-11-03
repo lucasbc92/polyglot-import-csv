@@ -2,7 +2,7 @@
 name: software-architecture
 description: >-
   Applies layered architecture, clear module boundaries, SOLID, and dependency
-  inversion for data pipelines and multi-backend tools. Use when designing or
+  inversion for data pipelines and multi-DBMS tools. Use when designing or
   refactoring imports, CLI orchestration, persistence adapters, configuration
   formats, or when the user mentions architecture, coupling, Clean Architecture,
   ports and adapters, or maintainability.
@@ -18,16 +18,16 @@ Use it for **new features**, **refactors**, or **reviews** that touch how code i
 
 1. **Separate concerns**
    - **Parsing / config**: no database drivers (e.g. JSON Schema + CSV reading only).
-   - **Use case / orchestration**: validate inputs, choose backends, call importers through narrow contracts—not concrete driver types everywhere.
+   - **Use case / orchestration**: validate inputs, choose DBMS, call importers through narrow contracts—not concrete driver types everywhere.
    - **Infrastructure**: driver code and SQL/Cypher/CQL live at the edge (importer modules, CLI wiring).
 
 2. **Stable direction of dependencies**
    - Inner layers must not import outer layers.
-   - Prefer **protocols / callables** (e.g. importer registry) so tests and future backends can substitute behavior without editing core orchestration.
+   - Prefer **protocols / callables** (e.g. importer registry) so tests and future DBMS can substitute behavior without editing core orchestration.
 
 3. **SOLID (practical checklist)**
-   - **SRP**: one module per backend; schema DDL generation separate from row insert paths where it helps clarity.
-   - **OCP**: add a backend by registering an importer + config keys, not by scattering `if backend ==` across unrelated files.
+   - **SRP**: one module per DBMS; schema DDL generation separate from row insert paths where it helps clarity.
+   - **OCP**: add a DBMS by registering an importer + config keys, not by scattering `if dbms ==` across unrelated files.
    - **LSP**: importers honor the same contract (same inputs/outputs, same error semantics for “skip vs fail” as documented).
    - **ISP**: small interfaces for what the runner actually needs (import function + config slice), not “god” types.
    - **DIP**: `runner` depends on abstractions (registry of callables / protocol), not on `psycopg2` / `redis` types directly.

@@ -70,7 +70,7 @@ On first encounter of a union entity (source is a `list`), build its
   rule as `_union_source`).
 - Reindex each sample to `data_cols + [_source]` (fill `""`), `pd.concat`,
   `infer_column_kinds(sample[data_cols])`, `kinds[_source]="string"`.
-- Produce `cfg` via `expand_entity_columns` exactly as `resolve_backend_entities`
+- Produce `cfg` via `expand_entity_columns` exactly as `resolve_dbms_entities`
   does; return `EntityBinding(cfg, kinds, source_name="+".join(names))`.
 
 Reading only the first chunk of each source keeps this **bounded** (one chunk ×

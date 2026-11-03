@@ -14,7 +14,7 @@ from polyglotimportcsv import benchmark_data
 from polyglotimportcsv.metrics import MetricsCollector
 from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB
 
-_ALL_BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
+_ALL_DBMS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
 
 _BYTES_PER_MB = 1024 * 1024
 
@@ -162,7 +162,7 @@ def run_matrix(
                 "config_path": config_path,
                 "overrides": _overrides(mode, dpath),
                 "merged": merged,
-                "selected": requested or [b for b in _ALL_BACKENDS if b in merged],
+                "selected": requested or [b for b in _ALL_DBMS if b in merged],
             })
 
     labeled: List[Dict[str, object]] = list(completed or [])
@@ -182,10 +182,10 @@ def run_matrix(
                 key = (cell["size"], cell["mode"], chunk_mb, rep)
                 if key in already_measured:
                     continue
-                for backend in selected:
-                    block = merged.get(backend)
-                    if block is not None and backend in cleaners:
-                        cleaners[backend](block)
+                for dbms in selected:
+                    block = merged.get(dbms)
+                    if block is not None and dbms in cleaners:
+                        cleaners[dbms](block)
                 collector = MetricsCollector()
                 # Measure whole-import peak memory, the figure the chunk size
                 # trades against time.

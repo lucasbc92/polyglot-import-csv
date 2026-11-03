@@ -21,8 +21,8 @@ def _write_csv(path, header, rows):
 class _FakeSink:
     """Records every call the orchestrator makes, without touching a real DB."""
 
-    def __init__(self, backend_cfg=None):
-        self.backend_cfg = backend_cfg
+    def __init__(self, dbms_cfg=None):
+        self.dbms_cfg = dbms_cfg
         self.schema_calls = 0
         self.ensure_calls = []  # partition names, in call order (may repeat if buggy)
         self.batches = {}  # partition -> [len(batch), ...] in flush order
@@ -450,7 +450,7 @@ def test_run_stream_import_records_one_write_metric_per_dbms(tmp_path):
     )
 
     recs = collector.to_records()
-    assert [(r["backend"], r["entity"], r["phase"], r["rows"]) for r in recs] == [
+    assert [(r["dbms"], r["entity"], r["phase"], r["rows"]) for r in recs] == [
         ("postgres", "*", "write", sum(counts.written["postgres"].values())),
         ("neo4j", "*", "write", sum(counts.written["neo4j"].values())),
     ]

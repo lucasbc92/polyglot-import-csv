@@ -58,7 +58,7 @@ Arquivo: [`docs-tcc/LucasBuenoCesario-PolyglotImportCSV-Report-TCC1.md`](docs-tc
 Ainda em [`docs-tcc/LucasBuenoCesario-PolyglotImportCSV-Report-TCC1.md`](docs-tcc/LucasBuenoCesario-PolyglotImportCSV-Report-TCC1.md):
 
 - **Linha 129** — adicionar citação Neal Ford: `[@ford2008productive]`
-- **§4.4** — adicionar parágrafo com evidência de execução dry-run (tabela com contagens por entidade/backend, gerada após rodar o script de exemplo)
+- **§4.4** — adicionar parágrafo com evidência de execução dry-run (tabela com contagens por entidade/SGBD, gerada após rodar o script de exemplo)
 - **Seção "Considerações Finais"** — nova seção (½–1 pág.) inserida entre §5 e o bloco `\postextual`, cobrindo: contribuições do TCC I, limitações do protótipo e ponte para o TCC II
 
 ---

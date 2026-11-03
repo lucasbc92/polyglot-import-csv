@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Conteúdo em português, frases curtas, sem parágrafos nos slides; nunca "backend", sempre "SGBD".
+- Conteúdo em português, frases curtas, sem parágrafos nos slides; sempre "SGBD", nunca o termo em inglês que o orientador rejeitou.
 - Sem "cara de IA": nada de autoelogio ("inovador", "robusto", "poderoso") nem travessões em série.
 - Vocabulário idêntico ao relatório: "ingênua (*naive*)" × "em lote (*batch*)"; "multifonte" × "combinado"; "materialização" × "fluxo (*streaming*)"; "arquivo de importação" e "arquivo de conexão"; QP1–QP6.
 - Todo número sai de `docs-tcc/chapters/ch6avaliacao.tex` (v2.3), com a campanha declarada quando houver comparação de tempo ou memória; nunca misturar campanhas com e sem instrumentação de memória na mesma comparação.
@@ -57,7 +57,7 @@
   - Ambiente `painel`: `\begin{painel}{<título>}{<subtítulo>} ... \end{painel}`. Caixa (tcolorbox) com borda fina `ufscborda`, título em `ufscazul` negrito e subtítulo em cinza.
   - `\destaque{<texto>}`: `ufscazul` + negrito.
   - Estilos de listings `jsonslide` e `bashslide`: mono, `\scriptsize` ou maior, com `literate` para á é í ó ú â ê ô ã õ ç (minúsculas e maiúsculas).
-  - `bash verificar.sh <corpo> <cartas> [página ...]`. Compila com `latexmk -pdf -interaction=nonstopmode -halt-on-error apresentacao.tex`. Falha (exit 1) se a compilação falhar; se `FECHAMENTO-NUMERO` ≠ `<corpo>`; se o número de `\begin{frame}` em `secoes/6-cartas.tex` ≠ `<cartas>`; se `backend`, `\tiny`, `\trans`, `\movie` ou `\sound` aparecerem em `apresentacao.tex`, `beamerthemeufsc.sty` ou `secoes/*.tex` (sem diferenciar maiúsculas em "backend"); se o log tiver `Overfull \hbox` ou `Overfull \vbox`. Renderiza cada `[página]` pedida com `pdftoppm -png -r 80 -f P -l P` em `render/pagina-P.png`. Imprime `OK corpo=<n> cartas=<m>` no fim.
+  - `bash verificar.sh <corpo> <cartas> [página ...]`. Compila com `latexmk -pdf -interaction=nonstopmode -halt-on-error apresentacao.tex`. Falha (exit 1) se a compilação falhar; se `FECHAMENTO-NUMERO` ≠ `<corpo>`; se o número de `\begin{frame}` em `secoes/6-cartas.tex` ≠ `<cartas>`; se o termo em inglês que o orientador rejeitou, `\tiny`, `\trans`, `\movie` ou `\sound` aparecerem em `apresentacao.tex`, `beamerthemeufsc.sty` ou `secoes/*.tex` (sem diferenciar maiúsculas nesse termo); se o log tiver `Overfull \hbox` ou `Overfull \vbox`. Renderiza cada `[página]` pedida com `pdftoppm -png -r 80 -f P -l P` em `render/pagina-P.png`. Imprime `OK corpo=<n> cartas=<m>` no fim.
 - Geometria do cabeçalho e do rodapé (do mockup aprovado; L = largura do slide, 160 mm em 16:9):
 
 ```

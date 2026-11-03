@@ -11,7 +11,7 @@ ser feitas uma única vez.
 
 Regras de redação que valem para todo o trabalho (preferências do orientador):
 legendas de figura abaixo e de tabela acima; "Fonte:" sempre abaixo; toda
-listagem com frase de introdução; nada de "backend", sempre SGBD; **nenhuma
+listagem com frase de introdução; sempre SGBD, nunca o termo em inglês que o orientador rejeitou; **nenhuma
 prosa sobre versões anteriores do próprio relatório**. A menção ao TCC1 no
 item 5 é sobre a história da **ferramenta**, pedida explicitamente pelo
 orientador, e não sobre versões do texto.

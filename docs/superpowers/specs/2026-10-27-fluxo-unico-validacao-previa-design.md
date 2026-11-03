@@ -8,7 +8,7 @@
 
 A revisão final dos slides da defesa encontrou uma afirmação falsa sobre o modo padrão da ferramenta, o fluxo (*streaming*). O relatório v2.3 (§4.2.4/§4.3) e os slides dizem que, se a validação falhar, nada é gravado. No código, porém, a camada 3 da validação (colunas e chaves conferidas contra os CSVs) não roda antes da gravação no fluxo:
 
-- `stream_runner.run_stream_import` nunca chama `validate_backend_entities`;
+- `stream_runner.run_stream_import` nunca chama `validate_dbms_entities`;
 - uma coluna inexistente vira `None` no MongoDB/Neo4j;
 - a mesma coluna inexistente gera `KeyError` no meio da carga no PostgreSQL/Cassandra, depois que outros SGBDs já gravaram.
 
@@ -86,7 +86,7 @@ O mesmo número de linhas ocupa de 3 a 17 MB. Por isso o bloco é definido em MB
   - **coleta erros.** Cada tipo de erro é reportado com contagem e até 5 exemplos, com arquivo, linha, coluna e valor (o limite de 5 é escolha minha);
   - **produz** as contagens por entidade/partição/relacionamento, iguais às da gravação por construção.
 - **Erros da camada 3** (a importação para antes de gravar):
-  - **Pelos cabeçalhos:** tudo o que `validate_backend_entities` confere hoje:
+  - **Pelos cabeçalhos:** tudo o que `validate_dbms_entities` confere hoje:
     - coluna mapeada inexistente;
     - coluna de filtro inexistente;
     - coluna de partição/agrupamento do Cassandra inexistente;
@@ -111,7 +111,7 @@ O mesmo número de linhas ocupa de 3 a 17 MB. Por isso o bloco é definido em MB
   - linhas excluídas por filtros;
   - entidades com 0 linhas (continuam como aviso);
   - valores de origem do CSV combinado que nenhuma entidade consome (aparecem no resumo, com contagem; escolha minha).
-- **Leitura de gravação:** é o fluxo atual (um *sink* por SGBD, na ordem de `BACKENDS`), com três diferenças:
+- **Leitura de gravação:** é o fluxo atual (um *sink* por SGBD, na ordem de `DBMS_NAMES`), com três diferenças:
   - usa os tipos da leitura de inferência em vez de inferir pelo primeiro bloco;
   - grava em lotes de `--batch-size`;
   - confere no resumo final as contagens gravadas contra as da leitura de validação. Como as duas usam o mesmo código, uma diferença só aparece por defeito da ferramenta; ela vira aviso, não falha, porque o que já foi gravado não se desfaz (escolha minha).
@@ -186,7 +186,7 @@ O mesmo número de linhas ocupa de 3 a 17 MB. Por isso o bloco é definido em MB
 - Qualquer número no relatório ou nos slides que não venha da campanha nova (ou, para o histórico, da v2.3), ou que misture campanhas com e sem instrumentação de memória.
 - Afirmação no relatório ou nos slides que o código não sustenta. Cada afirmação sobre comportamento é conferida no código.
 - Texto que explique o histórico de versões do próprio relatório (o orientador não gosta disso). A materialização entra como etapa técnica avaliada, não como "versões anteriores do texto diziam".
-- "backend" em qualquer texto em português; sempre "SGBD".
+- O termo em inglês que o orientador rejeitou em qualquer texto em português; sempre "SGBD".
 
 ## Restrições
 
@@ -199,7 +199,7 @@ O mesmo número de linhas ocupa de 3 a 17 MB. Por isso o bloco é definido em MB
   - trechos de JSON terminam em `...`;
   - jargão definido no primeiro uso;
   - partes de cada comando explicadas;
-  - SGBD, nunca "backend".
+  - SGBD, nunca o termo em inglês que o orientador rejeitou.
 - Git: commits em português com o *trailer* `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`, push após cada commit, comandos com prefixo `rtk`.
 - READMEs e documentos de uso (`README.md`, `docs/ARCHITECTURE.md`, `benchmarks/README.md`, `data/ecommerce/README.md`, scripts de exemplo e o *completion* do bash) sem `--execution` e com as opções novas. Arquivos históricos (`docs/releases/v1.0.0.md`, resultados antigos em `benchmarks/`) ficam como estão.
 

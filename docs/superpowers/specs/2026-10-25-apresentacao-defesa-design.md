@@ -76,7 +76,7 @@ adequado, com destaque discreto para palavras-chave; cores discretas; figuras co
 apresentadas aos poucos; ~1 minuto por slide; slides extras ("cartas na manga") depois do
 último; demonstração só do que certamente funciona, senão capturas de tela.
 
-**Preferências do orientador já conhecidas:** nunca "backend" — sempre "SGBD"; definir sigla
+**Preferências do orientador já conhecidas:** sempre "SGBD", nunca o termo em inglês que o orientador rejeitou; definir sigla
 ou termo técnico no primeiro uso; trechos de JSON parciais terminam em `...`; tabelas com
 título acima, figuras com legenda abaixo, e "Fonte:" quando a figura ou tabela vier de
 outro trabalho.
@@ -260,6 +260,6 @@ ferramenta gera a escrita específica de cada SGBD (resolve); valida antes e ofe
 3. Os slides 1 e 12, renderizados em PNG (`pdftoppm`), conferem visualmente com o mockup
    aprovado: corte diagonal, brasão no canto branco sem linha embaixo, rodapé azul.
 4. Todos os números conferidos um a um contra o `ch6avaliacao.tex` da v2.3.
-5. Nenhuma ocorrência de "backend"; nenhuma frase longa (o construtor revisa slide a slide).
+5. Nenhuma ocorrência do termo em inglês que o orientador rejeitou; nenhuma frase longa (o construtor revisa slide a slide).
 6. O PDF de entrega versionado e enviado ao remoto.
 7. O ensaio de tempo (≤ 30 min, alvo 25) é responsabilidade do autor.

@@ -188,7 +188,7 @@ que em série daria cerca de 10 s com cinco SGBDs fora.
 
 ### 5.4 Dicas de inicialização
 
-`start_hints(down, dbms_cfg, dbms_config_dir) -> List[str]`, na ordem de `BACKENDS`:
+`start_hints(down, dbms_cfg, dbms_config_dir) -> List[str]`, na ordem de `DBMS_NAMES`:
 
 - `command`: o texto literal.
 - `compose`: SGBDs com o **mesmo arquivo** (caminho absoluto resolvido) viram um
@@ -216,7 +216,7 @@ def check_dbms(targets, dbms_cfg, dbms_config_dir, probe=probe) -> DbmsCheckRepo
 ```
 
 `targets` são os DBMS que a importação usaria: os presentes no import config,
-filtrados por `--only`, na ordem de `BACKENDS`.
+filtrados por `--only`, na ordem de `DBMS_NAMES`.
 
 ## 6. Fase 2 — CLI e runner
 

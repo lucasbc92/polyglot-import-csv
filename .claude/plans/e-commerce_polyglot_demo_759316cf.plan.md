@@ -1,9 +1,9 @@
 ---
 name: E-commerce polyglot demo
-overview: Redesign `import_config.json` to map the thesis's 5 e-commerce use cases (section 2.1) to the 5 database backends, run the tool against Docker, and verify data in each database as end-to-end proof.
+overview: Redesign `import_config.json` to map the thesis's 5 e-commerce use cases (section 2.1) to the 5 database DBMS, run the tool against Docker, and verify data in each database as end-to-end proof.
 todos:
   - id: config-rewrite
-    content: Rewrite import_config.json with the 5-backend thesis mapping (orders/inventory/catalog/cart+session/activity-log/recommendation-graph)
+    content: Rewrite import_config.json with the 5-DBMS thesis mapping (orders/inventory/catalog/cart+session/activity-log/recommendation-graph)
     status: completed
   - id: neo4j-fix
     content: Generalize Neo4j importer relationship MERGE key instead of hardcoded order_number
@@ -37,7 +37,7 @@ The thesis (section 2.1, lines 107-111 of `_docs/polyglot-import-csv.md`) define
 
 The source CSV is [`data/ecommerce/ecommerce_join.csv`](data/ecommerce/ecommerce_join.csv) (32 data rows, 4 action types: `stock`, `purchase`, `select_product`, `add_to_cart`). It already has flat columns for all 5 use cases -- no CSV changes needed.
 
-## Proposed column-to-backend mapping
+## Proposed column-to-DBMS mapping
 
 ```mermaid
 flowchart LR

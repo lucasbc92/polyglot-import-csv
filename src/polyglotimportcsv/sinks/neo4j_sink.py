@@ -88,8 +88,8 @@ def relationship_columns(
 class Neo4jSink:
     """Streams cast batches into Neo4j nodes and relationships, one label/type per partition."""
 
-    def __init__(self, backend_cfg: Dict[str, Any], *, driver_factory=_default_neo4j_driver):
-        conn = backend_cfg.get("connection") or {}
+    def __init__(self, dbms_cfg: Dict[str, Any], *, driver_factory=_default_neo4j_driver):
+        conn = dbms_cfg.get("connection") or {}
         database = conn.get("database") or None
         try:
             driver = driver_factory(conn)

@@ -4,7 +4,7 @@
 
 **Goal:** Add a deterministic synthetic e-commerce dataset generator and a benchmark runner that measures import throughput across sizes, input modes, and SGBDs.
 
-**Architecture:** Pure, testable logic lives in the `src/polyglotimportcsv/` package (`benchmark_data.py` — generation; `benchmark_results.py` — median/consolidation; `benchmark_runner.py` — matrix orchestration with dependency injection). Two thin `scripts/` CLIs wrap them (`generate_benchmark_data.py`, `run_benchmarks.py`). The runner reuses the Plan-2 seam `run_import(..., collector=MetricsCollector())` for measurement and the per-backend `CLEANERS` from `scripts/inspect_persisted_data.py` for cold-start cleaning — injected as a parameter so `src` never imports `scripts`.
+**Architecture:** Pure, testable logic lives in the `src/polyglotimportcsv/` package (`benchmark_data.py` — generation; `benchmark_results.py` — median/consolidation; `benchmark_runner.py` — matrix orchestration with dependency injection). Two thin `scripts/` CLIs wrap them (`generate_benchmark_data.py`, `run_benchmarks.py`). The runner reuses the Plan-2 seam `run_import(..., collector=MetricsCollector())` for measurement and the per-SGBD `CLEANERS` from `scripts/inspect_persisted_data.py` for cold-start cleaning — injected as a parameter so `src` never imports `scripts`.
 
 **Tech Stack:** Python ≥3.9, stdlib `random`/`csv`/`uuid`/`statistics` (no new dependency), pandas (already present via the pipeline), pytest.
 
@@ -759,9 +759,9 @@ git commit -m "feat: generator CLI + committed 1k reference dataset (both modes)
 - Test: `tests/test_benchmark_results.py`
 
 **Interfaces:**
-- Consumes: labeled run dicts of shape `{"size": int, "mode": str, "repetition": int, "records": List[dict]}` where each record is a `PhaseMetric.to_record()` (`backend`, `entity`, `phase`, `rows`, `seconds`, `rows_per_second`).
+- Consumes: labeled run dicts of shape `{"size": int, "mode": str, "repetition": int, "records": List[dict]}` where each record is a `PhaseMetric.to_record()` (`dbms`, `entity`, `phase`, `rows`, `seconds`, `rows_per_second`).
 - Produces:
-  - `median_results(labeled_runs: List[Dict[str, object]]) -> List[Dict[str, object]]` — median `seconds` per `(size, mode, backend, entity, phase)`; `rows_per_second` recomputed from the median.
+  - `median_results(labeled_runs: List[Dict[str, object]]) -> List[Dict[str, object]]` — median `seconds` per `(size, mode, dbms, entity, phase)`; `rows_per_second` recomputed from the median.
   - `write_consolidated(results, metadata, out_dir="benchmarks") -> Tuple[Path, Path]` — writes `benchmark_run_<timestamp>.json` and appends `benchmark_results.csv`.
 
 - [ ] **Step 1: Write the failing test**
@@ -781,7 +781,7 @@ def _run(size, mode, rep, seconds):
     return {
         "size": size, "mode": mode, "repetition": rep,
         "records": [{
-            "backend": "postgres", "entity": "products", "phase": "write",
+            "dbms": "postgres", "entity": "products", "phase": "write",
             "rows": 100, "seconds": seconds, "rows_per_second": 100 / seconds,
         }],
     }
@@ -793,7 +793,7 @@ def test_median_across_repetitions():
     assert len(results) == 1
     r = results[0]
     assert r["size"] == 1000 and r["mode"] == "multi"
-    assert r["backend"] == "postgres" and r["entity"] == "products" and r["phase"] == "write"
+    assert r["dbms"] == "postgres" and r["entity"] == "products" and r["phase"] == "write"
     assert r["rows"] == 100
     assert r["median_seconds"] == 0.3
     assert abs(r["rows_per_second"] - 100 / 0.3) < 1e-9
@@ -849,13 +849,13 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 _RESULT_FIELDS = (
-    "timestamp", "size", "mode", "backend", "entity", "phase",
+    "timestamp", "size", "mode", "dbms", "entity", "phase",
     "rows", "median_seconds", "rows_per_second",
 )
 
 
 def median_results(labeled_runs: List[Dict[str, object]]) -> List[Dict[str, object]]:
-    """Median ``seconds`` per ``(size, mode, backend, entity, phase)``.
+    """Median ``seconds`` per ``(size, mode, dbms, entity, phase)``.
 
     ``rows`` is constant across repetitions (same dataset); ``rows_per_second``
     is recomputed from the median.
@@ -864,7 +864,7 @@ def median_results(labeled_runs: List[Dict[str, object]]) -> List[Dict[str, obje
     order: List[Tuple] = []
     for run in labeled_runs:
         for rec in run["records"]:
-            key = (run["size"], run["mode"], rec["backend"], rec["entity"], rec["phase"])
+            key = (run["size"], run["mode"], rec["dbms"], rec["entity"], rec["phase"])
             if key not in groups:
                 groups[key] = {"rows": rec["rows"], "seconds": []}
                 order.append(key)
@@ -872,12 +872,12 @@ def median_results(labeled_runs: List[Dict[str, object]]) -> List[Dict[str, obje
 
     results: List[Dict[str, object]] = []
     for key in order:
-        size, mode, backend, entity, phase = key
+        size, mode, dbms, entity, phase = key
         g = groups[key]
         med = statistics.median(g["seconds"])
         rps = (g["rows"] / med) if med > 0 else None
         results.append({
-            "size": size, "mode": mode, "backend": backend,
+            "size": size, "mode": mode, "dbms": dbms,
             "entity": entity, "phase": phase, "rows": g["rows"],
             "median_seconds": med, "rows_per_second": rps,
         })
@@ -1044,7 +1044,7 @@ from typing import Callable, Dict, Iterable, List, Optional
 from polyglotimportcsv import benchmark_data
 from polyglotimportcsv.metrics import MetricsCollector
 
-_ALL_BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
+_ALL_DBMS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
 
 # mode -> (import config filename, combined source name or None)
 _MODE_CONFIG = {
@@ -1101,12 +1101,12 @@ def run_matrix(
             dpath = _ensure_dataset(data_dir, size, seed, mode, generate)
             overrides = _overrides(mode, dpath)
             merged = load_cfg(config_path, sgbd_config_path)
-            selected = requested or [b for b in _ALL_BACKENDS if b in merged]
+            selected = requested or [b for b in _ALL_DBMS if b in merged]
             for rep in range(repetitions):
-                for backend in selected:
-                    block = merged.get(backend)
-                    if block is not None and backend in cleaners:
-                        cleaners[backend](block)
+                for dbms in selected:
+                    block = merged.get(dbms)
+                    if block is not None and dbms in cleaners:
+                        cleaners[dbms](block)
                 collector = MetricsCollector()
                 importer(
                     config_path,
@@ -1136,7 +1136,7 @@ Expected: PASS (2 tests).
 """CLI: run the import benchmark matrix over live databases (spec §3).
 
 Prerequisite: the databases must already be up (e.g. `docker compose up --wait`
-or via run_example.sh). This script cleans each backend before every import so
+or via run_example.sh). This script cleans each DBMS before every import so
 each measurement is a cold load.
 """
 
@@ -1156,7 +1156,7 @@ from polyglotimportcsv.config_parser import load_config
 from polyglotimportcsv.metrics import environment_metadata
 from polyglotimportcsv.runner import run_import
 
-_ALL_BACKENDS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
+_ALL_DBMS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
 
 
 def _parse_int_list(raw: str) -> List[int]:
@@ -1176,7 +1176,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--repetitions", type=int, default=3,
                         help="Runs per (size, mode); the median is reported (default: 3).")
     parser.add_argument("--only", default="",
-                        help=f"Comma-separated backends (default: all). Choices: {', '.join(_ALL_BACKENDS)}.")
+                        help=f"Comma-separated DBMS (default: all). Choices: {', '.join(_ALL_DBMS)}.")
     parser.add_argument("--seed", type=int, default=42, help="Generator seed (default: 42).")
     parser.add_argument("--sgbd-config", type=Path, default=Path("data/ecommerce/sgbd_config.json"))
     parser.add_argument("--config-dir", type=Path, default=Path("data/ecommerce"),
@@ -1269,7 +1269,7 @@ import is preceded by a clean, so every measurement is a cold load:
       --modes multi,combined --repetitions 3
 
 Results land in `benchmarks/`: a `benchmark_run_<timestamp>.json` plus an
-append-only `benchmark_results.csv` (`size,mode,backend,entity,phase,rows,
+append-only `benchmark_results.csv` (`size,mode,dbms,entity,phase,rows,
 median_seconds,rows_per_second`) for the report graphs.
 ```
 
@@ -1297,7 +1297,7 @@ precedida de uma limpeza, então cada medição é uma carga a frio:
       --modes multi,combined --repetitions 3
 
 Os resultados vão para `benchmarks/`: um `benchmark_run_<timestamp>.json` e um
-`benchmark_results.csv` append-only (`size,mode,backend,entity,phase,rows,
+`benchmark_results.csv` append-only (`size,mode,dbms,entity,phase,rows,
 median_seconds,rows_per_second`) para os gráficos do relatório.
 ```
 

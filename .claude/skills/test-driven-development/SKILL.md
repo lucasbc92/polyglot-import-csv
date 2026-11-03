@@ -28,7 +28,7 @@ Use it whenever behavior is **non-trivial**, **easy to regress**, or **touches e
    - **Config**: invalid schema keys, missing files, happy path minimal config (`tests/test_config_parser.py`).
    - **Filters / materialization**: pure functions—table-driven cases, edge strings, empty rows.
    - **Validation / dry-run**: orchestration decisions without connecting to DBs (`tests/test_validation_dry_run.py`).
-   - **Runner**: injected importer registry executes selected backends and propagates failures predictably.
+   - **Runner**: injected importer registry executes selected DBMS and propagates failures predictably.
 
 ## TDD loop (recommended)
 

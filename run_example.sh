@@ -15,11 +15,11 @@
 #   --dbms-config PATH      DBMS connection JSON config (default: data/ecommerce/dbms_config.json)
 #   --dry-run               Validate only (no Docker, no import)
 #   --import                Real import (skip dry-run unless also passed)
-#   --clean                 Empty all configured backends
+#   --clean                 Empty all configured DBMS
 #   --inspect               Log persisted data after other steps
 #   --no-docker             Do not start/wait for Docker (assume DBs already reachable)
 #   --fresh-start           First-time run: down -v, remove images, pull, up --wait, then default flow
-#   --only BACKENDS         Comma-separated backends (postgres,redis,...)
+#   --only DBMS             Comma-separated DBMS (postgres,redis,...)
 #   --log-file PATH         Write all output to this log file (default: logs/run_example_*.log)
 #   --no-log                Do not write a log file
 #   -h, --help              Show this help
@@ -177,9 +177,9 @@ import json, sys
 order = ["postgres", "redis", "mongodb", "cassandra", "neo4j"]
 with open(sys.argv[1], encoding="utf-8") as f:
     cfg = json.load(f)
-for backend in order:
-    if backend in cfg:
-        print(backend)
+for dbms in order:
+    if dbms in cfg:
+        print(dbms)
 PYEOF
 )
 # Strip stray carriage returns / whitespace (Git Bash / Windows line endings).

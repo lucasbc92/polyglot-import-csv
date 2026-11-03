@@ -77,7 +77,7 @@ código (dry-run real, pytest, script de checagem de schema/validação).
 3. **`ImporterRegistry` / inversão de dependência** (importers injetáveis; base do
    teste sem I/O real; `docs/ARCHITECTURE.md`). É uma decisão de arquitetura
    central da ferramenta e mereceria uma subseção no cap. 4.
-4. **Semântica de idempotência por backend**: PostgreSQL `ON CONFLICT DO NOTHING`
+4. **Semântica de idempotência por SGBD**: PostgreSQL `ON CONFLICT DO NOTHING`
    + dedupe `keep="last"`; Neo4j `MERGE`; Redis `SET` (sobrescreve); MongoDB
    `insert_many` **duplica documentos** em reexecução. Excelente material de
    discussão poliglota que o texto não cobre.

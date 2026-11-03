@@ -43,7 +43,7 @@ sources once (I/O, not memory).
 The split from Plan 2 is preserved. In `run_stream_import`, after the node loop
 for a DBMS:
 
-- Skip unless `backend_cfg` has `relationships` **and** the sink exposes the
+- Skip unless `dbms_cfg` has `relationships` **and** the sink exposes the
   capability: `write_rels = getattr(sink, "write_relationships", None)`. The
   other four sinks don't define it and are untouched (no `DbmsSink` protocol
   bloat; Postgres FKs stay `close()`-time DDL).

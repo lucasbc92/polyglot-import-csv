@@ -21,7 +21,7 @@
 
 | Dimensão | Status | Nota (0–10) |
 |----------|--------|-------------|
-| **Código (protótipo)** | Funcional, 5 backends, JSON Schema, CLI, 29 testes | **8** |
+| **Código (protótipo)** | Funcional, 5 SGBDs, JSON Schema, CLI, 29 testes | **8** |
 | **Relatório (conteúdo)** | Capítulos 1–5 preenchidos, refs recentes, figuras | **7,5** |
 | **Relatório (consistência)** | Contradições metodologia vs cap. 4, comentários obsoletos | **5,5** |
 | **Evidência experimental** | Dry-run testado; import real pouco documentado | **4** |
@@ -36,7 +36,7 @@
 
 - Arquitetura em camadas: CLI → `runner` → validação → importadores injetáveis.
 - JSON Schema embutido + validação em duas fases (schema + CSV).
-- Cinco backends no mesmo CSV e-commerce: PostgreSQL, Redis, MongoDB, Cassandra, Neo4j.
+- Cinco SGBDs no mesmo CSV e-commerce: PostgreSQL, Redis, MongoDB, Cassandra, Neo4j.
 - Modo `--dry-run` para demonstração sem infraestrutura.
 - 29 testes `pytest` passando.
 
@@ -180,7 +180,7 @@ O relatório descreve com fidelidade o pipeline `load_config` → `load_csv` →
 |------|--------|
 | `run_example.sh` | Criado |
 | Correções P0 no relatório | Feitas |
-| §4.4.1 tabela dry-run (32 linhas CSV; contagens por backend) | Feita |
+| §4.4.1 tabela dry-run (32 linhas CSV; contagens por SGBD) | Feita |
 | Considerações finais | Feitas |
 | Citação `[@ford2008productive]` | Feita |
 | `references.bib` + SGPD | Feitos |
@@ -190,7 +190,7 @@ O relatório descreve com fidelidade o pipeline `load_config` → `load_csv` →
 
 ### Contagens do dry-run (cenário e-commerce)
 
-| Backend | Destino | Registros |
+| SGBD | Destino | Registros |
 |---------|---------|-----------|
 | PostgreSQL | categories, products, inventory, orders | 8 cada |
 | MongoDB | product_catalog | 8 documentos |

@@ -4,7 +4,7 @@
 
 **Goal:** Replace the hand-rolled ANSI console layer with a `rich`-based logging/reporting stack: leveled terminal output (`--log-level`), an always-DEBUG plain-text session file, a 50-row data-dump threshold with `--show-data`/`--no-data`, live progress bars, an always-on `MetricsCollector`, and `--benchmark` output files (spec §4 + CLI additions from §3.1 of `docs/superpowers/specs/2026-07-08-tcc2-import-modes-design.md`).
 
-**Architecture:** A new `reporting.py` module owns two output channels: (1) Python `logging` with a `RichHandler` on the terminal (filtered by `--log-level`) plus a plain-text `StreamHandler` on the session file (always DEBUG), and (2) a `print_rich()` helper that renders rich renderables (banners, JSON row dumps, tables, progress) to the terminal console and, in parallel, to a no-color file console sharing the same file handle. A new `metrics.py` holds `MetricsCollector` plus a module-level "current collector" so importers keep their frozen signature `(backend_cfg, entities, *, dry_run, create_schema) -> List[str]` and record phases via `metrics.timed_phase(...)` no-op-safe helpers. `console.py` is deleted; `cli.py`, `runner.py`, and `scripts/inspect_persisted_data.py` migrate to `reporting.py`.
+**Architecture:** A new `reporting.py` module owns two output channels: (1) Python `logging` with a `RichHandler` on the terminal (filtered by `--log-level`) plus a plain-text `StreamHandler` on the session file (always DEBUG), and (2) a `print_rich()` helper that renders rich renderables (banners, JSON row dumps, tables, progress) to the terminal console and, in parallel, to a no-color file console sharing the same file handle. A new `metrics.py` holds `MetricsCollector` plus a module-level "current collector" so importers keep their frozen signature `(dbms_cfg, entities, *, dry_run, create_schema) -> List[str]` and record phases via `metrics.timed_phase(...)` no-op-safe helpers. `console.py` is deleted; `cli.py`, `runner.py`, and `scripts/inspect_persisted_data.py` migrate to `reporting.py`.
 
 **Tech Stack:** Python >= 3.9, `rich` (new dependency), `click`, `pandas`, `pytest`.
 
@@ -15,7 +15,7 @@
 - `--benchmark` writes `benchmarks/benchmark_<timestamp>.json` plus a consolidatable CSV (`benchmarks/benchmark_history.csv`) with environment metadata: Python version, platform, config path, per-source row counts (spec §4.4).
 - Progress bars appear only for entities **above** the dump threshold and only when stdout is a terminal (spec §4.4).
 - DEBUG logs statements/templates and batch counts — **never per-row data values** (the session file must stay bounded at benchmark volumes).
-- Importer contract is frozen: `(backend_cfg, entities: Dict[str, BoundEntity], *, dry_run, create_schema) -> List[str]`. Metrics/progress reach importers via module-level helpers, not signature changes.
+- Importer contract is frozen: `(dbms_cfg, entities: Dict[str, BoundEntity], *, dry_run, create_schema) -> List[str]`. Metrics/progress reach importers via module-level helpers, not signature changes.
 - Exception taxonomy unchanged (`ConfigError`, `SourceError`, `MappingError`, `ImportExecutionError` under `BusinessException`); tests assert types, not message text.
 - Test command: `./.venv/Scripts/python.exe -m pytest tests -q`. Baseline before this plan: **89 passed, 1 skipped** (the skip is pre-existing `data/db.json missing`). Suite must stay green after every task.
 - Python floor is 3.9: `X | Y` unions only inside annotations (files use `from __future__ import annotations`); no `match` statements.
@@ -298,7 +298,7 @@ git commit -m "feat: reporting core - rich terminal handler + always-DEBUG sessi
 
 ---
 
-### Task 2: Presentation helpers (banners, JSON row dumps, backend lines)
+### Task 2: Presentation helpers (banners, JSON row dumps, DBMS lines)
 
 **Files:**
 - Modify: `src/polyglotimportcsv/reporting.py`
@@ -306,7 +306,7 @@ git commit -m "feat: reporting core - rich terminal handler + always-DEBUG sessi
 
 **Interfaces:**
 - Consumes: Task 1's `print_rich`, `_console`.
-- Produces (all in `reporting.py`, signatures used by Tasks 3-4): `banner(title: str, *, subtitle: str = "") -> None`; `section(title: str) -> None`; `step(label: str, detail: str = "") -> None`; `kv(key: str, value: Any) -> None`; `note(message: str) -> None`; `success(message: str) -> None`; `warn(message: str) -> None` (routes to `logger.warning`); `error(message: str) -> None` (routes to `logger.error`); `empty_label() -> Text`; `format_json_row(obj: Any) -> Text`; `dump_rows(label: str, rows: Sequence[Dict[str, Any]]) -> None`; `backend_text(line: str) -> Text`.
+- Produces (all in `reporting.py`, signatures used by Tasks 3-4): `banner(title: str, *, subtitle: str = "") -> None`; `section(title: str) -> None`; `step(label: str, detail: str = "") -> None`; `kv(key: str, value: Any) -> None`; `note(message: str) -> None`; `success(message: str) -> None`; `warn(message: str) -> None` (routes to `logger.warning`); `error(message: str) -> None` (routes to `logger.error`); `empty_label() -> Text`; `format_json_row(obj: Any) -> Text`; `dump_rows(label: str, rows: Sequence[Dict[str, Any]]) -> None`; `dbms_text(line: str) -> Text`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -328,8 +328,8 @@ def test_dump_rows_empty(capsys):
     assert "0 row(s)" in out and "(empty)" in out
 
 
-def test_backend_text_styles_known_backend():
-    text = reporting.backend_text("[postgres] inserted 8 row(s) into public.products")
+def test_dbms_text_styles_known_dbms():
+    text = reporting.dbms_text("[postgres] inserted 8 row(s) into public.products")
     assert text.plain.startswith("[postgres]")
     assert "inserted 8 row(s)" in text.plain
 
@@ -345,7 +345,7 @@ def test_warn_and_error_route_through_logging(capsys):
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `./.venv/Scripts/python.exe -m pytest tests/test_reporting.py -v`
-Expected: the 4 new tests FAIL with `AttributeError` (no `dump_rows` / `backend_text`).
+Expected: the 4 new tests FAIL with `AttributeError` (no `dump_rows` / `dbms_text`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -365,7 +365,7 @@ from rich.text import Text
 Append after `print_rich`:
 
 ```python
-_BACKEND_STYLE: Dict[str, str] = {
+_DBMS_STYLE: Dict[str, str] = {
     "postgres": "cyan",
     "mongodb": "green",
     "cassandra": "yellow",
@@ -373,7 +373,7 @@ _BACKEND_STYLE: Dict[str, str] = {
     "neo4j": "magenta",
 }
 
-_BACKEND_LINE = re.compile(r"^\[(\w+)\]\s*(.*)$", re.IGNORECASE)
+_DBMS_LINE = re.compile(r"^\[(\w+)\]\s*(.*)$", re.IGNORECASE)
 
 
 def banner(title: str, *, subtitle: str = "") -> None:
@@ -446,16 +446,16 @@ def dump_rows(label: str, rows: Sequence[Dict[str, Any]]) -> None:
         print_rich(line)
 
 
-def backend_text(line: str) -> Text:
+def dbms_text(line: str) -> Text:
     """Style an importer log line ('[postgres] inserted ...') for the terminal."""
-    m = _BACKEND_LINE.match(line.strip())
+    m = _DBMS_LINE.match(line.strip())
     if not m:
         if line.startswith("  "):
             return Text(line, style="dim")
         return Text(line)
-    backend, rest = m.group(1).lower(), m.group(2)
-    style = _BACKEND_STYLE.get(backend, "white")
-    out = Text(f"[{backend}]", style=f"bold {style}")
+    dbms, rest = m.group(1).lower(), m.group(2)
+    style = _DBMS_STYLE.get(dbms, "white")
+    out = Text(f"[{dbms}]", style=f"bold {style}")
     if "dry-run" in rest or rest.startswith("would "):
         out.append(f" {rest}", style="yellow")
     elif "inserted" in rest or "merged" in rest or "SET " in rest:
@@ -474,7 +474,7 @@ Expected: all PASS (9 tests).
 
 ```bash
 git add src/polyglotimportcsv/reporting.py tests/test_reporting.py
-git commit -m "feat: rich presentation helpers (banner/section/dump/backend lines)"
+git commit -m "feat: rich presentation helpers (banner/section/dump/dbms lines)"
 ```
 
 ---
@@ -489,7 +489,7 @@ git commit -m "feat: rich presentation helpers (banner/section/dump/backend line
 - Test: `tests/test_cli.py`
 
 **Interfaces:**
-- Consumes: Task 1's `setup_reporting`; Task 2's helpers (`banner`, `section`, `step`, `kv`, `note`, `success`, `warn`, `error`, `dump_rows`, `format_json_row`, `empty_label`, `backend_text`, `print_rich`).
+- Consumes: Task 1's `setup_reporting`; Task 2's helpers (`banner`, `section`, `step`, `kv`, `note`, `success`, `warn`, `error`, `dump_rows`, `format_json_row`, `empty_label`, `dbms_text`, `print_rich`).
 - Produces: `cli.main` gains `--log-level` (Choice DEBUG/INFO/WARNING/ERROR, default INFO, case-insensitive). `run_import` keeps its exact current signature and `List[str]` return. Nothing imports `polyglotimportcsv.console` afterwards.
 
 - [ ] **Step 1: Write the failing test**
@@ -586,7 +586,7 @@ def _parse_source_overrides(pairs: Tuple[str, ...]) -> Dict[str, str]:
 @click.option(
     "--only",
     default="",
-    help="Comma-separated backends to run (postgres,redis,mongodb,cassandra,neo4j). Empty = all configured.",
+    help="Comma-separated DBMS to run (postgres,redis,mongodb,cassandra,neo4j). Empty = all configured.",
 )
 @click.option(
     "--source",
@@ -641,7 +641,7 @@ if __name__ == "__main__":
 (Intermediate version — dump/metrics arrive in Tasks 4 and 6.)
 
 ```python
-"""Orchestrate source loading, entity resolution, validation, and per-backend import."""
+"""Orchestrate source loading, entity resolution, validation, and per-DBMS import."""
 
 from __future__ import annotations
 
@@ -655,9 +655,9 @@ from rich.text import Text
 from polyglotimportcsv.config_parser import load_config
 from polyglotimportcsv.importers import default_importer_registry
 from polyglotimportcsv.importers.base import ImporterRegistry
-from polyglotimportcsv.mapping_resolver import resolve_backend_entities
+from polyglotimportcsv.mapping_resolver import resolve_dbms_entities
 from polyglotimportcsv.reporting import (
-    backend_text,
+    dbms_text,
     banner,
     note,
     print_rich,
@@ -666,14 +666,14 @@ from polyglotimportcsv.reporting import (
     success,
 )
 from polyglotimportcsv.sources import load_sources
-from polyglotimportcsv.validation import BACKENDS, validate_backend_entities
+from polyglotimportcsv.validation import DBMS_NAMES, validate_dbms_entities
 
 logger = logging.getLogger(__name__)
 
 
-def _print_backend_line(line: str) -> None:
+def _print_dbms_line(line: str) -> None:
     out = Text("  ")
-    out.append_text(backend_text(line))
+    out.append_text(dbms_text(line))
     print_rich(out)
 
 
@@ -688,7 +688,7 @@ def run_import(
     source_overrides: Optional[Dict[str, str]] = None,
 ) -> List[str]:
     """
-    Load config and sources, bind entities, validate, then run configured backends.
+    Load config and sources, bind entities, validate, then run configured DBMS.
 
     Data comes from the config's ``sources`` block (one CSV per entity, or a
     combined CSV with the origin in column 0). ``source_overrides`` remaps a
@@ -701,8 +701,8 @@ def run_import(
 
     step("Load config", str(config_path))
     config = load_config(config_path, sgbd_config_path)
-    backends_in_cfg = [b for b in BACKENDS if b in config]
-    note(f"{len(backends_in_cfg)} backend(s) configured: {', '.join(backends_in_cfg)}")
+    dbms_in_cfg = [b for b in DBMS_NAMES if b in config]
+    note(f"{len(dbms_in_cfg)} DBMS configured: {', '.join(dbms_in_cfg)}")
 
     step("Load sources")
     sources = load_sources(
@@ -728,22 +728,22 @@ def run_import(
 
     cast_cache: Dict[Tuple[str, object], pd.DataFrame] = {}
     log_lines: List[str] = []
-    for backend in BACKENDS:
-        if backend not in config:
+    for dbms in DBMS_NAMES:
+        if dbms not in config:
             continue
-        if only_set and backend not in only_set:
+        if only_set and dbms not in only_set:
             continue
-        fn = registry.get(backend)
+        fn = registry.get(dbms)
         if fn is None:
             continue
-        section(f"Backend · {backend}")
-        bcfg = config[backend]
-        bound = resolve_backend_entities(bcfg, sources, cast_cache)
-        validate_backend_entities(backend, bcfg, bound)
-        backend_lines = fn(bcfg, bound, dry_run=dry_run, create_schema=create_schema)
-        log_lines.extend(backend_lines)
-        for line in backend_lines:
-            _print_backend_line(line)
+        section(f"DBMS · {dbms}")
+        bcfg = config[dbms]
+        bound = resolve_dbms_entities(bcfg, sources, cast_cache)
+        validate_dbms_entities(dbms, bcfg, bound)
+        dbms_lines = fn(bcfg, bound, dry_run=dry_run, create_schema=create_schema)
+        log_lines.extend(dbms_lines)
+        for line in dbms_lines:
+            _print_dbms_line(line)
 
     success(f"Finished {mode} — {len(log_lines)} log line(s) from importer(s)")
     return log_lines
@@ -821,7 +821,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         note(f"log file: {log_path}")
 ```
 
-(The rest of `main()` — `_load_config`, `_parse_only`, banner/step, `_run_backends`, exit codes — stays exactly as-is.)
+(The rest of `main()` — `_load_config`, `_parse_only`, banner/step, `_run_dbms`, exit codes — stays exactly as-is.)
 
 - [ ] **Step 6: Delete `src/polyglotimportcsv/console.py` and verify no references**
 
@@ -838,7 +838,7 @@ Run: `./.venv/Scripts/python.exe -m pytest tests -q`
 Expected: 95 passed, 1 skipped.
 
 Smoke: `./.venv/Scripts/python.exe -m polyglotimportcsv --config data/ecommerce/import_config.json --dry-run`
-Expected: banner, per-source notes, per-backend dry-run lines, success line; exit 0.
+Expected: banner, per-source notes, per-DBMS dry-run lines, success line; exit 0.
 
 - [ ] **Step 8: Commit**
 
@@ -859,7 +859,7 @@ git commit -m "refactor: migrate cli, runner, and inspect script to reporting; d
 
 **Interfaces:**
 - Consumes: Task 2's `dump_rows`, `note`.
-- Produces: `reporting.dump_entity_frame(backend: str, entity: str, df: pd.DataFrame, *, force: Optional[bool] = None) -> None`; `run_import(..., show_data: Optional[bool] = None)`; CLI `--show-data/--no-data` mapped to that tri-state (None = threshold decides).
+- Produces: `reporting.dump_entity_frame(dbms: str, entity: str, df: pd.DataFrame, *, force: Optional[bool] = None) -> None`; `run_import(..., show_data: Optional[bool] = None)`; CLI `--show-data/--no-data` mapped to that tri-state (None = threshold decides).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -923,8 +923,8 @@ Append to `tests/test_runner_registry.py`:
 def test_run_import_dumps_bound_entities(monkeypatch):
     calls = []
 
-    def fake_dump(backend, entity, df, *, force=None):
-        calls.append((backend, entity, len(df), force))
+    def fake_dump(dbms, entity, df, *, force=None):
+        calls.append((dbms, entity, len(df), force))
 
     monkeypatch.setattr("polyglotimportcsv.runner.dump_entity_frame", fake_dump)
 
@@ -933,7 +933,7 @@ def test_run_import_dumps_bound_entities(monkeypatch):
 
     run_import(CFG, dry_run=True, only=["postgres"], importers={"postgres": stub})
     assert calls, "expected one dump call per bound entity"
-    assert all(backend == "postgres" and force is None for backend, _, _, force in calls)
+    assert all(dbms == "postgres" and force is None for dbms, _, _, force in calls)
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -947,16 +947,16 @@ In `src/polyglotimportcsv/reporting.py`, append:
 
 ```python
 def dump_entity_frame(
-    backend: str, entity: str, df: Any, *, force: Optional[bool] = None
+    dbms: str, entity: str, df: Any, *, force: Optional[bool] = None
 ) -> None:
     """Dump entity records up to DATA_DUMP_THRESHOLD rows; counts only above (spec §4.3)."""
     n = len(df)
     show = force if force is not None else n <= DATA_DUMP_THRESHOLD
     if not show:
-        note(f"{backend} · {entity}: {n} row(s) (data dump suppressed; --show-data forces it)")
-        logger.debug("%s · %s: data dump suppressed for %d row(s)", backend, entity, n)
+        note(f"{dbms} · {entity}: {n} row(s) (data dump suppressed; --show-data forces it)")
+        logger.debug("%s · %s: data dump suppressed for %d row(s)", dbms, entity, n)
         return
-    dump_rows(f"{backend} · {entity}", df.to_dict(orient="records"))
+    dump_rows(f"{dbms} · {entity}", df.to_dict(orient="records"))
 ```
 
 In `src/polyglotimportcsv/runner.py`:
@@ -970,13 +970,13 @@ In `src/polyglotimportcsv/runner.py`:
 ) -> List[str]:
 ```
 
-3. Inside the backend loop, between `validate_backend_entities(...)` and the `fn(...)` call, insert:
+3. Inside the DBMS loop, between `validate_dbms_entities(...)` and the `fn(...)` call, insert:
 
 ```python
-        validate_backend_entities(backend, bcfg, bound)
+        validate_dbms_entities(dbms, bcfg, bound)
         for ename, be in bound.items():
-            dump_entity_frame(backend, ename, be.df, force=show_data)
-        backend_lines = fn(bcfg, bound, dry_run=dry_run, create_schema=create_schema)
+            dump_entity_frame(dbms, ename, be.df, force=show_data)
+        dbms_lines = fn(bcfg, bound, dry_run=dry_run, create_schema=create_schema)
 ```
 
 In `src/polyglotimportcsv/cli.py`:
@@ -1044,7 +1044,7 @@ import logging
 import pandas as pd
 
 from polyglotimportcsv.casting import cast_frame
-from polyglotimportcsv.mapping_resolver import resolve_backend_entities
+from polyglotimportcsv.mapping_resolver import resolve_dbms_entities
 from polyglotimportcsv.sources import load_sources
 
 
@@ -1063,7 +1063,7 @@ def test_resolver_logs_effective_mapping_per_column(tmp_path, caplog):
     sources = load_sources({"stock": "stock.csv"}, tmp_path)
     bcfg = {"entities": {"stock": {}}}
     with caplog.at_level(logging.DEBUG, logger="polyglotimportcsv.mapping_resolver"):
-        resolve_backend_entities(bcfg, sources)
+        resolve_dbms_entities(bcfg, sources)
     debug = [r.message for r in caplog.records if r.levelno == logging.DEBUG]
     assert any("sku" in m and "db_type" in m for m in debug)
     assert any("qty" in m and "BIGINT" in m for m in debug)
@@ -1113,7 +1113,7 @@ import logging
 logger = logging.getLogger(__name__)
 ```
 
-and in `resolve_backend_entities`, after `cfg["columns"] = expand_entity_columns(...)`:
+and in `resolve_dbms_entities`, after `cfg["columns"] = expand_entity_columns(...)`:
 
 ```python
         cfg["columns"] = expand_entity_columns(ename, ecfg, src)
@@ -1190,11 +1190,11 @@ git commit -m "feat: pipeline DEBUG/WARNING instrumentation (sources, mapping, c
 **Interfaces:**
 - Consumes: Task 2's `print_rich`.
 - Produces (used by Tasks 7-9):
-  - `metrics.PhaseMetric` (dataclass: `backend, entity, phase, rows, seconds`; property `rows_per_second: Optional[float]`; `to_record() -> Dict[str, object]`).
-  - `metrics.MetricsCollector` with `record(backend, entity, phase, *, rows, seconds)`, `timed(backend, entity, phase)` context manager yielding an object with a mutable `rows` attribute, `entries() -> List[PhaseMetric]`, `to_records() -> List[Dict[str, object]]`.
-  - Module-level: `metrics.set_current(collector | None)`, `metrics.current()`, `metrics.timed_phase(backend, entity, phase)` — no-op-safe context manager importers call without signature changes.
+  - `metrics.PhaseMetric` (dataclass: `dbms, entity, phase, rows, seconds`; property `rows_per_second: Optional[float]`; `to_record() -> Dict[str, object]`).
+  - `metrics.MetricsCollector` with `record(dbms, entity, phase, *, rows, seconds)`, `timed(dbms, entity, phase)` context manager yielding an object with a mutable `rows` attribute, `entries() -> List[PhaseMetric]`, `to_records() -> List[Dict[str, object]]`.
+  - Module-level: `metrics.set_current(collector | None)`, `metrics.current()`, `metrics.timed_phase(dbms, entity, phase)` — no-op-safe context manager importers call without signature changes.
   - `reporting.metrics_table(records: Sequence[Dict[str, object]]) -> rich.table.Table`.
-  - `run_import(..., collector: Optional[MetricsCollector] = None)` — injectable; runner records phase `"read"` (backend `"(sources)"`, entity `"*"`, all sources aggregated — reading is global, not per SGBD) and phase `"map"` per backend (entity `"*"`). Phases `"filter"`/`"write"` come from importers (Tasks 7-8).
+  - `run_import(..., collector: Optional[MetricsCollector] = None)` — injectable; runner records phase `"read"` (dbms `"(sources)"`, entity `"*"`, all sources aggregated — reading is global, not per SGBD) and phase `"map"` per DBMS (entity `"*"`). Phases `"filter"`/`"write"` come from importers (Tasks 7-8).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1223,7 +1223,7 @@ def test_collector_records_and_computes_rate():
     [m] = c.entries()
     assert m.rows_per_second == 50.0
     rec = m.to_record()
-    assert rec["backend"] == "postgres" and rec["phase"] == "write"
+    assert rec["dbms"] == "postgres" and rec["phase"] == "write"
 
 
 def test_zero_seconds_has_no_rate():
@@ -1248,7 +1248,7 @@ def test_timed_phase_records_into_current():
     finally:
         metrics.set_current(None)
     [m] = c.entries()
-    assert (m.backend, m.entity, m.phase, m.rows) == ("postgres", "items", "filter", 7)
+    assert (m.dbms, m.entity, m.phase, m.rows) == ("postgres", "items", "filter", 7)
     assert m.seconds >= 0
 
 
@@ -1260,7 +1260,7 @@ def test_run_import_records_read_and_map_phases():
     run_import(
         CFG, dry_run=True, only=["postgres"], importers={"postgres": stub}, collector=c
     )
-    phases = {(m.backend, m.phase) for m in c.entries()}
+    phases = {(m.dbms, m.phase) for m in c.entries()}
     assert ("(sources)", "read") in phases
     assert ("postgres", "map") in phases
     assert metrics.current() is None  # runner must reset after the run
@@ -1302,7 +1302,7 @@ PHASES = ("read", "filter", "map", "write")
 
 @dataclass
 class PhaseMetric:
-    backend: str
+    dbms: str
     entity: str
     phase: str
     rows: int
@@ -1316,7 +1316,7 @@ class PhaseMetric:
 
     def to_record(self) -> Dict[str, object]:
         return {
-            "backend": self.backend,
+            "dbms": self.dbms,
             "entity": self.entity,
             "phase": self.phase,
             "rows": self.rows,
@@ -1337,19 +1337,19 @@ class MetricsCollector:
         self._entries: List[PhaseMetric] = []
 
     def record(
-        self, backend: str, entity: str, phase: str, *, rows: int, seconds: float
+        self, dbms: str, entity: str, phase: str, *, rows: int, seconds: float
     ) -> None:
-        self._entries.append(PhaseMetric(backend, entity, phase, rows, seconds))
+        self._entries.append(PhaseMetric(dbms, entity, phase, rows, seconds))
 
     @contextmanager
-    def timed(self, backend: str, entity: str, phase: str) -> Iterator[_Timed]:
+    def timed(self, dbms: str, entity: str, phase: str) -> Iterator[_Timed]:
         t = _Timed()
         start = time.perf_counter()
         try:
             yield t
         finally:
             self.record(
-                backend, entity, phase, rows=t.rows, seconds=time.perf_counter() - start
+                dbms, entity, phase, rows=t.rows, seconds=time.perf_counter() - start
             )
 
     def entries(self) -> List[PhaseMetric]:
@@ -1372,12 +1372,12 @@ def current() -> Optional[MetricsCollector]:
 
 
 @contextmanager
-def timed_phase(backend: str, entity: str, phase: str) -> Iterator[_Timed]:
+def timed_phase(dbms: str, entity: str, phase: str) -> Iterator[_Timed]:
     """Record into the current collector; harmless no-op when none is active."""
     if _current is None:
         yield _Timed()
         return
-    with _current.timed(backend, entity, phase) as t:
+    with _current.timed(dbms, entity, phase) as t:
         yield t
 ```
 
@@ -1389,7 +1389,7 @@ Add `from rich.table import Table` to the imports, then append:
 def metrics_table(records: Sequence[Dict[str, Any]]) -> Table:
     """Summary table for the end of a run (spec §4.4)."""
     table = Table(title="Import metrics", header_style="bold")
-    table.add_column("backend")
+    table.add_column("dbms")
     table.add_column("entity")
     table.add_column("phase")
     table.add_column("rows", justify="right")
@@ -1398,7 +1398,7 @@ def metrics_table(records: Sequence[Dict[str, Any]]) -> Table:
     for rec in records:
         rate = rec.get("rows_per_second")
         table.add_row(
-            str(rec.get("backend", "")),
+            str(rec.get("dbms", "")),
             str(rec.get("entity", "")),
             str(rec.get("phase", "")),
             str(rec.get("rows", 0)),
@@ -1479,11 +1479,11 @@ def _run(
     )
 ```
 
-5. Time the map phase — replace the `resolve_backend_entities` call:
+5. Time the map phase — replace the `resolve_dbms_entities` call:
 
 ```python
-        with collector.timed(backend, "*", "map") as t:
-            bound = resolve_backend_entities(bcfg, sources, cast_cache)
+        with collector.timed(dbms, "*", "map") as t:
+            bound = resolve_dbms_entities(bcfg, sources, cast_cache)
             t.rows = sum(len(be.df) for be in bound.values())
 ```
 
@@ -1492,8 +1492,8 @@ def _run(
 ```python
         for ename, be in bound.items():
             if len(be.df) == 0:
-                logger.warning("entity %s/%s bound to 0 row(s)", backend, ename)
-            dump_entity_frame(backend, ename, be.df, force=show_data)
+                logger.warning("entity %s/%s bound to 0 row(s)", dbms, ename)
+            dump_entity_frame(dbms, ename, be.df, force=show_data)
 ```
 
 7. Print the summary table before the `success(...)` line:
@@ -1585,7 +1585,7 @@ CFG = ROOT / "data" / "ecommerce" / "import_config.json"
 def _filter_phases(only):
     c = MetricsCollector()
     run_import(CFG, dry_run=True, only=[only], collector=c)
-    return {(m.backend, m.phase) for m in c.entries()}
+    return {(m.dbms, m.phase) for m in c.entries()}
 
 
 def test_postgres_dry_run_records_filter_phase():
@@ -2129,7 +2129,7 @@ def test_write_benchmark_files(tmp_path):
     assert data["metadata"]["source_rows"] == {"stock": 10}
     assert data["metrics"][0]["phase"] == "write"
     lines = csv_path.read_text(encoding="utf-8").strip().splitlines()
-    assert lines[0] == "timestamp,backend,entity,phase,rows,seconds,rows_per_second"
+    assert lines[0] == "timestamp,dbms,entity,phase,rows,seconds,rows_per_second"
     assert len(lines) == 2
 
 
@@ -2202,7 +2202,7 @@ from typing import Dict, Iterator, List, Optional, Tuple
 Append at the end of the file:
 
 ```python
-_CSV_FIELDS = ("timestamp", "backend", "entity", "phase", "rows", "seconds", "rows_per_second")
+_CSV_FIELDS = ("timestamp", "dbms", "entity", "phase", "rows", "seconds", "rows_per_second")
 
 
 def environment_metadata(
@@ -2373,13 +2373,13 @@ benchmarks/
 Edit the English flags list — replace the line:
 
 ```
-- `--only postgres,redis` — run only listed backends.
+- `--only postgres,redis` — run only listed DBMS.
 ```
 
 with:
 
 ```
-- `--only postgres,redis` — run only listed backends.
+- `--only postgres,redis` — run only listed DBMS.
 - `--log-level DEBUG|INFO|WARNING|ERROR` — terminal verbosity (default `INFO`); the session log file under `logs/` always records `DEBUG`.
 - `--show-data` / `--no-data` — force or suppress the per-entity record dump (default: entities with up to 50 rows are dumped).
 - `--benchmark` — write per-phase metrics to `benchmarks/benchmark_<timestamp>.json` and append `benchmarks/benchmark_history.csv` (implies `--no-data`).
@@ -2388,13 +2388,13 @@ with:
 Edit the Portuguese flags list — replace the line:
 
 ```
-- `--only postgres,redis` — executa só os backends listados.
+- `--only postgres,redis` — executa só os SGBDs listados.
 ```
 
 with:
 
 ```
-- `--only postgres,redis` — executa só os backends listados.
+- `--only postgres,redis` — executa só os SGBDs listados.
 - `--log-level DEBUG|INFO|WARNING|ERROR` — verbosidade do terminal (padrão `INFO`); o arquivo de log de sessão em `logs/` sempre grava `DEBUG`.
 - `--show-data` / `--no-data` — força ou suprime a exibição dos registros por entidade (padrão: entidades com até 50 linhas são exibidas).
 - `--benchmark` — grava métricas por fase em `benchmarks/benchmark_<timestamp>.json` e acrescenta `benchmarks/benchmark_history.csv` (implica `--no-data`).
@@ -2471,10 +2471,10 @@ git commit -m "docs: rich logging flags in README/ARCHITECTURE; shared debug log
 - §4.1 `rich` layer replacing `console.py`, `RichHandler`, no scattered `print` → Tasks 1-3 (the only remaining `print` users were cli/runner/inspect, all migrated).
 - §4.2 levels: DEBUG statements/mapping/inference (Tasks 5, 7, 8), INFO phases/summary/metrics table (Tasks 3, 6), WARNING text-fallback/empty source-entity/duplicate keys (Tasks 5, 6, 8 — neo4j duplicates; Cassandra/Redis upsert-overwrite detection would need read-before-write and is intentionally not claimed), ERROR via `BusinessException` handler (Task 3). Two destinations with terminal `--log-level` and always-DEBUG file → Tasks 1, 3.
 - §4.3 threshold 50, `--show-data`/`--no-data`, benchmark never dumps → Tasks 4, 9.
-- §4.4 progress bar above threshold with rows/s, TTY-only → Task 7; MetricsCollector always active per SGBD×entity×phase with final table → Task 6 (documented deviation: `read` is recorded globally as `("(sources)", "*")` because sources load once, not per SGBD; `map` is per backend with entity `"*"`); `--benchmark` JSON + consolidatable CSV with environment metadata → Task 9.
+- §4.4 progress bar above threshold with rows/s, TTY-only → Task 7; MetricsCollector always active per SGBD×entity×phase with final table → Task 6 (documented deviation: `read` is recorded globally as `("(sources)", "*")` because sources load once, not per SGBD; `map` is per SGBD with entity `"*"`); `--benchmark` JSON + consolidatable CSV with environment metadata → Task 9.
 - §3.1 CLI: `--log-level`, `--show-data`/`--no-data`, `--benchmark` → Tasks 3, 4, 9. (`--source` shipped in Plan 1.)
 - Out of scope here (Plan 3): §5 dataset generators and `scripts/run_benchmarks.py`; the `collector` injection parameter added in Task 6 is the hook Plan 3's benchmark runner will use.
 
 **Placeholder scan:** every code step carries complete code; the only "rest stays as-is" notes point at file regions the same step shows or that no task touches.
 
-**Type consistency:** `timed_phase`/`timed` yield `_Timed` with mutable `.rows` everywhere; `entity_progress` yields `advance(n=1)` in Tasks 7-8; `dump_entity_frame(backend, entity, df, *, force)` matches the runner call and both monkeypatched fakes; `run_import` keyword additions accumulate as `show_data` (T4) → `collector` (T6) → `benchmark` (T9) in that order, and the T9 tests only use keywords, so order changes are safe; expected suite counts per task assume the stated number of new tests (89→94→95→99→102→108→112→115→119 passed, always 1 skipped) — if a count drifts by the odd test, the gate is "suite green", not the exact number.
+**Type consistency:** `timed_phase`/`timed` yield `_Timed` with mutable `.rows` everywhere; `entity_progress` yields `advance(n=1)` in Tasks 7-8; `dump_entity_frame(dbms, entity, df, *, force)` matches the runner call and both monkeypatched fakes; `run_import` keyword additions accumulate as `show_data` (T4) → `collector` (T6) → `benchmark` (T9) in that order, and the T9 tests only use keywords, so order changes are safe; expected suite counts per task assume the stated number of new tests (89→94→95→99→102→108→112→115→119 passed, always 1 skipped) — if a count drifts by the odd test, the gate is "suite green", not the exact number.

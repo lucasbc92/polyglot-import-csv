@@ -9,7 +9,7 @@ todos:
     content: Implementar resolução de colunas e iter_column_tree em entity_utils.py (retrocompat db_column/nested)
     status: completed
   - id: materialize-validation
-    content: Atualizar materialize.py (Mongo recursivo), validation.py (backends planos vs aninhados, csv_column índice) e schema_generator.py
+    content: Atualizar materialize.py (Mongo recursivo), validation.py (SGBDs planos vs aninhados, csv_column índice) e schema_generator.py
     status: completed
   - id: tests
     content: "Criar/estender testes: test_config_parser, test_entity_utils, test_materialize, test_validation_dry_run"
@@ -93,7 +93,7 @@ Passa a ser:
 
 - Objetos aninhados em `columns` = subdocumentos BSON.
 - Folhas = `columnSpec` (metadados de mapeamento).
-- Backends planos (PostgreSQL, Redis, Cassandra, Neo4j nós/rels): **somente folhas** — validação semântica rejeita objetos aninhados em `columns`.
+- SGBDs planos (PostgreSQL, Redis, Cassandra, Neo4j nós/rels): **somente folhas** — validação semântica rejeita objetos aninhados em `columns`.
 
 **Bloco `nested` legado:** mantido no schema e no código por compatibilidade; marcado como *deprecated* na documentação e nos testes. Migração do exemplo e-commerce para o novo formato.
 
@@ -125,7 +125,7 @@ Arquivo: [polyglot_import_config.schema.json](src/polyglotimportcsv/schemas/poly
 ```
 
 - `entity.additionalProperties: false` (exceto `nested` depreciado, se mantido).
-- Adicionar `description` em `$defs` principais (version, filter, backends) para embasar a documentação do relatório.
+- Adicionar `description` em `$defs` principais (version, filter, SGBDs) para embasar a documentação do relatório.
 - Bump opcional: `version: 2` no schema (ou manter `version: 1` com extensão retrocompatível — **recomendado manter v1** com extensão, para não forçar migração imediata).
 
 ### 1.1.4 Alterações no código Python
@@ -134,7 +134,7 @@ Arquivo: [polyglot_import_config.schema.json](src/polyglotimportcsv/schemas/poly
 |---------|---------|
 | [entity_utils.py](src/polyglotimportcsv/entity_utils.py) | Novas funções `source_column_name(key, spec)`, `target_field_name(key, spec)`, `iter_column_tree(columns, path=())` que percorrem `columns` recursivo **e** bloco `nested` legado; resolver `csv_column` inteiro → nome real via `df.columns[i]` |
 | [materialize.py](src/polyglotimportcsv/materialize.py) | `mongo_document_from_row` monta documento recursivamente a partir de `columns` aninhados; suporta múltiplos níveis (corrigindo limitação atual de 1 nível) |
-| [validation.py](src/polyglotimportcsv/validation.py) | Rejeitar `columns` aninhados em backends planos; validar `csv_column` (string presente no CSV ou índice válido); manter checagens de filtros/FK/Cassandra |
+| [validation.py](src/polyglotimportcsv/validation.py) | Rejeitar `columns` aninhados em SGBDs planos; validar `csv_column` (string presente no CSV ou índice válido); manter checagens de filtros/FK/Cassandra |
 | [schema_generator.py](src/polyglotimportcsv/schema_generator.py) | Usar `target_field_name` em vez de `output_column_name` direto |
 | Importers (postgres, redis, cassandra, neo4j) | Sem mudança estrutural — consomem helpers atualizados |
 
@@ -156,7 +156,7 @@ flowchart TD
 
 Novos/estendidos em [tests/](tests/):
 
-- **`test_config_parser.py`**: casos negativos (tipo inválido em `csv_column`, backend desconhecido, `columns` vazio); positivos com `csv_column` string e inteiro.
+- **`test_config_parser.py`**: casos negativos (tipo inválido em `csv_column`, SGBD desconhecido, `columns` vazio); positivos com `csv_column` string e inteiro.
 - **`test_entity_utils.py`** (novo): resolução de nomes, árvore recursiva, compatibilidade `db_column`/`nested` legado.
 - **`test_materialize.py`** (novo ou estender existente): documento Mongo com 2+ níveis de aninhamento; Postgres flatten ignora ramos aninhados (via validação prévia).
 - **`test_validation_dry_run.py`**: coluna CSV referenciada só via `csv_column`; índice fora do intervalo; nested em postgres rejeitado.
@@ -178,7 +178,7 @@ Atualizar [data/ecommerce/import_config.json](data/ecommerce/import_config.json)
 Expandir a seção **4.2** de [LucasBuenoCesario-PolyglotImportCSV-Report-TCC1.md](docs/LucasBuenoCesario-PolyglotImportCSV-Report-TCC1.md) com subseções estruturadas:
 
 ### 4.2.1 Estrutura raiz
-- `version` (obrigatório), backends opcionais, `additionalProperties: false`.
+- `version` (obrigatório), SGBDs opcionais, `additionalProperties: false`.
 
 ### 4.2.2 Mapeamento de colunas (`columnSpec`)
 - Tabela: campo | tipo | obrigatório | descrição.
@@ -193,7 +193,7 @@ Expandir a seção **4.2** de [LucasBuenoCesario-PolyglotImportCSV-Report-TCC1.m
 - Cassandra: `cassandra_partition`, `cassandra_cluster`.
 - Nota sobre `nested` legado (depreciado).
 
-### 4.2.4 Blocos por backend
+### 4.2.4 Blocos por SGBD
 - Para cada um (postgres, mongodb, cassandra, redis, neo4j): `connection`, campos específicos, `entities`, `relationships` (Postgres FK / Neo4j arestas).
 - Trecho JSON real extraído de `import_config.json` (e-commerce).
 
@@ -213,8 +213,8 @@ Nova seção **4.3 Algoritmo de execução da importação** no relatório, desc
 1. **Entrada**: `csv_path`, `config_path`, flags (`--dry-run`, `--create-schema`, `--only`).
 2. **Carregar config**: parse JSON → `jsonschema.validate` contra schema embutido.
 3. **Carregar CSV**: `read_csv(dtype=str)` → inferir *kinds* por coluna.
-4. **Validar config × CSV**: colunas referenciadas, filtros, FKs, PK Cassandra, regras por backend.
-5. **Para cada backend** configurado (e não filtrado por `--only`):
+4. **Validar config × CSV**: colunas referenciadas, filtros, FKs, PK Cassandra, regras por SGBD.
+5. **Para cada SGBD** configurado (e não filtrado por `--only`):
    - **Para cada entidade**:
      - Aplicar filtros (exceto `each`).
      - Expandir partições (`each` → múltiplas entidades/coleções).
@@ -222,7 +222,7 @@ Nova seção **4.3 Algoritmo de execução da importação** no relatório, desc
      - Conectar ao SGBD (ou pular em `--dry-run`).
      - Criar schema se aplicável (Postgres DDL, Cassandra keyspace/tabela).
      - Persistir (INSERT, insert_many, SET, MERGE…).
-6. **Saída**: log com contagens por entidade/backend.
+6. **Saída**: log com contagens por entidade/SGBD.
 
 ### Diagrama mermaid (incluir no relatório)
 
@@ -231,8 +231,8 @@ flowchart TD
     Start([CLI: csv + config]) --> LoadCfg[load_config + JSON Schema]
     LoadCfg --> LoadCSV[load_csv_with_inference]
     LoadCSV --> CrossVal[validate_import_config]
-    CrossVal --> BackendLoop{Para cada backend}
-    BackendLoop --> EntityLoop{Para cada entidade}
+    CrossVal --> DbmsLoop{Para cada SGBD}
+    DbmsLoop --> EntityLoop{Para cada entidade}
     EntityLoop --> Filters[apply_filters]
     Filters --> EachSplit[expand_each]
     EachSplit --> Materialize{Materializar}
@@ -246,8 +246,8 @@ flowchart TD
     Graph --> Persist
     Persist --> Log[Registrar contagens]
     Log --> EntityLoop
-    EntityLoop --> BackendLoop
-    BackendLoop --> EndNode([Fim])
+    EntityLoop --> DbmsLoop
+    DbmsLoop --> EndNode([Fim])
 ```
 
 ### Exemplo concreto no relatório

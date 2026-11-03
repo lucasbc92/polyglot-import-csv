@@ -4,7 +4,7 @@
 
 **Goal:** Add a streaming import path whose peak memory is ≈ one read chunk (constant in file size), as the default for real imports, while keeping the existing full-materialization path as the TCC phase-measured baseline.
 
-**Architecture:** Ports & adapters. A `StreamReader` yields `(entity, chunk)` pairs (multi: per-file; combined: routed by origin). A backend-agnostic orchestrator (`stream_runner`) binds each entity from its first chunk (inferring `kinds`, with declared `db_type` winning), then per chunk applies row-local filters, casts (vectorized), routes rows to partition buffers, and flushes `BATCH`-sized batches to a `DbmsSink`. Each DBMS implements `DbmsSink` by reusing the row-shaping/batched-write helpers already in its importer. A new `execution` axis (`materialize|stream`) selects the path.
+**Architecture:** Ports & adapters. A `StreamReader` yields `(entity, chunk)` pairs (multi: per-file; combined: routed by origin). A DBMS-agnostic orchestrator (`stream_runner`) binds each entity from its first chunk (inferring `kinds`, with declared `db_type` winning), then per chunk applies row-local filters, casts (vectorized), routes rows to partition buffers, and flushes `BATCH`-sized batches to a `DbmsSink`. Each DBMS implements `DbmsSink` by reusing the row-shaping/batched-write helpers already in its importer. A new `execution` axis (`materialize|stream`) selects the path.
 
 **Tech Stack:** Python 3.12, pandas (`read_csv(chunksize=...)`), pytest.
 
@@ -14,7 +14,7 @@
 - `READ_CHUNK = 8192` (read + inference-sample granularity); `BATCH = 1000` (DBMS flush granularity, same constant as redis/neo4j); Cassandra keeps concurrency 64 within a batch.
 - **Type inference:** `kinds` inferred once from each entity's **first chunk** and reused for all its chunks; a **declared `db_type` in config always wins** over inference.
 - Streaming always uses vectorized cast + batched writes (there is no "naive streaming"). `cast_frame(chunk, kinds, strategy="optimized")`; `format="mixed"` already guaranteed inside it.
-- The naming for the write port is **`DbmsSink`** (never "Backend"); adapters keep product names (`PostgresSink`, `MongoSink`, `CassandraSink`, `RedisSink`, `Neo4jSink`).
+- The naming for the write port is **`DbmsSink`** (never the term the advisor rejected); adapters keep product names (`PostgresSink`, `MongoSink`, `CassandraSink`, `RedisSink`, `Neo4jSink`).
 - `execution` default = `stream` in the CLI; `materialize` reproduces the existing baseline verbatim and stays byte-for-byte unchanged.
 - All new tests run without live databases (injected `DbmsSink` fakes / dry-run).
 - Code/identifiers/comments English; specs/plans Portuguese.
@@ -174,8 +174,8 @@ git commit -m "feat(stream): chunked StreamReader with multi + combined origin r
 - Test: `tests/test_stream_binding.py`
 
 **Interfaces:**
-- Consumes: `SourceData` (from `sources.py`), `resolve_backend_entities`-style binding pieces (`bind_entity_source`, `expand_entity_columns` in `mapping_resolver.py`), `infer_column_kinds` (`csv_reader.py`).
-- Produces: `EntityBinding` dataclass `(cfg: dict, kinds: dict, source_name: str)` and `bind_entity_from_sample(ename, ecfg, sample_df, source_name) -> EntityBinding`. `kinds` come from `infer_column_kinds(sample_df[data_cols])` with `SOURCE_COLUMN -> "string"`; a declared `db_type` in `ecfg["columns"]` must survive into `cfg` unchanged (declared wins). `cfg` is the expanded per-entity column config exactly as `resolve_backend_entities` produces (minus the frame).
+- Consumes: `SourceData` (from `sources.py`), `resolve_dbms_entities`-style binding pieces (`bind_entity_source`, `expand_entity_columns` in `mapping_resolver.py`), `infer_column_kinds` (`csv_reader.py`).
+- Produces: `EntityBinding` dataclass `(cfg: dict, kinds: dict, source_name: str)` and `bind_entity_from_sample(ename, ecfg, sample_df, source_name) -> EntityBinding`. `kinds` come from `infer_column_kinds(sample_df[data_cols])` with `SOURCE_COLUMN -> "string"`; a declared `db_type` in `ecfg["columns"]` must survive into `cfg` unchanged (declared wins). `cfg` is the expanded per-entity column config exactly as `resolve_dbms_entities` produces (minus the frame).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -204,7 +204,7 @@ Expected: FAIL — module missing.
 
 - [ ] **Step 3: Implement**
 
-Create `stream_binding.py`. Build a `SourceData` from the sample (`name=source_name`, `df=sample_df`, `kinds=infer_column_kinds(sample_df[data_cols]) + {SOURCE_COLUMN: "string"}`, `file_header=data_cols`) where `data_cols = [c for c in sample_df.columns if c != SOURCE_COLUMN]`, then reuse `mapping_resolver.bind_entity_source` + `expand_entity_columns` to produce `cfg` exactly as `resolve_backend_entities` does (copy that function's cfg-building lines: `cfg = dict(ecfg); cfg["columns"] = expand_entity_columns(...); cfg.pop("source"/"csv_columns"/"auto_map")`). Return `EntityBinding(cfg=cfg, kinds=source.kinds, source_name=source_name)`.
+Create `stream_binding.py`. Build a `SourceData` from the sample (`name=source_name`, `df=sample_df`, `kinds=infer_column_kinds(sample_df[data_cols]) + {SOURCE_COLUMN: "string"}`, `file_header=data_cols`) where `data_cols = [c for c in sample_df.columns if c != SOURCE_COLUMN]`, then reuse `mapping_resolver.bind_entity_source` + `expand_entity_columns` to produce `cfg` exactly as `resolve_dbms_entities` does (copy that function's cfg-building lines: `cfg = dict(ecfg); cfg["columns"] = expand_entity_columns(...); cfg.pop("source"/"csv_columns"/"auto_map")`). Return `EntityBinding(cfg=cfg, kinds=source.kinds, source_name=source_name)`.
 
 - [ ] **Step 4: Run tests + Step 5: Commit**
 
@@ -226,7 +226,7 @@ git commit -m "feat(stream): bind entity + infer kinds from first chunk (db_type
 **Interfaces:**
 - Produces:
   - `DbmsSink` Protocol: `create_schema() -> None` (data-INDEPENDENT DBMS-level setup only — e.g. keyspace/database; may be a no-op); `ensure_partition(partition_name: str, binding: EntityBinding) -> None` (lazy per-partition/entity DDL, create-if-not-exists, called once per partition on first write); `write_batch(partition_name: str, binding: EntityBinding, batch: pandas.DataFrame) -> int`; `close() -> None`.
-  - `SinkFactory = Callable[[dict], DbmsSink]` (receives the DBMS's `backend_cfg`).
+  - `SinkFactory = Callable[[dict], DbmsSink]` (receives the DBMS's `dbms_cfg`).
   - `run_stream_import(config, base_dir, *, sink_factories: Dict[str, SinkFactory], only=None, create_schema=True, source_overrides=None, chunksize=READ_CHUNK, batch=BATCH) -> Dict[str, int]` returning `{partition_name: rows_written}` per DBMS aggregated. `BATCH = 1000`.
 
 **Binding/schema ordering (refines the spec):** entities are bound **lazily** — the first time a chunk for an entity is seen, `bind_entity_from_sample` runs (cache the binding per entity). Per-entity/partition DDL is created **lazily** via `ensure_partition` on the first flush to each partition (tracked in a `seen_partitions` set), NOT via a create_schema-with-all-bindings up front — that up-front call is impossible in a streaming pass (combined mode interleaves entities; auto_map needs a data sample). `create_schema()` (when `create_schema=True`) is only for data-independent DBMS-level setup and may be a no-op for sinks that need none.
@@ -271,7 +271,7 @@ git commit -m "feat(stream): DbmsSink protocol + bounded-memory orchestrator (fa
 - Test: `tests/test_sinks.py` (fake DB client per sink).
 
 **Interfaces:**
-- Produces: `PostgresSink(backend_cfg, *, connection_factory=...)`, `MongoSink(backend_cfg, *, client_factory=...)` implementing `DbmsSink`. Each `write_batch` shapes the cast batch into the DBMS payload (reusing the importer's existing row-shaping) and writes it via the batched API (`execute_values`/`insert_many`). `create_schema` runs the same DDL the materialize importer runs. `ensure_partition` creates the per-`each`-partition table/collection if absent.
+- Produces: `PostgresSink(dbms_cfg, *, connection_factory=...)`, `MongoSink(dbms_cfg, *, client_factory=...)` implementing `DbmsSink`. Each `write_batch` shapes the cast batch into the DBMS payload (reusing the importer's existing row-shaping) and writes it via the batched API (`execute_values`/`insert_many`). `create_schema` runs the same DDL the materialize importer runs. `ensure_partition` creates the per-`each`-partition table/collection if absent.
 
 - [ ] Steps: For each sink, write a fake-client test (no live DB) asserting `write_batch` issues one batched write per call with the right row count and shaped payload; `create_schema` issues DDL; injected factory. Extract the importer's row-shaping into a shared function both the importer and the sink call. TDD RED→GREEN. Commit:
 ```bash

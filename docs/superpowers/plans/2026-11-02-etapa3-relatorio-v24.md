@@ -30,7 +30,7 @@
   - "cenário exemplo", exatamente assim;
   - "SGBD destino" para os SGBDs que recebem os dados;
   - "gravar" no lugar de "materializar" quando o sentido é guardar dados num SGBD. "Materialização" só nomeia o modo histórico (§4.5.1 e Cap. 5);
-  - "SGBD", nunca "backend".
+  - "SGBD", nunca o termo em inglês que o orientador rejeitou.
 - **Nomes de função** (`config_parser.merge_configs`, `stream_runner`, ...) não aparecem no texto corrido. Nomes de opção da CLI e de campo do JSON continuam, porque o usuário os digita.
 - **Rótulos LaTeX não mudam** (`sec:algoritmo`, `sec:modelos-execucao`, `fig:import-algorithm`, ...), mesmo quando o título muda. Remissões só por `\ref`, nunca "Figura 12" escrito à mão.
 - **Números:** os da 3.0.0 vêm de `benchmarks/v3/` (ver `benchmarks/README.md`, "Campaigns of the current version"); os históricos (QP4, QP5/QP6, materialização), de `benchmarks/`, `benchmarks/timings/`, `benchmarks/naive/` e `benchmarks/timings-naive/`. Tempo só de campanha sem tracemalloc e memória só de campanha com tracemalloc, nunca na mesma linha. Cada legenda declara a pasta. Número decimal com vírgula (`209{,}51`) e milhar com `\num{}`.
@@ -482,7 +482,7 @@ Expected:
 
 - [ ] **Step 2: Portão de vocabulário, no relatório inteiro**
 
-Run: a ferramenta Grep em `docs-tcc/chapters/` e `docs-tcc/main.tex` com cada padrão: `lgoritmo`, `amada`, `aterializ`, `cenário de exemplo`, `cenário de e-commerce`, `backend`, `--execution`, `create-schema`, `\[Ss\]treaming`.
+Run: a ferramenta Grep em `docs-tcc/chapters/` e `docs-tcc/main.tex` com cada padrão: `lgoritmo`, `amada`, `aterializ`, `cenário de exemplo`, `cenário de e-commerce`, `back[e]nd`, `--execution`, `create-schema`, `\[Ss\]treaming`.
 Expected: cada ocorrência que sobra está numa lista de exceções aceitas, registrada no ledger com o motivo:
 - "camada de observabilidade";
 - "camada de acesso da aplicação";

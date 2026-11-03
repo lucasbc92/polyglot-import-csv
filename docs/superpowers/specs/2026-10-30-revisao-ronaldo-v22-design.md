@@ -68,7 +68,7 @@ O orientador anotou só o Cap. 4. Mesmo assim, as convenções valem para o rela
 - **"cenário exemplo"**, exatamente assim.
 - **"SGBD destino"** onde o texto fala dos SGBDs para onde os dados vão.
 - **"gravar" no lugar de "materializar"** quando o sentido é guardar dados num SGBD (por exemplo, `tab:materializacao`, "relação materializada no PostgreSQL"), porque "materialização" é o nome do modo removido. **Escolha minha.**
-- Continua valendo a regra antiga: "SGBD", nunca "backend".
+- Continua valendo a regra antiga: "SGBD", nunca o termo em inglês que o orientador rejeitou.
 
 ## Figura nova: a importação em fluxo no cenário exemplo
 

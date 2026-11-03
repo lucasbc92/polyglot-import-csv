@@ -15,7 +15,7 @@
 - Base: o fonte atual de `main` (= v2.2). Nada da v2.2 é revertido.
 - Legenda de figura **abaixo**; de tabela **acima**; `Fonte: Elaborado pelo autor (2026).` sempre abaixo, em `\footnotesize`.
 - Toda listagem precedida de frase que a nomeie ("A Listagem~\ref{...} mostra ..."); trechos truncados com `...`, citado na prosa.
-- Nunca "backend" no texto: sempre "SGBD". Nomes de arquivo e opção: `dbms_config.json`, `--dbms-config`.
+- Sempre "SGBD" no texto, nunca o termo em inglês que o orientador rejeitou. Nomes de arquivo e opção: `dbms_config.json`, `--dbms-config`.
 - Nenhuma prosa sobre versões anteriores do relatório ou da ferramenta.
 - Nunca envolver `tabular` em `{\small ...}` (mata os struts). Para ganhar largura: `\setlength{\tabcolsep}{4pt}` dentro do `table`.
 - Listagens de exemplo são trechos fiéis de `data/ecommerce/*.json`, salvo quando o texto as declara ilustrativas.
@@ -246,7 +246,7 @@ git push
 - [ ] **Step 1: Conferir fatos antes de escrever**
 
 Os seguintes fatos foram verificados no código em 05/10 e fundamentam o texto; reconferir se o código mudou desde então:
-- `entity_utils.FLAT_BACKENDS = {"postgres", "redis", "cassandra", "neo4j"}` → só o MongoDB aceita `columns` aninhado.
+- `entity_utils.FLAT_DBMS = {"postgres", "redis", "cassandra", "neo4j"}` → só o MongoDB aceita `columns` aninhado.
 - `filter_engine.expand_each`: um filtro `each` por entidade; cada valor distinto gera o alvo `<entidade>_<sufixo>`, sufixo = `target_suffix` ou o valor normalizado.
 - `schema_generator.build_postgres_create_tables`: coluna manual sem `db_type` vira `TEXT`; auto-mapeada recebe o tipo da Tabela `tab:kinds` (`mapping_resolver.py:161`).
 - Schema de importação: raiz exige só `sources`; bloco de SGBD exige `entities`; entidade e `columnSpec` sem campos obrigatórios; `filter` exige `column` e `operator`.

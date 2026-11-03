@@ -27,7 +27,7 @@ def test_collector_records_and_computes_rate():
     [m] = c.entries()
     assert m.rows_per_second == 50.0
     rec = m.to_record()
-    assert rec["backend"] == "postgres" and rec["phase"] == "write"
+    assert rec["dbms"] == "postgres" and rec["phase"] == "write"
 
 
 def test_zero_seconds_has_no_rate():

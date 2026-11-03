@@ -75,7 +75,7 @@ Remover, de ponta a ponta:
 - `cli.py`: opção `--strategy` e o parâmetro repassado ao runner. Uma chamada com
   `--strategy` passa a ser opção desconhecida (erro do click).
 - `runner.py`: parâmetro `strategy`, o aviso "--strategy naive is ignored under --execution
-  stream" e o repasse a `resolve_backend_entities` e aos importadores.
+  stream" e o repasse a `resolve_dbms_entities` e aos importadores.
 - `casting.py`: caminho célula a célula de `cast_frame`; a função perde o parâmetro
   `strategy` e mantém só o caminho por coluna. Ajustar comentários que citam o ramo naive.
 - `mapping_resolver.py`: parâmetro `strategy` e o seu lugar na chave do cache de conversão.

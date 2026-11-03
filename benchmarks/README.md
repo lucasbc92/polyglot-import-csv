@@ -46,7 +46,7 @@ traced run distorts the phases *against each other*. Hence the paired campaigns.
 
 - Each `benchmark_results.csv` carries a single `timestamp` — no appended runs.
 - Row count matches its `benchmark_run_*.json` exactly (108 / 108 / 68 / 68).
-- Zero duplicate `(size, mode, strategy, execution, backend, entity, phase)` keys.
+- Zero duplicate `(size, mode, strategy, execution, dbms, entity, phase)` keys.
 - `peak_memory_mb` populated in all traced rows, empty in all untraced rows.
 - **Row counts identical across all four campaigns** for every shared cell — the
   workload is the same; only time and memory differ.
@@ -157,7 +157,7 @@ removed write-path axis. It takes read chunk sizes in MB, separated by commas
 (default `8`; each from 8 to 256), and every size is another cell of the matrix. The
 consolidated `benchmark_results.csv` has these columns:
 
-    timestamp,size,mode,chunk_mb,backend,entity,phase,rows,median_seconds,rows_per_second,peak_memory_mb
+    timestamp,size,mode,chunk_mb,dbms,entity,phase,rows,median_seconds,rows_per_second,peak_memory_mb
 
 The `phase` column holds `infer` and `validate`, once per import, and `write`, once
 per DBMS. A results file with the old header (an `execution` column and no
@@ -194,7 +194,7 @@ timestamp of the resumed run.
 
 - Each `benchmark_results.csv` carries a single `timestamp`, and its row count
   matches its `benchmark_run_*.json` (42 / 42 / 21 / 21).
-- No duplicate `(size, mode, chunk_mb, backend, entity, phase)` keys.
+- No duplicate `(size, mode, chunk_mb, dbms, entity, phase)` keys.
 - `peak_memory_mb` filled in every traced row and empty in every untraced row.
 - `infer` and `validate` read exactly `size` rows in every cell.
 - The MongoDB write holds the `stock` plus the `purchase` rows of the generated
@@ -324,7 +324,7 @@ Daí as campanhas pareadas.
   acrescentadas.
 - A contagem de linhas bate exatamente com seu `benchmark_run_*.json`
   (108 / 108 / 68 / 68).
-- Zero chaves `(size, mode, strategy, execution, backend, entity, phase)`
+- Zero chaves `(size, mode, strategy, execution, dbms, entity, phase)`
   duplicadas.
 - `peak_memory_mb` preenchido em todas as linhas rastreadas, vazio em todas as
   não rastreadas.
@@ -445,7 +445,7 @@ de leitura em MB, separados por vírgula (padrão `8`; cada um de 8 a 256), e ca
 tamanho é mais uma célula da matriz. O `benchmark_results.csv` consolidado tem estas
 colunas:
 
-    timestamp,size,mode,chunk_mb,backend,entity,phase,rows,median_seconds,rows_per_second,peak_memory_mb
+    timestamp,size,mode,chunk_mb,dbms,entity,phase,rows,median_seconds,rows_per_second,peak_memory_mb
 
 A coluna `phase` traz `infer` e `validate`, uma vez por importação, e `write`, uma
 vez por SGBD. Um arquivo de resultados com o cabeçalho antigo (uma coluna `execution`
@@ -482,7 +482,7 @@ CSV dela traz o *timestamp* da execução retomada.
 
 - Cada `benchmark_results.csv` traz um único `timestamp`, e o número de linhas bate
   com o do seu `benchmark_run_*.json` (42 / 42 / 21 / 21).
-- Nenhuma chave `(size, mode, chunk_mb, backend, entity, phase)` repetida.
+- Nenhuma chave `(size, mode, chunk_mb, dbms, entity, phase)` repetida.
 - `peak_memory_mb` preenchido em todas as linhas rastreadas e vazio em todas as não
   rastreadas.
 - `infer` e `validate` leram exatamente `size` linhas em todas as células.

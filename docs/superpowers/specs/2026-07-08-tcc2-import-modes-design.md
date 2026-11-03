@@ -136,7 +136,7 @@ validar → importar por SGBD/entidade, com métricas.
 Subclasses de `BusinessException` por categoria — CLI continua com um único
 `except BusinessException`; testes afirmam o tipo, não o texto da mensagem:
 
-- `ConfigError` — JSON inválido, schema violado, backend sem conexão declarada;
+- `ConfigError` — JSON inválido, schema violado, SGBD sem conexão declarada;
 - `SourceError` — fonte desconhecida, arquivo ausente, colisão nome×valor de origem;
 - `MappingError` — coluna/índice/range inexistente, entidade sem vínculo resolvível;
 - `ImportExecutionError` — falhas durante a escrita nos SGBDs

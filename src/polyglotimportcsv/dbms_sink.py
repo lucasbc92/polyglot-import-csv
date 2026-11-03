@@ -46,5 +46,5 @@ class DbmsSink(Protocol):
         ...
 
 
-#: Builds a DbmsSink from a DBMS's backend_cfg (e.g. config["postgres"]).
+#: Builds a DbmsSink from a DBMS's dbms_cfg (e.g. config["postgres"]).
 SinkFactory = Callable[[Dict[str, Any]], "DbmsSink"]

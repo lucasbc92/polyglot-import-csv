@@ -27,7 +27,7 @@
 **Modified:**
 - `src/polyglotimportcsv/casting.py` — vectorized `cast_frame` under `strategy`, per-cell path preserved.
 - `src/polyglotimportcsv/mapping_resolver.py` — thread `strategy` into `cast_frame` calls.
-- `src/polyglotimportcsv/runner.py` — accept `strategy`, pass to `resolve_backend_entities` and each importer.
+- `src/polyglotimportcsv/runner.py` — accept `strategy`, pass to `resolve_dbms_entities` and each importer.
 - `src/polyglotimportcsv/importers/base.py` — Protocol gains `strategy` (keyword, default).
 - `src/polyglotimportcsv/importers/redis_importer.py` — `_write_naive`/`_write_batched`, `client_factory`, hoist per-row lookups.
 - `src/polyglotimportcsv/importers/cassandra_importer.py` — concurrent batched write, `session_factory`.
@@ -241,9 +241,9 @@ git commit -m "perf(casting): vectorized cast_frame with naive fallback path"
 **Interfaces:**
 - Consumes: `cast_frame(df, kinds, *, strategy=...)` from Task 1.
 - Produces:
-  - `resolve_backend_entities(backend_cfg, sources, cast_cache=None, *, strategy="optimized")`
+  - `resolve_dbms_entities(dbms_cfg, sources, cast_cache=None, *, strategy="optimized")`
   - `run_import(..., strategy: str = "optimized")` — new keyword after `benchmark`.
-  - `BackendImporterFn.__call__(..., *, dry_run, create_schema, strategy="optimized")`.
+  - `DbmsImporterFn.__call__(..., *, dry_run, create_schema, strategy="optimized")`.
   - Cast cache key gains strategy so naive and optimized frames never collide.
 
 - [ ] **Step 1: Write the failing test**
@@ -254,7 +254,7 @@ Add to `tests/test_mapping_resolver.py`:
 def test_resolve_uses_strategy_for_casting():
     import pandas as pd
     from polyglotimportcsv.sources import SOURCE_COLUMN, SourceData
-    from polyglotimportcsv.mapping_resolver import resolve_backend_entities
+    from polyglotimportcsv.mapping_resolver import resolve_dbms_entities
 
     df = pd.DataFrame({"n": ["1", "2"], SOURCE_COLUMN: ["s", "s"]})
     sd = SourceData(name="s", df=df,
@@ -262,8 +262,8 @@ def test_resolve_uses_strategy_for_casting():
                     file_header=["n"])
     bcfg = {"entities": {"E": {"source": "s", "columns": {"n": {}}}}}
     cache: dict = {}
-    resolve_backend_entities(bcfg, {"s": sd}, cache, strategy="naive")
-    resolve_backend_entities(bcfg, {"s": sd}, cache, strategy="optimized")
+    resolve_dbms_entities(bcfg, {"s": sd}, cache, strategy="naive")
+    resolve_dbms_entities(bcfg, {"s": sd}, cache, strategy="optimized")
     # Distinct strategies must not share a cached frame.
     assert len({k for k in cache}) == 2
 ```
@@ -275,11 +275,11 @@ Expected: FAIL — unexpected keyword `strategy`.
 
 - [ ] **Step 3: Implement threading**
 
-In `mapping_resolver.py`, change `resolve_backend_entities` signature and body:
+In `mapping_resolver.py`, change `resolve_dbms_entities` signature and body:
 
 ```python
-def resolve_backend_entities(
-    backend_cfg: Dict[str, Any],
+def resolve_dbms_entities(
+    dbms_cfg: Dict[str, Any],
     sources: Dict[str, SourceData],
     cast_cache: Optional[Dict[tuple, pd.DataFrame]] = None,
     *,
@@ -298,15 +298,15 @@ Change the cache key line (was `cache_key = _binding_cache_key(ecfg, ename)`):
 In `runner.py`, add `strategy: str = "optimized"` to `run_import` (after `benchmark: bool = False`) and to `_run`'s keyword params, forward it in the `_run(...)` call, then use it:
 
 ```python
-        with collector.timed(backend, "*", "map") as t:
-            bound = resolve_backend_entities(bcfg, sources, cast_cache, strategy=strategy)
+        with collector.timed(dbms, "*", "map") as t:
+            bound = resolve_dbms_entities(bcfg, sources, cast_cache, strategy=strategy)
             t.rows = sum(len(be.df) for be in bound.values())
-        validate_backend_entities(backend, bcfg, bound)
+        validate_dbms_entities(dbms, bcfg, bound)
         for ename, be in bound.items():
             if len(be.df) == 0:
-                logger.warning("entity %s/%s bound to 0 row(s)", backend, ename)
-            dump_entity_frame(backend, ename, be.df, force=show_data)
-        backend_lines = fn(bcfg, bound, dry_run=dry_run,
+                logger.warning("entity %s/%s bound to 0 row(s)", dbms, ename)
+            dump_entity_frame(dbms, ename, be.df, force=show_data)
+        dbms_lines = fn(bcfg, bound, dry_run=dry_run,
                            create_schema=create_schema, strategy=strategy)
 ```
 
@@ -315,7 +315,7 @@ In `importers/base.py`, add the keyword to the Protocol:
 ```python
     def __call__(
         self,
-        backend_cfg: Dict[str, Any],
+        dbms_cfg: Dict[str, Any],
         entities: Dict[str, BoundEntity],
         *,
         dry_run: bool,
@@ -358,7 +358,7 @@ git commit -m "feat: thread strategy from run_import through resolver and import
 Create `tests/test_importer_write_batching.py`:
 
 ```python
-"""Write-path batching per backend, exercised with injected fake clients.
+"""Write-path batching per DBMS, exercised with injected fake clients.
 
 These are the first tests to run the importer write loop at all — the rest of
 the suite is dry-run. Each fake records how the driver was called so we can
@@ -515,7 +515,7 @@ def _write_batched(client, pairs: List[Tuple[str, str]], advance, batch: int = 1
 
 
 def run_redis_import(
-    backend_cfg: Dict[str, Any],
+    dbms_cfg: Dict[str, Any],
     entities: Dict[str, "BoundEntity"],
     *,
     dry_run: bool,
@@ -524,7 +524,7 @@ def run_redis_import(
     client_factory: Callable[[Dict[str, Any]], Any] = _default_redis_client,
 ) -> List[str]:
     lines: List[str] = []
-    conn = backend_cfg.get("connection") or {}
+    conn = dbms_cfg.get("connection") or {}
     _ = create_schema  # Redis has no DDL
 
     if dry_run:
@@ -563,7 +563,7 @@ def run_redis_import(
     return lines
 ```
 
-Note: `_kv_pairs` (payload building) is inside the `write` timer, matching §4.5's boundary rule and the other row-shaping backends.
+Note: `_kv_pairs` (payload building) is inside the `write` timer, matching §4.5's boundary rule and the other row-shaping DBMS.
 
 - [ ] **Step 4: Run redis tests + redis dry-run regression**
 
@@ -984,7 +984,7 @@ git commit -m "perf(neo4j): uniqueness constraint + UNWIND batched merges with n
 Create `tests/test_phase_boundaries.py`:
 
 ```python
-"""Every backend must shape rows inside its own 'write' timer (spec §4.5)."""
+"""Every DBMS must shape rows inside its own 'write' timer (spec §4.5)."""
 
 import inspect
 
@@ -1099,13 +1099,13 @@ In `benchmark_runner.py`, add `strategies: Iterable[str] = ("optimized",)` to `r
             dpath = _ensure_dataset(data_dir, size, seed, mode, generate)
             overrides = _overrides(mode, dpath)
             merged = load_cfg(config_path, sgbd_config_path)
-            selected = requested or [b for b in _ALL_BACKENDS if b in merged]
+            selected = requested or [b for b in _ALL_DBMS if b in merged]
             for strategy in strategies:
                 for rep in range(repetitions):
-                    for backend in selected:
-                        block = merged.get(backend)
-                        if block is not None and backend in cleaners:
-                            cleaners[backend](block)
+                    for dbms in selected:
+                        block = merged.get(dbms)
+                        if block is not None and dbms in cleaners:
+                            cleaners[dbms](block)
                     collector = MetricsCollector()
                     importer(
                         config_path,
@@ -1130,7 +1130,7 @@ In `benchmark_results.py`, add `"strategy"` to `_RESULT_FIELDS` after `"mode"`, 
 
 ```python
 _RESULT_FIELDS = (
-    "timestamp", "size", "mode", "strategy", "backend", "entity", "phase",
+    "timestamp", "size", "mode", "strategy", "dbms", "entity", "phase",
     "rows", "median_seconds", "rows_per_second",
 )
 ```
@@ -1139,14 +1139,14 @@ _RESULT_FIELDS = (
     for run in labeled_runs:
         for rec in run["records"]:
             key = (run["size"], run["mode"], run["strategy"],
-                   rec["backend"], rec["entity"], rec["phase"])
+                   rec["dbms"], rec["entity"], rec["phase"])
             ...
     for key in order:
-        size, mode, strategy, backend, entity, phase = key
+        size, mode, strategy, dbms, entity, phase = key
         ...
         results.append({
             "size": size, "mode": mode, "strategy": strategy,
-            "backend": backend, "entity": entity, "phase": phase,
+            "dbms": dbms, "entity": entity, "phase": phase,
             "rows": g["rows"], "median_seconds": med, "rows_per_second": rps,
         })
 ```
@@ -1309,7 +1309,7 @@ In `scripts/run_benchmarks.py`, add the argument and forward it:
 
 Parse with `_parse_str_list(args.strategies)`, add to `meta`, and pass `strategies=...` to `run_matrix(...)`.
 
-In `scripts/run_benchmarks_100k.py`, forward `--strategies` if the caller passes it (it already flows through `passthrough`), and make the slow-backend warning conditional:
+In `scripts/run_benchmarks_100k.py`, forward `--strategies` if the caller passes it (it already flows through `passthrough`), and make the slow-DBMS warning conditional:
 
 ```python
     if slow and "naive" in args.strategies:
@@ -1374,6 +1374,6 @@ python scripts/run_benchmarks_100k.py --strategies optimized
 
 ## Self-Review Notes
 
-- **Spec §1.1 (casting)** → Task 1. **§1.2 (row writes)** → Tasks 3,4,5. **§1.3 (phase boundary)** → Task 6. **§3.1 strategy axis** → Task 2. **§3.2 injectable client** → Tasks 3-5. **§4.1-4.6** → Tasks 1,3,4,5,6,2. **§5 metrics/CSV** → Tasks 7,8. **§6 CLI** → Task 9. **§7 tests** → each task's tests + Task 10. **§8 validation** → Task 10 Step 4. **§9 out-of-scope** honored (no COPY, no cross-backend parallelism, clean_postgres untouched).
+- **Spec §1.1 (casting)** → Task 1. **§1.2 (row writes)** → Tasks 3,4,5. **§1.3 (phase boundary)** → Task 6. **§3.1 strategy axis** → Task 2. **§3.2 injectable client** → Tasks 3-5. **§4.1-4.6** → Tasks 1,3,4,5,6,2. **§5 metrics/CSV** → Tasks 7,8. **§6 CLI** → Task 9. **§7 tests** → each task's tests + Task 10. **§8 validation** → Task 10 Step 4. **§9 out-of-scope** honored (no COPY, no cross-SGBD parallelism, clean_postgres untouched).
 - **Type consistency:** `strategy` is the single param name everywhere; factory params named `client_factory` (redis), `session_factory` (cassandra), `driver_factory` (neo4j) — different because the driver connection shapes differ (client vs cluster+session vs driver). Batch constant 1000 for redis/neo4j, concurrency 64 for cassandra, stated in Global Constraints and reused verbatim.
 - **Ordering risk:** Task 2 makes the five importers accept `strategy` (ignoring it) so Task 2's runner change doesn't break them before Tasks 3-6 give it meaning. Tasks 3-6 are independent of each other and can run in any order after Task 2.
