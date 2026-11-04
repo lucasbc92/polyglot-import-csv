@@ -11,9 +11,9 @@ import pytest
 from polyglotimportcsv.business_exception import MappingError, SourceError
 from polyglotimportcsv.csv_reader import infer_column_kinds
 from polyglotimportcsv.import_plan import (
-    DEFAULT_BATCH_SIZE,
-    MAX_BATCH_SIZE,
-    MIN_BATCH_SIZE,
+    DEFAULT_BATCH_LINES,
+    MAX_BATCH_LINES,
+    MIN_BATCH_LINES,
     plan_import,
 )
 from polyglotimportcsv.sources import SOURCE_COLUMN
@@ -30,7 +30,7 @@ def _entities(**by_name):
 
 
 def test_batch_size_constants():
-    assert (MIN_BATCH_SIZE, DEFAULT_BATCH_SIZE, MAX_BATCH_SIZE) == (1024, 1024, 8192)
+    assert (MIN_BATCH_LINES, DEFAULT_BATCH_LINES, MAX_BATCH_LINES) == (1024, 1024, 8192)
 
 
 def test_only_reads_the_sources_the_selected_dbms_use(tmp_path):
@@ -210,7 +210,7 @@ def test_a_source_without_rows_still_binds(tmp_path):
     plan = plan_import(cfg, tmp_path, dbms_names=["postgres"])
     assert plan.profiles["s"].rows == 0
     assert set(plan.bindings["postgres"]["t"].cfg["columns"]) == {"a", "b"}
-    assert plan.entity_batch("postgres", "t") == min(DEFAULT_BATCH_SIZE, plan.rows_per_chunk["s"])
+    assert plan.entity_batch("postgres", "t") == min(DEFAULT_BATCH_LINES, plan.rows_per_chunk["s"])
 
 
 #: 2000 distinct ISO datetimes shared out between two sources: the first is all dates, the
