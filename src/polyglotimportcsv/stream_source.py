@@ -16,9 +16,10 @@ from polyglotimportcsv.business_exception import SourceError
 from polyglotimportcsv.sources import SOURCE_COLUMN, resolve_path
 
 #: Size of a read block, in MB: the default and the bounds a user may choose within.
-DEFAULT_CHUNK_MB = 8
-MIN_CHUNK_MB = 8
-MAX_CHUNK_MB = 256
+MIN_CHUNK_MB = 16
+MAX_CHUNK_MB = MIN_CHUNK_MB*16
+DEFAULT_CHUNK_MB = MIN_CHUNK_MB*8
+
 
 #: Rows read from the start of a file to measure how wide its rows are.
 PROBE_ROWS = 1000

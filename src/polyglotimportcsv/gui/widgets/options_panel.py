@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from PySide6.QtCore import Qt
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QRadioButton,
     QSpinBox,
+    QSlider,
     QWidget,
 )
 
@@ -29,11 +31,8 @@ from polyglotimportcsv.gui.state import (
     MAX_SAMPLE_SIZE,
 )
 from polyglotimportcsv.gui.widgets.info_badge import InfoBadge
-from polyglotimportcsv.import_plan import DEFAULT_BATCH_SIZE, MAX_BATCH_SIZE, MIN_BATCH_SIZE
+from polyglotimportcsv.import_plan import DEFAULT_BATCH_LINES, MAX_BATCH_LINES, MIN_BATCH_LINES
 from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB
-
-#: How far one arrow click moves the batch size.
-BATCH_STEP = 1024
 
 SHOW_DATA_CHOICES = (
     ("sample", "Amostra (--sample)"),
@@ -83,20 +82,79 @@ class OptionsPanel(QGroupBox):
         layout.addWidget(QLabel("Bancos de dados (--only)", self), 0, 0)
         layout.addLayout(self._build_dbms_row(), 0, 1)
 
-        self.chunk_spin = QSpinBox(self)
-        self.chunk_spin.setRange(MIN_CHUNK_MB, MAX_CHUNK_MB)
-        self.chunk_spin.setValue(DEFAULT_CHUNK_MB)
-        self.chunk_spin.valueChanged.connect(self.changed)
-        layout.addWidget(QLabel("Bloco em MB (--chunk-size)", self), 1, 0)
-        layout.addLayout(self._build_spin_row(self.chunk_spin, "chunk_size"), 1, 1)
+        # Chunk size slider
+        self.chunk_slider = QSlider(Qt.Orientation.Horizontal, self)
 
-        self.batch_spin = QSpinBox(self)
-        self.batch_spin.setRange(MIN_BATCH_SIZE, MAX_BATCH_SIZE)
-        self.batch_spin.setSingleStep(BATCH_STEP)
-        self.batch_spin.setValue(DEFAULT_BATCH_SIZE)
-        self.batch_spin.valueChanged.connect(self.changed)
-        layout.addWidget(QLabel("Lote (--batch-size)", self), 2, 0)
-        layout.addLayout(self._build_spin_row(self.batch_spin, "batch_size"), 2, 1)
+        self.chunk_slider.setRange(
+            0,
+            (MAX_CHUNK_MB - MIN_CHUNK_MB) / MIN_CHUNK_MB
+        )
+        self.chunk_slider.setSingleStep(1)
+        self.chunk_slider.setPageStep(1)
+
+        self.chunk_slider.setValue(
+            DEFAULT_CHUNK_MB / MIN_CHUNK_MB
+        )
+
+        self.chunk_value_label = QLabel(self)
+        self.chunk_value_label.setMinimumWidth(65)
+        self.chunk_value_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+
+        self.chunk_slider.valueChanged.connect(
+            lambda value: self.chunk_value_label.setText(
+                f"{MIN_CHUNK_MB + value * MIN_CHUNK_MB} MB"
+            )
+        )
+        self.chunk_slider.valueChanged.connect(self.changed)
+
+        self.chunk_value_label.setText(f"{DEFAULT_CHUNK_MB} MB")
+
+        layout.addWidget(QLabel("Bloco lido por vez:", self), 1, 0)
+        layout.addLayout(
+            self._build_slider_row(
+                self.chunk_slider,
+                self.chunk_value_label,
+                "chunk_size"
+            ),
+            1, 1
+        )
+
+        # Batch size slider
+        self.batch_slider = QSlider(Qt.Orientation.Horizontal, self)
+
+        self.batch_slider.setRange(
+            0,
+            (MAX_BATCH_LINES - MIN_BATCH_LINES) / MIN_BATCH_LINES
+        )
+        self.batch_slider.setSingleStep(1)
+        self.batch_slider.setPageStep(1)
+
+        self.batch_slider.setValue(
+            DEFAULT_BATCH_LINES / MIN_BATCH_LINES
+        )
+
+        self.batch_value_label = QLabel(self)
+        self.batch_value_label.setMinimumWidth(85)
+        self.batch_value_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+
+        self.batch_slider.valueChanged.connect(
+            lambda value: self.batch_value_label.setText(
+                f"{MIN_BATCH_LINES + value * MIN_BATCH_LINES} linhas"
+            )
+        )
+        self.batch_slider.valueChanged.connect(self.changed)
+
+        self.batch_value_label.setText(f"{DEFAULT_BATCH_LINES} linhas")
+
+        layout.addWidget(QLabel("Lote gravado por vez:", self), 2, 0)
+        layout.addLayout(
+            self._build_slider_row(
+                self.batch_slider,
+                self.batch_value_label,
+                "batch_size"
+            ),
+            2, 1
+        )
 
         self.dry_run_box = QCheckBox("Simulação (--dry-run)", self)
         self.dry_run_box.toggled.connect(self.changed)
@@ -132,10 +190,10 @@ class OptionsPanel(QGroupBox):
         return tuple(name for name in DBMS_NAMES if self.dbms_boxes[name].isChecked())
 
     def chunk_size_mb(self) -> int:
-        return self.chunk_spin.value()
+        return MIN_CHUNK_MB + self.chunk_slider.value() * MIN_CHUNK_MB
 
     def batch_size(self) -> int:
-        return self.batch_spin.value()
+        return MIN_BATCH_LINES + self.batch_slider.value() * MIN_BATCH_LINES
 
     def dry_run(self) -> bool:
         return self.dry_run_box.isChecked()
@@ -181,11 +239,20 @@ class OptionsPanel(QGroupBox):
         row.addStretch(1)
         return row
 
-    def _build_spin_row(self, spin: QSpinBox, help_key: str) -> QHBoxLayout:
+    def _build_slider_row(
+        self,
+        slider: QSlider,
+        value_label: QLabel,
+        help_key: str
+    ) -> QHBoxLayout:
         row = QHBoxLayout()
-        row.addWidget(spin)
+
+        slider.setMinimumWidth(300)
+        row.addWidget(slider)
+        row.addWidget(value_label)
         row.addWidget(self._badge(help_key))
         row.addStretch(1)
+
         return row
 
     def _build_show_data_row(self) -> QHBoxLayout:
