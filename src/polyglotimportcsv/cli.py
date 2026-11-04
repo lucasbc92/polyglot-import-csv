@@ -11,7 +11,7 @@ import click
 
 from polyglotimportcsv.business_exception import BusinessException
 from polyglotimportcsv.dbms_check import not_ready_message
-from polyglotimportcsv.import_plan import DEFAULT_BATCH_SIZE, MAX_BATCH_SIZE, MIN_BATCH_SIZE
+from polyglotimportcsv.import_plan import DEFAULTbATCH_lINES, MAXbATCH_lINES, MINbATCH_lINES
 from polyglotimportcsv.reporting import DEFAULT_SAMPLE_SIZE, error, kv, setup_reporting
 from polyglotimportcsv.runner import run_check, run_import
 from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB
@@ -92,8 +92,8 @@ def _parse_source_overrides(pairs: Tuple[str, ...]) -> Dict[str, str]:
 @click.option(
     "--batch-size",
     "batch_size",
-    type=click.IntRange(MIN_BATCH_SIZE, MAX_BATCH_SIZE),
-    default=DEFAULT_BATCH_SIZE,
+    type=click.IntRange(MINbATCH_lINES, MAXbATCH_lINES),
+    default=DEFAULTbATCH_lINES,
     show_default=True,
     metavar="N",
     help="Rows per write batch (1024-8192), capped at the rows of one read chunk.",
