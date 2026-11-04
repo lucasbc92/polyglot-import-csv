@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
-from polyglotimportcsv.import_plan import DEFAULT_BATCH_SIZE, MAX_BATCH_SIZE, MIN_BATCH_SIZE
+from polyglotimportcsv.import_plan import DEFAULT_BATCH_LINES, MAX_BATCH_LINES, MIN_BATCH_LINES
 from polyglotimportcsv.reporting import DEFAULT_SAMPLE_SIZE
 from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB
 
@@ -38,7 +38,7 @@ class RunOptions:
     dbms_config_path: Optional[Path] = None
     only: Tuple[str, ...] = ()
     chunk_size_mb: int = DEFAULT_CHUNK_MB
-    batch_size: int = DEFAULT_BATCH_SIZE
+    batch_size: int = DEFAULT_BATCH_LINES
     dry_run: bool = False
     log_level: str = "INFO"
     show_data: Optional[bool] = None
@@ -70,7 +70,7 @@ def validate(options: RunOptions) -> Dict[str, str]:
     if not MIN_CHUNK_MB <= options.chunk_size_mb <= MAX_CHUNK_MB:
         errors["chunk_size_mb"] = "O bloco deve ter entre 8 e 256 MB."
 
-    if not MIN_BATCH_SIZE <= options.batch_size <= MAX_BATCH_SIZE:
+    if not MIN_BATCH_LINES <= options.batch_size <= MAX_BATCH_LINES:
         errors["batch_size"] = "O lote deve ter entre 1024 e 8192 linhas."
 
     if options.show_data is None and not 1 <= options.sample_size <= MAX_SAMPLE_SIZE:

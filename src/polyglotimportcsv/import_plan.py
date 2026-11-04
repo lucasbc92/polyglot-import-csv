@@ -18,10 +18,9 @@ from polyglotimportcsv.stream_binding import EntityBinding, bind_entity, entity_
 from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, chunk_rows, source_path
 
 #: Rows per write batch: the default and the bounds a user may choose within.
-DEFAULT_BATCH_SIZE = 1024
-MIN_BATCH_SIZE = 1024
-MAX_BATCH_SIZE = 8192
-
+MIN_BATCH_LINES = 256
+MAX_BATCH_LINES = MIN_BATCH_LINES*16
+DEFAULT_BATCH_LINES = MIN_BATCH_LINES*8
 
 @dataclass
 class ImportPlan:
@@ -107,7 +106,7 @@ def plan_import(
     dbms_names: Sequence[str],
     overrides: Optional[Dict[str, str]] = None,
     chunk_mb: float = DEFAULT_CHUNK_MB,
-    batch_size: int = DEFAULT_BATCH_SIZE,
+    batch_size: int = DEFAULT_BATCH_LINES,
 ) -> ImportPlan:
     """Read the sources ``dbms_names`` use once and bind their entities.
 
