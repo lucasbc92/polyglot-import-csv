@@ -14,6 +14,7 @@ import pandas as pd
 import pytest
 
 from polyglotimportcsv import runner
+from polyglotimportcsv.auto_size import AutoChunk
 from polyglotimportcsv.business_exception import (
     ConfigError,
     DataValidationError,
@@ -125,8 +126,8 @@ def _probe_answers(value, seen=None):
 def test_run_import_takes_chunk_and_batch_sizes_not_importers_or_execution():
     params = inspect.signature(run_import).parameters
     assert "importers" not in params and "execution" not in params
-    assert params["chunk_size_mb"].default == 128
-    assert params["batch_size"].default == 2048
+    assert params["chunk_size_mb"].default is None
+    assert params["batch_size"].default is None
 
 
 def test_a_validation_error_stops_before_any_sink_is_built(tmp_path, capsys):
@@ -376,6 +377,71 @@ def test_chunk_and_batch_sizes_reach_the_plan(tmp_path, monkeypatch):
     monkeypatch.setattr(runner, "plan_import", spy)
     run_import(cfg, dry_run=True, chunk_size_mb=16, batch_size=2048)
     assert seen == {"chunk_mb": 16, "batch_size": 2048}
+
+
+_AUTO_REASON = "auto: largest source read whole (95.5 MB); 890 MB free"
+
+
+def _plan_spy(monkeypatch, seen):
+    real = runner.plan_import
+
+    def spy(*args, **kwargs):
+        seen.update(chunk_mb=kwargs["chunk_mb"], batch_size=kwargs["batch_size"])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(runner, "plan_import", spy)
+
+
+def test_auto_sizes_are_resolved_logged_and_reach_the_plan(tmp_path, monkeypatch, capsys):
+    cfg = _events(tmp_path)
+    seen, calls = {}, []
+    _plan_spy(monkeypatch, seen)
+    monkeypatch.setattr(runner, "available_mb", lambda: 890.0)
+
+    def fake_auto(config, base_dir, dbms_names, overrides, free_mb):
+        calls.append(free_mb)
+        return AutoChunk(95, _AUTO_REASON)
+
+    monkeypatch.setattr(runner, "auto_chunk_mb", fake_auto)
+    run_import(cfg, dry_run=True)
+    out = capsys.readouterr().out
+    assert seen == {"chunk_mb": 95, "batch_size": 2048}
+    assert calls == [890.0]
+    assert f"Read block: 95 MB ({_AUTO_REASON})" in out
+    assert "Write batch: 2048 rows (auto)" in out
+
+
+def test_manual_sizes_skip_the_auto_rule(tmp_path, monkeypatch, capsys):
+    cfg = _events(tmp_path)
+
+    def fail(*args, **kwargs):
+        raise AssertionError("the auto rule ran for manual sizes")
+
+    monkeypatch.setattr(runner, "auto_chunk_mb", fail)
+    run_import(cfg, dry_run=True, chunk_size_mb=64, batch_size=4096)
+    out = capsys.readouterr().out
+    assert "Read block: 64 MB (--chunk-size)" in out
+    assert "Write batch: 4096 rows (--batch-size)" in out
+
+
+def test_benchmark_metadata_records_the_sizes(tmp_path, monkeypatch):
+    cfg = _events(tmp_path)
+    saved = {}
+    monkeypatch.setattr(runner, "available_mb", lambda: 890.0)
+    monkeypatch.setattr(
+        runner, "auto_chunk_mb", lambda *a: AutoChunk(95, _AUTO_REASON)
+    )
+
+    def fake_write(collector, meta, *args, **kwargs):
+        saved.update(meta)
+        return tmp_path / "b.json", tmp_path / "b.csv"
+
+    monkeypatch.setattr(runner.metrics, "write_benchmark_files", fake_write)
+    run_import(cfg, dry_run=True, benchmark=True)
+    assert saved["chunk_mb"] == 95
+    assert saved["chunk_reason"] == _AUTO_REASON
+    assert saved["batch_lines"] == 2048
+    assert saved["free_memory_mb"] == 890.0
 
 
 @pytest.mark.parametrize("dry_run", [False, True])
