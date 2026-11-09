@@ -88,8 +88,8 @@ validação, inclusive a leitura completa dos dados, e informa quantas linhas
 revisar o mapeamento antes da carga real. A opção \texttt{-{}-check-dbms} apenas verifica
 se os SGBDs destino respondem e encerra sem importar; ela é passada no mesmo comando,
 como em \texttt{python -m polyglotimportcsv -{}-config data/ecommerce/import\_config.json
--{}-check-dbms}, e a interface gráfica oferece a mesma verificação no botão ``Verificar
-SGBDs'' (seções~\ref{sec:verificacao-sgbds} e~\ref{sec:interface-grafica}). A opção
+-{}-check-dbms}, e a interface gráfica oferece a mesma verificação no botão ``Check
+DBMSs'' (seções~\ref{sec:verificacao-sgbds} e~\ref{sec:interface-grafica}). A opção
 \texttt{-{}-only} restringe a execução a um subconjunto dos SGBDs configurados (por
 exemplo, \texttt{-{}-only postgres,redis}).
 
@@ -103,11 +103,12 @@ Estruturas que já existem são reaproveitadas. O MongoDB e o Redis não exigem 
 prévia: coleções e chaves surgem na primeira gravação.
 
 O segundo conjunto define \textbf{como} importar. Os arquivos são lidos em
-\textbf{blocos}, nunca inteiros, e gravados em \textbf{lotes}: \texttt{-{}-chunk-size}
-fixa a memória reservada a cada bloco de leitura, em MB (128, por padrão), e
-\texttt{-{}-batch-size}, o número de linhas de cada lote de gravação (2048, por padrão),
-limitado às linhas de um bloco. A seção~\ref{sec:modelos-execucao} descreve
-esse modelo de execução e o efeito do tamanho do bloco.
+\textbf{blocos}, nunca inteiros, e gravados em \textbf{lotes}. Por padrão, a ferramenta
+escolhe sozinha a memória de cada bloco de leitura, conforme o tamanho das fontes e a
+memória livre do computador, e grava lotes de \num{2048} linhas;
+\texttt{-{}-chunk-size} fixa o bloco à mão, em MB, e \texttt{-{}-batch-size}, o número de
+linhas de cada lote, limitado às linhas de um bloco. A seção~\ref{sec:modelos-execucao}
+descreve esse modelo de execução e a escolha automática.
 
 O terceiro conjunto governa a \textbf{observabilidade} da execução ---
 \texttt{-{}-log-level} ajusta o nível de detalhe das mensagens no terminal;
@@ -1052,7 +1053,7 @@ que fazer: para cada descritor \texttt{command}, o próprio comando; para os des
 SGBD sem \texttt{start}, uma orientação genérica. A opção \texttt{-{}-check-dbms}, da
 linha de comando da ferramenta (seção~\ref{sec:visao-geral}), executa apenas esse passo e
 encerra, com código de saída zero quando todos os SGBDs respondem e 1 quando algum não
-responde; na interface gráfica, o mesmo passo é disparado pelo botão ``Verificar SGBDs''
+responde; na interface gráfica, o mesmo passo é disparado pelo botão ``Check DBMSs''
 (seção~\ref{sec:interface-grafica}). A Tabela~\ref{tab:check-dbms} e a Listagem~\ref{lst:check-dbms} reproduzem
 uma verificação feita com o arquivo de conexão de exemplo para Windows, com o MongoDB e
 o Neo4j fora do ar.
@@ -1541,13 +1542,28 @@ isso: o Capítulo~\ref{cap:avaliacao} mede somente a versão final da ferramenta
 Na \textbf{leitura em blocos} (em inglês, \textit{streaming}), nenhum arquivo é carregado
 inteiro: cada uma das leituras do fluxo (seção~\ref{sec:algoritmo}) percorre o arquivo em
 \textbf{blocos} de linhas, e cada bloco é tratado antes de o próximo ser lido. O tamanho do
-bloco é dado em memória, pela opção \texttt{-{}-chunk-size} (128~MB, por padrão). Para convertê-lo em linhas, a ferramenta lê as primeiras mil linhas de cada
+bloco é dado em memória, em MB. Para convertê-lo em linhas, a ferramenta lê as primeiras mil linhas de cada
 arquivo, mede quanto cada linha ocupa na memória e divide o orçamento do bloco por esse
 valor; a estimativa é aproximada, pois um arquivo cujas linhas fiquem mais largas adiante
 ultrapassa o orçamento. Na gravação, as linhas de cada destino acumulam-se até completar um
-\textbf{lote} de \texttt{-{}-batch-size} linhas (2048, por padrão), limitado às linhas de um
-bloco, para que um lote não retenha vários blocos na memória. A escolha automática desses
-dois valores, conforme a memória da máquina, está em desenvolvimento.
+\textbf{lote} de linhas, limitado às linhas de um bloco, para que um lote não retenha
+vários blocos na memória.
+
+Os dois tamanhos são escolhidos \textbf{automaticamente} a cada execução, a partir da
+campanha exploratória da seção~\ref{sec:res-bloco}. O lote tem \num{2048} linhas, porque
+nenhum tamanho de lote mostrou vantagem mensurável. O bloco é o que lê a maior fonte da
+importação inteira, porque é isso que torna as leituras mais rápidas, e um bloco maior que
+ela só ocuparia memória. Esse bloco é limitado pela memória livre do computador, lida no
+início da execução: o pico de memória previsto para a importação --- uma base que cresce
+com o tamanho dos arquivos em disco, mais cerca de 1,08~MB por MB de bloco --- deve caber em
+$25\%$ dela. Quando não cabe, o bloco é o maior que cabe, e a importação troca um pouco de
+tempo por memória. O resultado fica sempre entre 16 e 256~MB, e a ferramenta informa no
+console e no \textit{log} o tamanho escolhido e o motivo, por exemplo
+\texttt{Read block: 96 MB (auto: largest source read whole (96.1 MB); 1033 MB free)}. Para
+estimar quanto a maior fonte ocupa inteira, a ferramenta multiplica o tamanho do arquivo pela
+razão entre a memória e o espaço em disco das suas primeiras mil linhas, sem ler o arquivo de
+novo. As opções \texttt{-{}-chunk-size} (de 16 a 256~MB) e \texttt{-{}-batch-size} (de 512 a
+\num{8192} linhas) continuam disponíveis para fixar os dois valores à mão.
 
 O pico de memória acompanha, assim, o tamanho do bloco, e não o do arquivo. Além do
 bloco, a memória guarda os agregados por coluna da leitura de inferência, que resumem o
@@ -1556,38 +1572,6 @@ chaves das entidades referenciadas, usados para conferir as referências pendent
 escrita no Neo4j, o conjunto das chaves de nós já gravadas, usado para não repeti-las.
 Esses conjuntos crescem com o número de chaves distintas, e não com o número de linhas;
 um arquivo maior que a memória disponível pode ser importado desde que eles caibam nela.
-
-A Tabela~\ref{tab:bloco} mostra o efeito do tamanho do bloco em uma importação de cem mil
-linhas no modo multifonte, medida antes da escolha dos padrões atuais, com blocos de 8, 64
-e 256~MB.
-
-\begin{table}[H]
-  \caption{Efeito do tamanho do bloco ($N = 100\,000$, multifonte): pico de memória e tempos, em medianas de três repetições.}
-  \label{tab:bloco}
-  \centering
-  \begin{tabular}{r r r r r}
-    \toprule
-    \textbf{Bloco} & \textbf{Pico (MB)} & \textbf{Total (s)} & \textbf{Inferência (s)} & \textbf{Validação (s)} \\
-    \midrule
-    8~MB   &  66{,}2 & 204{,}00 & 15{,}69 & 27{,}53 \\
-    64~MB  & 131{,}9 & 192{,}91 & 10{,}95 & 22{,}71 \\
-    256~MB & 149{,}9 & 190{,}88 &  9{,}74 & 23{,}57 \\
-    \bottomrule
-  \end{tabular}
-  \par\vspace{4pt}
-  {\footnotesize Fonte: Elaborado pelo autor (2026). Pico de \texttt{benchmarks/v3/chunks-memory/} (com instrumentação de memória); tempos de \texttt{benchmarks/v3/chunks-timings/} (sem instrumentação).}
-\end{table}
-
-Em cem mil linhas, a maior fonte, \texttt{purchase}, ocupa 10 blocos de 8~MB, 2 de 64~MB e
-um só de 256~MB; as outras três ocupam 2 blocos de 8~MB e um só a partir de 64~MB. Com o
-bloco de 256~MB, portanto, cada fonte já é lida inteira de uma vez. Em relação ao bloco de
-8~MB, o de 64~MB dobra o pico de memória e reduz o tempo total em 5{,}4\%; o de 256~MB
-eleva o pico 2{,}3 vezes e reduz o tempo em 6{,}4\%. O ganho concentra-se nas leituras de
-inferência e de validação, que leem mais linhas por bloco; a escrita, que domina o
-tempo, quase não muda. Blocos maiores reduzem, portanto, pouco o tempo e aumentam bastante
-o pico de memória. O padrão atual, de 128~MB, é provisório: ele será substituído pela
-escolha automática do bloco, que vai pesar esse ganho de tempo contra a memória disponível
-em cada computador (seção~\ref{sec:res-bloco}).
 
 A arquitetura que viabiliza a leitura em blocos segue o padrão \textbf{portas e
 adaptadores} (\textit{ports and adapters}). Um \textbf{orquestrador} agnóstico de SGBD
@@ -1632,22 +1616,22 @@ traduzem a saída não dependem da biblioteca gráfica, podendo ser testados sem
 aplicação de janelas.
 
 A janela divide-se em duas regiões, separadas por um divisor ajustável, como mostra a
-Figura~\ref{fig:gui-ocioso}. As figuras desta seção mostram a interface ainda em português
-e com campos numéricos para o bloco e o lote; elas serão refeitas quando a interface for
-traduzida para o inglês e esses dois campos derem lugar à escolha automática. Na metade superior estão três cartões de formulário. O primeiro
+Figura~\ref{fig:gui-ocioso}. Os textos da interface estão em inglês, como as mensagens da
+CLI, para que a ferramenta possa ser usada fora do Brasil; o texto desta seção cita os
+rótulos como aparecem na tela. Na metade superior estão três cartões de formulário. O primeiro
 seleciona, por diálogos de arquivo, os dois arquivos de configuração. O segundo reúne as
-opções de execução, com um controle para cada opção: os SGBDs destino, os campos ``Bloco em
-MB (\texttt{-{}-chunk-size})'' e ``Lote (\texttt{-{}-batch-size})'', descritos na
-Seção~\ref{sec:modelos-execucao}, a simulação (\texttt{-{}-dry-run}), o nível de
-\textit{log} e a exibição de dados --- uma amostra das primeiras linhas de cada entidade, em
-quantidade escolhida pelo usuário, todos os dados ou nenhum. Ao lado de cada opção cujo nome
-não se explica sozinho há um \textbf{ícone de ajuda} que, ao receber o cursor ou um clique,
-descreve o efeito da opção; o do bloco, por exemplo, explica que blocos maiores usam mais
-memória. Uma opção da CLI
+opções de execução (\textit{Run options}), com um controle para cada opção: os SGBDs
+destino, a simulação (\texttt{-{}-dry-run}), o nível de \textit{log} e a exibição de dados
+--- uma amostra das primeiras linhas de cada entidade, em quantidade escolhida pelo usuário,
+todos os dados ou nenhum. Ao lado de cada opção cujo nome não se explica sozinho há um
+\textbf{ícone de ajuda} que, ao receber o cursor ou um clique, descreve o efeito da opção; o
+da simulação, por exemplo, explica que ela lê os dados sem conectar a nenhum SGBD. O bloco
+de leitura e o lote de gravação não têm controle no formulário, porque a CLI os escolhe a
+cada execução (Seção~\ref{sec:modelos-execucao}). Outra opção da CLI também
 não aparece no formulário: o registro de métricas de \textit{benchmark}, instrumento da
 avaliação de desempenho do Capítulo~\ref{cap:avaliacao}, e não do uso cotidiano da
-ferramenta, que continua disponível na linha de comando. O terceiro cartão recebe os
-\textbf{arquivos CSV de entrada}: se ficar vazio, valem os caminhos declarados no bloco
+ferramenta, que continua disponível na linha de comando. O terceiro cartão, \textit{CSV
+files}, recebe os \textbf{arquivos CSV de entrada}: se ficar vazio, valem os caminhos declarados no bloco
 \texttt{sources} da configuração de importação; cada arquivo escolhido substitui o caminho
 da fonte correspondente (opção \texttt{-{}-source}). Na metade inferior está o console
 integrado, que exibe o comando montado e, abaixo dele, a saída da execução.
@@ -1686,7 +1670,8 @@ antes de gravar qualquer dado.
 \end{figure}
 
 O comando montado é, por padrão, \textbf{somente leitura}, e \textbf{explicita todas as
-opções}, inclusive aquelas mantidas no valor padrão da CLI. Para facilitar a leitura, o comando é colorido: o nome do programa, as opções e os
+opções do formulário}, inclusive aquelas mantidas no valor padrão da CLI; o bloco e o lote,
+que a CLI escolhe sozinha, ficam de fora. Para facilitar a leitura, o comando é colorido: o nome do programa, as opções e os
 seus valores recebem cores distintas. Um \textbf{modo de edição} permite editar o texto
 diretamente; ao entrá-lo, o formulário é \textbf{bloqueado}, sinalizando que o texto passou
 a ser a fonte da verdade. Essa decisão é intencional e tem uma razão precisa: \textbf{não
@@ -1702,7 +1687,7 @@ a interrupção do processo e a saída da CLI chega ao console de forma incremen
 mesmas cores que teria em um terminal, como ilustra a Figura~\ref{fig:gui-executando}. Ao
 término, a barra de estado informa o desfecho: a Figura~\ref{fig:gui-sucesso} mostra uma
 execução concluída, com o tempo total e o caminho do arquivo de \textit{log} da sessão. Um
-clique nesse caminho abre a pasta em que o arquivo está, e o botão \textbf{Salvar log}
+clique nesse caminho abre a pasta em que o arquivo está, e o botão \textbf{Save log}
 copia-o para um local escolhido pelo usuário. O arquivo salvo é o \textit{log} completo da
 sessão, em nível \texttt{DEBUG}, e não apenas o texto exibido no console.
 
@@ -1748,7 +1733,7 @@ real, não há tradução intermediária que pudesse mascarar a mensagem.
 \end{figure}
 
 A disponibilidade dos SGBDs, que a validação prévia deliberadamente não examina, tem um
-botão próprio: \textbf{Verificar SGBDs}, ao lado do botão de execução. Ele executa a CLI
+botão próprio: \textbf{Check DBMSs}, ao lado do botão de execução. Ele executa a CLI
 com \texttt{-{}-check-dbms}, com os arquivos de configuração e a seleção de SGBDs do
 formulário, e depende apenas de que esses dois arquivos sejam válidos --- pendências nas
 fontes CSV não o bloqueiam, porque a verificação não lê dados. A saída é a mesma do
@@ -1759,7 +1744,7 @@ Figura~\ref{fig:gui-verificacao} mostra uma verificação com dois SGBDs fora do
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.95\textwidth]{images/figure16-gui-verificacao}
-  \caption{Verificação dos SGBDs pela interface gráfica: o botão \textbf{Verificar SGBDs},
+  \caption{Verificação dos SGBDs pela interface gráfica: o botão \textbf{Check DBMSs},
   acionado, aparece destacado em vermelho; no console, MongoDB e Neo4j fora do ar e, abaixo
   da tabela de estados, os comandos que os iniciam.}
   \label{fig:gui-verificacao}
