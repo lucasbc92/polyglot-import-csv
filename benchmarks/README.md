@@ -275,6 +275,32 @@ block. Against 8 MB, 64 MB doubles the peak (2.0×) and cuts the total by 5.4%, 
 - **Cassandra dominates the write.** At 100 000 multi it takes 67% of the write
   time (64% in combined) and 53% of the whole import.
 
+### Preliminary campaign (`v4-preview/`)
+
+Measured on 2026-11-08/09 for the report preview, on commit `641e8a8` with its
+defaults: 128 MB chunks and 2048-row batches. Volumes 1 024, 16 384, 32 768,
+65 536, 131 072 and 262 144 rows, multi and combined. `timings/` has 3 repetitions
+without tracemalloc. `memory/` has **1** repetition with tracemalloc. Both folders
+passed the checks (one timestamp, no duplicate keys, all 12 cells, `infer`/`validate`
+rows equal to the size), and their row counts are identical in every cell. The
+timing campaign was interrupted twice, by an out-of-memory error in pandas and by
+an unresponsive Docker engine, and was resumed with `--resume` without losing
+measured runs. The final campaign of 3.2.0 will replace these numbers.
+
+| Rows | multi time (s) | ms/row | multi peak (MB) | combined time (s) | ms/row | combined peak (MB) |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 024 | 9.35 | 9.13 | 11.2 | 8.87 | 8.66 | 10.7 |
+| 16 384 | 45.36 | 2.77 | 55.2 | 43.08 | 2.63 | 74.3 |
+| 32 768 | 75.17 | 2.29 | 72.4 | 80.53 | 2.46 | 99.0 |
+| 65 536 | 135.34 | 2.07 | 97.8 | 162.20 | 2.47 | 143.8 |
+| 131 072 | 294.19 | 2.24 | 195.5 | 353.14 | 2.69 | 225.1 |
+| 262 144 | 555.10 | 2.12 | 300.0 | 593.92 | 2.27 | 370.7 |
+
+Exponent `b` of `log t = a + b log N`, fitted from 16 384 rows on: time 0.92 (multi)
+and 0.97 (combined), which is linear growth; peak 0.63 and 0.58. At 262 144 multi,
+the write takes 82.4% of the time, Cassandra alone 58.0%, and `infer` plus
+`validate` take 17.6%.
+
 ## Português (BR)
 
 Auditado em 2026-08-01. As quatro campanhas da raiz, `timings/`, `naive/` e
@@ -567,3 +593,30 @@ bloco. Em relação a 8 MB, o bloco de 64 MB dobra o pico (2,0×) e reduz o tota
   mesma.
 - **O Cassandra domina a escrita.** Em 100 000 multifonte, ele leva 67% do tempo de
   escrita (64% no combinado) e 53% da importação inteira.
+
+### Campanha intermediária (`v4-preview/`)
+
+Medida em 2026-11-08/09 para a prévia do relatório, sobre o *commit* `641e8a8` e os
+seus padrões: blocos de 128 MB e lotes de 2048 linhas. Volumes de 1 024, 16 384,
+32 768, 65 536, 131 072 e 262 144 linhas, multifonte e combinado. `timings/` tem 3
+repetições sem tracemalloc. `memory/` tem **1** repetição com tracemalloc. As duas
+pastas passaram na conferência (um só *timestamp*, nenhuma chave repetida, as 12
+células, linhas de `infer`/`validate` iguais ao volume), e as contagens de linhas são
+idênticas entre elas em todas as células. A campanha de tempo foi interrompida duas
+vezes, por falta de memória no pandas e por um motor do Docker que parou de
+responder, e foi retomada com `--resume` sem perder execuções já medidas. A campanha
+final da 3.2.0 substituirá estes números.
+
+| Linhas | tempo multi (s) | ms/linha | pico multi (MB) | tempo combinado (s) | ms/linha | pico combinado (MB) |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 024 | 9,35 | 9,13 | 11,2 | 8,87 | 8,66 | 10,7 |
+| 16 384 | 45,36 | 2,77 | 55,2 | 43,08 | 2,63 | 74,3 |
+| 32 768 | 75,17 | 2,29 | 72,4 | 80,53 | 2,46 | 99,0 |
+| 65 536 | 135,34 | 2,07 | 97,8 | 162,20 | 2,47 | 143,8 |
+| 131 072 | 294,19 | 2,24 | 195,5 | 353,14 | 2,69 | 225,1 |
+| 262 144 | 555,10 | 2,12 | 300,0 | 593,92 | 2,27 | 370,7 |
+
+Expoente `b` de `log t = a + b log N`, ajustado a partir de 16 384 linhas: tempo 0,92
+(multifonte) e 0,97 (combinado), ou seja, crescimento linear; pico 0,63 e 0,58. Em
+262 144 multifonte, a escrita leva 82,4% do tempo, o Cassandra sozinho 58,0%, e
+`infer` mais `validate`, 17,6%.
