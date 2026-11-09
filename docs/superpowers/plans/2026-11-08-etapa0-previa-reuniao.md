@@ -18,7 +18,7 @@
 - Volumes: 1024, 16384, 32768, 65536, 131072 e 262144. Modos: multifonte e combinado.
 - Docker: só iniciar ou reiniciar com o OK do autor (pendente em 2026-11-08 20:50; ver Task 1, Step 1).
 - Durante uma campanha: nada de testes, compilação LaTeX nem renderização pesada (8 GB de RAM). Edições de texto podem seguir.
-- Texto em português: "SGBD" (nunca "backend"); legenda de figura embaixo, título de tabela em cima, "Fonte:" embaixo; uma frase de introdução antes de cada tabela e figura; nada de prosa sobre o histórico de versões, exceto a ressalva exigida na §4.5.1.
+- Texto em português: "SGBD" (nunca o termo inglês banido pelo guarda de nomenclatura); legenda de figura embaixo, título de tabela em cima, "Fonte:" embaixo; uma frase de introdução antes de cada tabela e figura; nada de prosa sobre o histórico de versões, exceto a ressalva exigida na §4.5.1.
 - Shell heredocs comem barras invertidas: editar LaTeX só com as ferramentas Edit/Write.
 - Arquivos descartáveis vão para `.superpowers/scratch/`, que já é ignorado pelo git.
 - `grep` pelo shell em `data/` ou no repositório inteiro trava: usar a ferramenta Grep com caminho.
