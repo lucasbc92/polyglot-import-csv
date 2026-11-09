@@ -301,6 +301,32 @@ and 0.97 (combined), which is linear growth; peak 0.63 and 0.58. At 262 144 mult
 the write takes 82.4% of the time, Cassandra alone 58.0%, and `infer` plus
 `validate` take 17.6%.
 
+### Exploratory campaign (`v4-explore/`)
+
+Measured on 2026-11-09 on commit `491a64f` to choose the automatic block and batch
+sizes: 131 072 rows, multi. One axis at a time: blocks of 16, 32, 64, 128 and 256 MB
+with 2048-row batches (`chunks-*`), and batches of 512 to 8192 rows with 128 MB
+blocks (`batches-*`). Time is the median of 3 repetitions; memory comes from 1.
+Every folder passed the checks, and the paired folders have identical row counts.
+`chunks-memory` was interrupted once (Cassandra refused the connection with a CRC
+mismatch) and resumed with `--resume` after a Docker restart.
+
+| Block (MB) | 16 | 32 | 64 | 128 | 256 |
+|---|---:|---:|---:|---:|---:|
+| total (s) | 275.08 | 304.36 | 282.19 | 248.00 | 251.00 |
+| peak (MB) | 103.6 | 127.9 | 144.9 | 195.5 | 195.5 |
+
+| Batch (rows) | 512 | 1024 | 2048 | 4096 | 8192 |
+|---|---:|---:|---:|---:|---:|
+| total (s) | 211.97 | 206.57 | 195.34 | 208.00 | 202.80 |
+| peak (MB) | 200.4 | 197.0 | 195.5 | 195.6 | 197.1 |
+
+The shared cell (128 MB, 2048) took 248.00 s in one campaign and 195.34 s in the
+other: compare only within a campaign. Blocks that read the largest source whole
+(about 95.5 MB here) are the fastest; peak ≈ 87.0 + 1.078 × effective block (MB).
+The batch barely moves time or peak. The resulting rule is in
+`docs/superpowers/specs/2026-11-08-revisao-ronaldo-v23-design.md`.
+
 ## Português (BR)
 
 Auditado em 2026-08-01. As quatro campanhas da raiz, `timings/`, `naive/` e
@@ -620,3 +646,29 @@ Expoente `b` de `log t = a + b log N`, ajustado a partir de 16 384 linhas: tempo
 (multifonte) e 0,97 (combinado), ou seja, crescimento linear; pico 0,63 e 0,58. Em
 262 144 multifonte, a escrita leva 82,4% do tempo, o Cassandra sozinho 58,0%, e
 `infer` mais `validate`, 17,6%.
+
+### Campanha exploratória (`v4-explore/`)
+
+Medida em 2026-11-09 sobre o *commit* `491a64f` para escolher os tamanhos automáticos
+do bloco e do lote: 131 072 linhas, multifonte. Um eixo de cada vez: blocos de 16, 32,
+64, 128 e 256 MB com lotes de 2048 linhas (`chunks-*`), e lotes de 512 a 8192 linhas
+com blocos de 128 MB (`batches-*`). O tempo é a mediana de 3 repetições; a memória,
+de 1. Todas as pastas passaram na conferência, e as pastas pares têm contagens de
+linhas idênticas. `chunks-memory` foi interrompida uma vez (o Cassandra recusou a
+conexão com CRC *mismatch*) e retomada com `--resume` depois de reiniciar o Docker.
+
+| Bloco (MB) | 16 | 32 | 64 | 128 | 256 |
+|---|---:|---:|---:|---:|---:|
+| total (s) | 275,08 | 304,36 | 282,19 | 248,00 | 251,00 |
+| pico (MB) | 103,6 | 127,9 | 144,9 | 195,5 | 195,5 |
+
+| Lote (linhas) | 512 | 1024 | 2048 | 4096 | 8192 |
+|---|---:|---:|---:|---:|---:|
+| total (s) | 211,97 | 206,57 | 195,34 | 208,00 | 202,80 |
+| pico (MB) | 200,4 | 197,0 | 195,5 | 195,6 | 197,1 |
+
+A célula comum (128 MB, 2048) levou 248,00 s numa campanha e 195,34 s na outra:
+compare só dentro de uma campanha. Os blocos que leem a maior fonte inteira (cerca de
+95,5 MB aqui) são os mais rápidos; pico ≈ 87,0 + 1,078 × bloco efetivo (MB). O lote
+quase não mexe no tempo nem no pico. A regra resultante está em
+`docs/superpowers/specs/2026-11-08-revisao-ronaldo-v23-design.md`.

@@ -196,6 +196,47 @@ Também é preciso explicar "conversão vetorizada" (p. 83: "o que é exatamente
 - **Prazo:** a entrega do relatório está bem adiante, então cabem as duas campanhas completas. Mas o orientador quer conversar em 2026-11-09 (segunda-feira, provavelmente à noite), e o autor quer levar **um resultado intermediário no Cap. 5 e as correções pedidas** (ver "Etapa 0").
 - **PDFs anotados no repositório público** (`...-v2.2-REVISADO.pdf`, que entrou no `6b7becc`, e `...-v1.0-REVISADO.pdf`): **ficam como estão**. Nada é removido e o histórico não é reescrito.
 
+## Resultado da campanha exploratória (2026-11-09)
+
+Dados em `benchmarks/v4-explore/` (commits `d5c065f`, `759b8bb`, `2daead8`, `795db6f`), medidos sobre o commit `491a64f`, com N = 131072 e modo multifonte. O tempo é a mediana de 3 repetições; o pico vem de 1 repetição. As quatro pastas passaram na conferência, e as pastas pares têm contagens de linhas idênticas.
+
+**Eixo do bloco** (lote 2048):
+
+| Bloco | Total (s) | vs. melhor | Pico (MB) |
+|---:|---:|---:|---:|
+| 16 | 275,08 | +10,9% | 103,6 |
+| 32 | 304,36 | +22,7% | 127,9 |
+| 64 | 282,19 | +13,8% | 144,9 |
+| 128 | 248,00 | — | 195,5 |
+| 256 | 251,00 | +1,2% | 195,5 |
+
+**Eixo do lote** (bloco 128 MB):
+
+| Lote | Total (s) | vs. melhor | Pico (MB) |
+|---:|---:|---:|---:|
+| 512 | 211,97 | +8,5% | 200,4 |
+| 1024 | 206,57 | +5,8% | 197,0 |
+| 2048 | 195,34 | — | 195,5 |
+| 4096 | 208,00 | +6,5% | 195,6 |
+| 8192 | 202,80 | +3,8% | 197,1 |
+
+**Leituras:**
+
+- **A deriva entre campanhas é grande.** A célula comum (128 MB, 2048) levou 248,00 s numa campanha e 195,34 s na outra, 27% de diferença; o Docker foi reiniciado entre elas. Por isso as comparações valem só **dentro** de cada campanha, em que as repetições alternam as células. A tolerância de 3% do design também se aplica dentro da campanha.
+- **Bloco:** os blocos que leem a maior fonte inteira (128 e 256 MB; a `purchase` precisa de cerca de 95,5 MB em 131072 linhas) são os mais rápidos. Os menores ficam de 11% a 23% atrás, sem ordem clara entre si. O pico satura quando o bloco passa a conter a fonte inteira: 195,5 MB em 128 e em 256 MB.
+- **Pico em função do bloco efetivo** (o menor entre o bloco e o tamanho da maior fonte): `pico ≈ 87,0 + 1,078 × bloco efetivo` (MB), com erro de 1% a 7% nos quatro pontos distintos. A base inclui os conjuntos de chaves desse volume e cresce com os dados.
+- **Lote:** todos ficam a até 8,5% do melhor (2048), perto do ruído. O pico quase não muda (de 195 a 200 MB). O melhor lote de cada SGBD varia (PostgreSQL 8192, Redis 4096, os demais 2048), com diferenças pequenas.
+
+**Regra adotada** (substitui a da Parte 1, item 3, onde houver conflito):
+
+- **bloco automático** = mín(256; MB necessários para ler a maior fonte declarada inteira; limite de segurança), preso a [16, 256] e arredondado para baixo a um inteiro. O "teto de conforto" da Parte 1 virou "ler a maior fonte inteira", porque foi isso que os dados mostraram: o ganho vem de ler a fonte de uma vez.
+  - MB necessários de uma fonte = linhas da fonte / linhas por MB, com as linhas por MB tiradas da mesma estimativa de `stream_source.chunk_rows`.
+  - O número de linhas exige contar a fonte (uma leitura a mais). Como alternativa, a implementação pode usar `tamanho do arquivo × (MB em memória por MB em disco, medido nas primeiras mil linhas)`, que não exige outra leitura. A escolha fica com o implementador, desde que a estimativa seja documentada.
+- **limite de segurança** = (0,25 × memória livre − 87,0) / 1,078. Com cerca de 890 MB livres, como nesta máquina com o Docker no ar, ele dá cerca de 125 MB; com 2 GB livres, cerca de 383 MB, e aí vale o teto de 256. Constantes nomeadas: `PEAK_BASE_MB = 87.0`, `PEAK_MB_PER_CHUNK_MB = 1.078`, `FREE_MEMORY_FRACTION = 0.25`.
+  - Se a memória livre for ilegível (`available_mb()` devolve `None`), o limite não se aplica, e o bloco é o necessário para ler a maior fonte inteira, preso a [16, 256]. O motivo é registrado no log.
+- **lote automático** = 2048, fixo. O efeito do lote por SGBD vira atividade futura.
+- **O que muda se a tolerância for outra:** com ela maior que 11%, até o bloco de 16 MB entraria como "tão bom quanto o melhor" e a regra preferiria a memória ao tempo. Os dados não sustentam essa escolha, porque todos os blocos menores ficaram mais de 10% atrás dentro da mesma campanha.
+
 ## Etapa 0 — prévia para a reunião de 2026-11-09
 
 Vem antes da "Ordem de trabalho" abaixo e não muda o código da ferramenta.
