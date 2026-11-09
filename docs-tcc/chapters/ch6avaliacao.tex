@@ -82,23 +82,26 @@ tempo total de uma importação é a soma das medianas das suas fases.
 Tempo e memória são medidos em execuções separadas, por um motivo prático. Para obter o
 pico de memória, o Python precisa registrar cada alocação de memória feita pelo programa
 (com o módulo \texttt{tracemalloc}), e esse registro deixa a importação mais lenta --- e de
-forma desigual entre as fases. Em uma medição de cem mil linhas feita durante o projeto, o
-registro deixou a importação inteira $3{,}3$ vezes mais lenta, mas a fase de inferência,
-que aloca muita memória, ficou $6{,}2$ vezes mais lenta, e a escrita no Cassandra, que
-passa a maior parte do tempo esperando o SGBD, apenas $2{,}1$ vezes. Os tempos de uma
+forma desigual entre as fases. Na importação multifonte de \num{262144} linhas desta
+avaliação, o registro deixou a importação inteira $2{,}35$ vezes mais lenta, mas a fase de
+inferência, que aloca muita memória, ficou $6{,}0$ vezes mais lenta, e a escrita no
+Cassandra, que passa a maior parte do tempo esperando o SGBD, apenas $1{,}5$ vez. Os tempos de uma
 execução que mede memória estariam, portanto, inflados e distorcidos entre as fases. Por
 isso, cada célula é executada em duas \textbf{campanhas} idênticas em carga e configuração:
 uma \textbf{sem} o registro de memória, de onde vêm todos os tempos, e outra \textbf{com}
 ele, de onde vêm todos os picos de memória. As duas campanhas processaram exatamente as
 mesmas contagens de linhas em todas as células, o que confirma que executam a mesma carga.
-Nesta medição preliminar, a campanha de memória fez uma só execução por célula; o pico de
-memória é bem mais estável que o tempo e, em medições anteriores, variou menos de $0{,}2\%$
-entre campanhas.
+Nesta medição preliminar, a campanha de memória fez uma só execução por célula. O pico de
+memória tende a ser bem mais estável que o tempo: em uma medição anterior, a mesma célula,
+medida em duas campanhas diferentes, teve picos que diferiram menos de $0{,}2\%$ --- uma
+indicação, colhida em uma só célula, e não uma garantia.
 
 Os resultados brutos de cada campanha (um arquivo CSV e um JSON com os metadados) estão no
-repositório do projeto\footnote{\url{https://github.com/lucasbc92/polyglot-import-csv/tree/main/benchmarks/v4-preview}:
+repositório do projeto\footnote{\url{https://github.com/lucasbc92/polyglot-import-csv/tree/b09ae38/benchmarks/v4-preview}:
 pasta \texttt{timings} (tempos) e pasta \texttt{memory} (picos de memória).}, e a ``Fonte'' de
-cada tabela indica de qual das duas pastas vêm os seus números.
+cada tabela indica de qual das duas pastas vêm os seus números. Quando uma tabela mostra
+tempo e pico de memória lado a lado, cada valor vem da sua campanha, como indica a legenda;
+os dois nunca são lidos de uma mesma execução.
 
 \section{Configuração Experimental}
 \label{sec:config-experimental}
@@ -159,7 +162,8 @@ fontes, enquanto o Redis, por exemplo, grava apenas as seleções e os carrinhos
   {\footnotesize Fonte: Elaborado pelo autor (2026), a partir de \texttt{data/ecommerce/import\_config.json}.}
 \end{table}
 
-A ferramenta foi medida com os seus valores padrão de bloco de leitura (128~MB) e de lote de
+Os números deste capítulo são preliminares: a ferramenta foi medida com os seus valores
+padrão provisórios de bloco de leitura (128~MB) e de lote de
 gravação (\num{2048} linhas), descritos na seção~\ref{sec:modelos-execucao}.
 
 \section{Resultados}
@@ -257,7 +261,7 @@ arquivos, às leituras de inferência e de validação, ao tempo total e ao pico
     \textbf{Critério} & \textbf{Multifonte} & \textbf{Combinado} \\
     \midrule
     Tamanho dos arquivos (MB)  & 63{,}26 (4 arquivos) & 75{,}92 \\
-    Colunas por arquivo        & 20, 33, 6 e 7 & 39 \\
+    Colunas por arquivo        & 20, 33, 6 e 7$^{*}$ & 39 \\
     Células vazias             & 0\%      & 44\% \\
     Inferência (s)             & 27{,}80  & 36{,}73 \\
     Validação (s)              & 69{,}62  & 71{,}16 \\
@@ -266,7 +270,8 @@ arquivos, às leituras de inferência e de validação, ao tempo total e ao pico
     \bottomrule
   \end{tabular}
   \par\vspace{4pt}
-  {\footnotesize Fonte: Elaborado pelo autor (2026). Tamanho, colunas e células vazias dos arquivos gerados; tempos da pasta \texttt{timings}; memória da pasta \texttt{memory}. Tamanho em MB de $10^6$ bytes; memória em MB de $2^{20}$ bytes (MiB).}
+  {\footnotesize $^{*}$Na ordem \texttt{stock}, \texttt{purchase}, \texttt{select\_product} e \texttt{add\_to\_cart}.\par
+  Fonte: Elaborado pelo autor (2026). Tamanho, colunas e células vazias dos arquivos gerados; tempos da pasta \texttt{timings}; memória da pasta \texttt{memory}. Tamanho em MB de $10^6$ bytes; memória em MB de $2^{20}$ bytes (MiB).}
 \end{table}
 
 O arquivo combinado é $20\%$ \textbf{maior}, porque todos os tipos de evento partilham um
@@ -327,7 +332,11 @@ dados. Para medir o crescimento sem esse efeito, ajustou-se uma reta aos pontos 
 \num{16384} linhas em diante, em escala logarítmica ($\log t = a + b \log N$): o expoente
 $b$ indica como o tempo cresce --- $b = 1$ significa crescimento proporcional ao volume,
 $b = 2$, quadrático. O expoente obtido é $b = 0{,}92$ no modo multifonte e $b = 0{,}97$ no
-combinado, ambos próximos de 1. A Figura~\ref{fig:escala} mostra o mesmo resultado: em
+combinado, ambos próximos de 1. Ficar um pouco abaixo de 1 é efeito dos custos fixos, que
+ainda pesam em \num{16384} linhas: descontando de cada volume o tempo total da importação
+de \num{1024} linhas, que é quase só custo fixo, o expoente passa a $0{,}996$ no multifonte e
+$1{,}046$ no combinado --- o crescimento proporcional ao volume que se espera de uma
+importação que percorre os dados um número fixo de vezes. A Figura~\ref{fig:escala} mostra o mesmo resultado: em
 escala logarítmica nos dois eixos, os pontos dos dois modos acompanham a reta de
 crescimento linear.
 
@@ -403,7 +412,7 @@ volume e modo.
 \end{table}
 
 A partir de \num{16384} linhas, a validação prévia custa entre $15\%$ e $20\%$ do tempo
-total, cerca de um sexto; em \num{1024} linhas, a fração é maior porque a escrita, que
+total; em \num{1024} linhas, a fração é maior porque a escrita, que
 domina nos volumes maiores, ainda é pequena. Em troca desse custo, nenhum problema nos
 dados chega a uma gravação parcial: a importação termina antes de gravar qualquer dado
 quando encontra um valor que não converte para o tipo da sua coluna, um valor que o tipo
@@ -444,7 +453,7 @@ tem ainda vantagens de organização (QP2). A ferramenta \textbf{escala linearme
 volume de dados nos volumes medidos (QP3): a partir de \num{16384} linhas, o tempo por linha
 fica estável, e o expoente do crescimento é próximo de 1 nos dois modos.
 O pico de memória cresce menos que o volume, com expoente de $0{,}63$ e $0{,}58$, e chega a
-$300{,}0$~MB no multifonte em \num{262144} linhas. A validação prévia dos dados custa cerca de um sexto do tempo da
+$300{,}0$~MB no multifonte em \num{262144} linhas. A validação prévia dos dados custa entre $15\%$ e $20\%$ do tempo da
 importação (QP4), e a escolha dos tamanhos do bloco e do lote está em andamento (QP5).
 
 \subsection{Ameaças à Validade}

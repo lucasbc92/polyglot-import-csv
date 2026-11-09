@@ -27,12 +27,13 @@ problema que ela detecta chega a uma gravação parcial. A ferramenta \textbf{mo
 escalável} nos volumes analisados: de \num{16384} a \num{262144} linhas, o tempo cresce
 linearmente com o volume --- o tempo por linha fica estável, entre $2{,}1$ e $2{,}8$~ms, e o
 expoente do crescimento é $0{,}92$ no modo multifonte e $0{,}97$ no combinado, próximo de 1.
-O pico de memória, por sua vez, cresce menos que o volume. As medições feitas com uma versão anterior da ferramenta
+O pico de memória, por sua vez, cresce menos que o volume: de \num{1024} para \num{262144}
+linhas (256 vezes mais dados), ele passa de $11{,}2$ para $300{,}0$~MB no modo multifonte,
+cerca de 27 vezes. As medições feitas com uma versão anterior da ferramenta
 (Seção~\ref{sec:estrategias-escrita}) mostram que a estratégia em lote acelera a importação
 em cerca de nove vezes sobre a gravação linha a linha e que a leitura em blocos reduz o pico
 de memória em mais de doze vezes em cem mil linhas, em relação à carga do arquivo inteiro na
-memória --- o que habilita, pelo projeto, a importação de arquivos maiores que a memória
-disponível, desde que os conjuntos de chaves distintas caibam nela. A equivalência das
+memória. A equivalência das
 contagens entre os dois modos de importação, conferida por testes automatizados, permite
 tratar a escolha entre eles como uma questão de organização e de custo, não de correção.
 
