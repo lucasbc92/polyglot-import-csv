@@ -250,3 +250,18 @@ def test_every_chunk_is_indexed_by_the_row_position_in_the_file(tmp_path):
             {"e": {"file": "j.csv"}}, tmp_path, rows_per_chunk={"e": 3}):
         by_origin.setdefault(name, []).extend(df.index)
     assert by_origin == {"a": [1, 2, 4, 5], "b": [0, 3, 6]}
+
+
+def test_source_memory_mb_matches_the_rows_per_mb_estimate(tmp_path):
+    path = tmp_path / "items.csv"
+    lines = ["id,name,price"] + [f"{i:05d},product number {i:05d},{i % 100:02d}.50" for i in range(5000)]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    whole = ss.source_memory_mb("items", path)
+    expected = 5000 / (ss.chunk_rows("items", path, 64) / 64)
+    assert whole == pytest.approx(expected, rel=0.03)
+
+
+def test_source_memory_mb_of_a_header_only_file_is_zero(tmp_path):
+    path = tmp_path / "empty.csv"
+    path.write_text("id,name\n", encoding="utf-8")
+    assert ss.source_memory_mb("empty", path) == 0.0
