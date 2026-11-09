@@ -417,9 +417,9 @@
   configurações e os dados em três etapas de validação, inclusive uma leitura completa dos
   dados pelo mesmo código da gravação, e interrompe a importação, sem gravar nada, diante de
   qualquer problema que essas etapas encontrem. O desempenho apoia-se na escrita em lote,
-  com conversão vetorizada de tipos, e na leitura dos arquivos em blocos, cujo consumo de
-  memória acompanha o tamanho do bloco e o número de chaves distintas, e não o tamanho do
-  arquivo. Uma avaliação empírica com dados sintéticos, de \num{1024} a \num{262144} linhas,
+  com conversão vetorizada de tipos, e na leitura dos arquivos em blocos, projetada para que
+  o consumo de memória acompanhe o tamanho do bloco e o número de chaves distintas, e não o
+  tamanho do arquivo. Uma avaliação empírica com dados sintéticos, de \num{1024} a \num{262144} linhas,
   mostrou que o tempo de importação cresce linearmente com o volume de dados e que a
   validação prévia ocupa cerca de um sexto do tempo de uma importação, dominada pela escrita
   nos bancos; medições feitas com uma versão anterior da ferramenta mostraram que a escrita
@@ -459,8 +459,9 @@
   metrics. Before writing any data, the tool checks the configuration and the data in three
   validation stages, including a full read of the data through the same code as the write,
   and stops the import, writing nothing, at any problem these stages find. Performance rests
-  on batch writing, with vectorized type casting, and on reading the files in chunks, whose
-  memory use follows the chunk size and the number of distinct keys, not the file size. An
+  on batch writing, with vectorized type casting, and on reading the files in chunks,
+  designed so that memory use follows the chunk size and the number of distinct keys, not
+  the file size. An
   empirical evaluation with synthetic
   data, from 1,024 to 262,144 rows, showed that the import time grows linearly with the data
   volume and that the prior validation takes about one sixth of the time of an import, which

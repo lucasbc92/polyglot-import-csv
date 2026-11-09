@@ -364,12 +364,16 @@ linhas ($256$ vezes mais dados), ele cresce $26{,}8$ vezes no modo multifonte (d
 $11{,}2$ para $300{,}0$~MB) e $34{,}7$ vezes no combinado (de $10{,}7$ para $370{,}7$~MB). O
 expoente ajustado da mesma forma, de \num{16384} linhas em diante, é $0{,}63$ no multifonte
 e $0{,}58$ no combinado: cada vez que o volume dobra, o pico cresce, em média, cerca de
-$50\%$. O pico ainda não se estabiliza porque, com o bloco de 128~MB, os arquivos desses
-volumes cabem, inteiros ou quase, em um bloco: no modo multifonte, até \num{131072} linhas
-cada fonte é lida em um único bloco, e em \num{262144} linhas só a maior, \texttt{purchase},
-ocupa dois. O bloco, portanto, ainda acompanha o tamanho do arquivo. Além do bloco, a memória guarda conjuntos de chaves distintas que crescem com os
-dados (seção~\ref{sec:modelos-execucao}). A escolha do tamanho do bloco, que governa esse
-pico, é o objeto da QP5.
+$50\%$. Duas causas, ambas previstas no projeto (seção~\ref{sec:modelos-execucao}),
+contribuem para que o pico ainda cresça nesses volumes. A primeira é o bloco: com o bloco de
+128~MB, no modo multifonte, cada fonte é lida em um único bloco até \num{131072} linhas, e
+em \num{262144} linhas só a maior, \texttt{purchase}, ocupa dois; o bloco, portanto, ainda
+acompanha o tamanho dos arquivos. A segunda são os conjuntos de chaves distintas que a
+validação e a escrita no Neo4j guardam, que crescem com os dados. A primeira causa não
+explica tudo: no modo combinado, o arquivo já ocupa vários blocos a partir de \num{65536}
+linhas (cinco em \num{262144}), e o pico continua crescendo. A contribuição de cada causa
+não foi separada nesta medição preliminar; o efeito do tamanho do bloco sobre o pico é o
+objeto da QP5.
 
 \subsection{Custo da Validação Prévia (QP4)}
 \label{sec:res-validacao}
@@ -452,7 +456,13 @@ seção~\ref{sec:protocolo-medicao}: o registro de alocações, necessário para
 deixa a importação mais lenta e distorce as fases umas em relação às outras, de modo que os
 tempos só são confiáveis em execuções sem ele. A contrapartida é que tempo e pico de uma
 mesma célula vêm de execuções diferentes, embora de carga idêntica. Nesta medição
-preliminar, a campanha de memória fez uma só execução por célula.
+preliminar, a campanha de memória fez uma só execução por célula. Além disso, o computador
+trabalhou com pouca memória livre (cerca de 800~MB com os contêineres no ar): a campanha
+de tempo foi interrompida duas vezes --- por falta de memória e por uma parada do Docker,
+reiniciado em seguida --- e retomada sem repetir as execuções já medidas. As interrupções
+ocorreram durante as repetições de \num{131072} linhas, em que a escrita no Cassandra variou
+bastante entre execuções (de 165 a 229~s), o que provavelmente explica por que esse é o
+único volume em que o tempo por linha sobe nos dois modos (Tabela~\ref{tab:escala}).
 
 Quanto à \textbf{validade externa}, todos os experimentos correram em um único computador,
 sob Windows, com os cinco SGBDs em contêineres partilhando 8~GB de memória física. Esse

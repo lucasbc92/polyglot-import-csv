@@ -104,9 +104,9 @@ prévia: coleções e chaves surgem na primeira gravação.
 
 O segundo conjunto define \textbf{como} importar. Os arquivos são lidos em
 \textbf{blocos}, nunca inteiros, e gravados em \textbf{lotes}: \texttt{-{}-chunk-size}
-fixa a memória reservada a cada bloco de leitura, em MB (8, por padrão, de 8 a 256), e
-\texttt{-{}-batch-size}, o número de linhas de cada lote de gravação (1024, por padrão, de
-1024 a 8192), limitado às linhas de um bloco. A seção~\ref{sec:modelos-execucao} descreve
+fixa a memória reservada a cada bloco de leitura, em MB (128, por padrão), e
+\texttt{-{}-batch-size}, o número de linhas de cada lote de gravação (2048, por padrão),
+limitado às linhas de um bloco. A seção~\ref{sec:modelos-execucao} descreve
 esse modelo de execução e o efeito do tamanho do bloco.
 
 O terceiro conjunto governa a \textbf{observabilidade} da execução ---
@@ -1585,7 +1585,9 @@ bloco de 256~MB, portanto, cada fonte já é lida inteira de uma vez. Em relaç�
 eleva o pico 2{,}3 vezes e reduz o tempo em 6{,}4\%. O ganho concentra-se nas leituras de
 inferência e de validação, que leem mais linhas por bloco; a escrita, que domina o
 tempo, quase não muda. Blocos maiores reduzem, portanto, pouco o tempo e aumentam bastante
-o pico de memória.
+o pico de memória. O padrão atual, de 128~MB, é provisório: ele será substituído pela
+escolha automática do bloco, que vai pesar esse ganho de tempo contra a memória disponível
+em cada computador (seção~\ref{sec:res-bloco}).
 
 A arquitetura que viabiliza a leitura em blocos segue o padrão \textbf{portas e
 adaptadores} (\textit{ports and adapters}). Um \textbf{orquestrador} agnóstico de SGBD
@@ -1630,7 +1632,9 @@ traduzem a saída não dependem da biblioteca gráfica, podendo ser testados sem
 aplicação de janelas.
 
 A janela divide-se em duas regiões, separadas por um divisor ajustável, como mostra a
-Figura~\ref{fig:gui-ocioso}. Na metade superior estão três cartões de formulário. O primeiro
+Figura~\ref{fig:gui-ocioso}. As figuras desta seção mostram a interface ainda em português
+e com campos numéricos para o bloco e o lote; elas serão refeitas quando a interface for
+traduzida para o inglês e esses dois campos derem lugar à escolha automática. Na metade superior estão três cartões de formulário. O primeiro
 seleciona, por diálogos de arquivo, os dois arquivos de configuração. O segundo reúne as
 opções de execução, com um controle para cada opção: os SGBDs destino, os campos ``Bloco em
 MB (\texttt{-{}-chunk-size})'' e ``Lote (\texttt{-{}-batch-size})'', descritos na
