@@ -86,7 +86,7 @@ def _parse_source_overrides(pairs: Tuple[str, ...]) -> Dict[str, str]:
     default=DEFAULT_CHUNK_MB,
     show_default=True,
     metavar="MB",
-    help="Memory budget of each read chunk, in MB (8-256). "
+    help="Memory budget of each read chunk, in MB (16-256). "
     "Rows per chunk follow each file's row width.",
 )
 @click.option(
@@ -96,7 +96,7 @@ def _parse_source_overrides(pairs: Tuple[str, ...]) -> Dict[str, str]:
     default=DEFAULT_BATCH_LINES,
     show_default=True,
     metavar="N",
-    help="Rows per write batch (1024-8192), capped at the rows of one read chunk.",
+    help="Rows per write batch (512-8192), capped at the rows of one read chunk.",
 )
 @click.option(
     "--source",

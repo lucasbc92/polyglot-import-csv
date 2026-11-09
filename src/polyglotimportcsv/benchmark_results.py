@@ -9,46 +9,51 @@ from typing import Dict, List, Tuple
 from polyglotimportcsv.benchmark_io import check_csv_header, write_json_and_csv
 
 _RESULT_FIELDS = (
-    "timestamp", "size", "mode", "chunk_mb", "dbms", "entity",
+    "timestamp", "size", "mode", "chunk_mb", "batch_lines", "dbms", "entity",
     "phase", "rows", "median_seconds", "rows_per_second", "peak_memory_mb",
+    "free_memory_mb",
 )
 _RESULTS_CSV = "benchmark_results.csv"
 
 
 def median_results(labeled_runs: List[Dict[str, object]]) -> List[Dict[str, object]]:
-    """Median ``seconds`` per ``(size, mode, chunk_mb, dbms, entity, phase)``.
+    """Median ``seconds`` per ``(size, mode, chunk_mb, batch_lines, dbms, entity, phase)``.
 
     ``rows`` is constant across repetitions (same dataset); ``rows_per_second``
     is recomputed from the median. ``peak_memory_mb`` is a per-import (whole
     process) measurement carried on the labeled run, so each repetition
     contributes one value to the group; the median across repetitions is
-    reported (``None`` if no run supplied a peak).
+    reported (``None`` if no run supplied a peak). ``free_memory_mb`` is the median
+    of the free memory the repetitions started with, the same way.
     """
     groups: Dict[Tuple, Dict[str, object]] = {}
     order: List[Tuple] = []
     for run in labeled_runs:
         for rec in run["records"]:
-            key = (run["size"], run["mode"], run["chunk_mb"],
+            key = (run["size"], run["mode"], run["chunk_mb"], run["batch_lines"],
                    rec["dbms"], rec["entity"], rec["phase"])
             if key not in groups:
-                groups[key] = {"rows": rec["rows"], "seconds": [], "peak": []}
+                groups[key] = {"rows": rec["rows"], "seconds": [], "peak": [], "free": []}
                 order.append(key)
             groups[key]["seconds"].append(rec["seconds"])
             groups[key]["peak"].append(run.get("peak_memory_mb"))
+            groups[key]["free"].append(run.get("free_memory_mb"))
 
     results: List[Dict[str, object]] = []
     for key in order:
-        size, mode, chunk_mb, dbms, entity, phase = key
+        size, mode, chunk_mb, batch_lines, dbms, entity, phase = key
         g = groups[key]
         med = statistics.median(g["seconds"])
         rps = (g["rows"] / med) if med > 0 else None
         peaks = [p for p in g["peak"] if p is not None]
         peak = statistics.median(peaks) if peaks else None
+        frees = [f for f in g["free"] if f is not None]
+        free = statistics.median(frees) if frees else None
         results.append({
-            "size": size, "mode": mode, "chunk_mb": chunk_mb,
+            "size": size, "mode": mode, "chunk_mb": chunk_mb, "batch_lines": batch_lines,
             "dbms": dbms, "entity": entity, "phase": phase,
             "rows": g["rows"], "median_seconds": med, "rows_per_second": rps,
-            "peak_memory_mb": peak,
+            "peak_memory_mb": peak, "free_memory_mb": free,
         })
     return results
 

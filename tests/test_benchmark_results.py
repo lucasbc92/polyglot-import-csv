@@ -11,7 +11,7 @@ from polyglotimportcsv import benchmark_results as br
 def _run(size, mode, rep, seconds, peak=12.5):
     return {
         "size": size, "mode": mode,
-        "chunk_mb": 8, "peak_memory_mb": peak, "repetition": rep,
+        "chunk_mb": 8, "batch_lines": 2048, "peak_memory_mb": peak, "repetition": rep,
         "records": [{
             "dbms": "postgres", "entity": "products", "phase": "write",
             "rows": 100, "seconds": seconds, "rows_per_second": 100 / seconds,
@@ -94,7 +94,7 @@ def test_group_order_preserved():
     # group order (via the `order` list), not fall back to dict/set iteration.
     run = {
         "size": 1000, "mode": "multi",
-        "chunk_mb": 8, "peak_memory_mb": 8.0, "repetition": 0,
+        "chunk_mb": 8, "batch_lines": 2048, "peak_memory_mb": 8.0, "repetition": 0,
         "records": [
             {"dbms": "redis", "entity": "orders", "phase": "write",
              "rows": 50, "seconds": 0.1, "rows_per_second": 500.0},
@@ -135,3 +135,17 @@ def test_appending_to_a_csv_with_the_old_header_is_refused_and_leaves_it_intact(
     with pytest.raises(ValueError, match="header mismatch"):
         br.write_consolidated(results, {"timestamp": "t"}, out_dir=tmp_path)
     assert old.read_text(encoding="utf-8") == content
+
+
+def test_runs_that_differ_only_in_batch_are_separate_rows_with_median_free_memory(tmp_path):
+    runs = []
+    for batch, frees in ((512, (800.0, 700.0, 900.0)), (4096, (600.0, None, 650.0))):
+        for rep, free in enumerate(frees):
+            run = _run(1000, "multi", rep, 0.2)
+            run.update(batch_lines=batch, free_memory_mb=free)
+            runs.append(run)
+    results = br.median_results(runs)
+    assert [(r["batch_lines"], r["free_memory_mb"]) for r in results] == [(512, 800.0), (4096, 625.0)]
+    _, csv_path = br.write_consolidated(results, {"timestamp": "t"}, out_dir=tmp_path)
+    header = csv_path.read_text(encoding="utf-8").splitlines()[0].split(",")
+    assert header[3:5] == ["chunk_mb", "batch_lines"] and header[-1] == "free_memory_mb"

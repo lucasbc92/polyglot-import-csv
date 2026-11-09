@@ -39,8 +39,8 @@ def _saved_metadata(tmp_path):
 
 def test_chunk_sizes_default_to_the_default_block(monkeypatch, tmp_path):
     captured = _run_main(monkeypatch, tmp_path, [])
-    assert captured["chunk_sizes"] == [DEFAULT_CHUNK_MB] == [8]
-    assert _saved_metadata(tmp_path)["chunk_sizes"] == [8]
+    assert captured["chunk_sizes"] == [DEFAULT_CHUNK_MB] == [128]
+    assert _saved_metadata(tmp_path)["chunk_sizes"] == [128]
 
 
 def test_chunk_sizes_flag_becomes_a_list_of_ints_for_the_matrix(monkeypatch, tmp_path):
@@ -68,10 +68,10 @@ def _matrix(tmp_path, chunk_sizes, seen):
 
 
 def test_run_matrix_accepts_the_largest_block_and_rejects_the_next(tmp_path):
-    assert (MIN_CHUNK_MB, MAX_CHUNK_MB) == (8, 256)
+    assert (MIN_CHUNK_MB, MAX_CHUNK_MB) == (16, 256)
     seen = []
     _matrix(tmp_path, [MIN_CHUNK_MB, MAX_CHUNK_MB], seen)
-    assert seen == [8, 256]
+    assert seen == [16, 256]
     with pytest.raises(ValueError, match=r"chunk size\(s\) out of range: 257"):
         _matrix(tmp_path, [MAX_CHUNK_MB + 1], seen)
-    assert seen == [8, 256]  # nothing ran
+    assert seen == [16, 256]  # nothing ran
