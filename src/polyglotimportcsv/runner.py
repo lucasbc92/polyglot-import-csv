@@ -31,7 +31,7 @@ from polyglotimportcsv.dbms_check import (
     not_ready_message,
 )
 from polyglotimportcsv.dbms_sink import SinkFactory
-from polyglotimportcsv.import_plan import DEFAULTbATCH_lINES, ImportPlan, plan_import
+from polyglotimportcsv.import_plan import DEFAULT_BATCH_LINES, ImportPlan, plan_import
 from polyglotimportcsv.stream_binding import entity_source_names
 from polyglotimportcsv.stream_runner import StreamCounts, run_stream_import
 from polyglotimportcsv.reporting import (
@@ -260,7 +260,7 @@ def run_import(
     collector: Optional[metrics.MetricsCollector] = None,
     benchmark: bool = False,
     chunk_size_mb: float = DEFAULT_CHUNK_MB,
-    batch_size: int = DEFAULTbATCH_lINES,
+    batch_size: int = DEFAULT_BATCH_LINES,
     sink_factories: Optional[Dict[str, SinkFactory]] = None,
 ) -> List[str]:
     """

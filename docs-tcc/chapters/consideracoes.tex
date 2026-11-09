@@ -1,4 +1,4 @@
-\chapter{Considerações Finais}
+\chapter{Conclusão}
 \label{cap:conclusao}
 
 Este trabalho apresentou a \textit{PolyglotImportCSV}, uma ferramenta de importação
@@ -17,32 +17,74 @@ de observabilidade e um subsistema de métricas que instrumentam cada fase da im
 dois recursos de desempenho --- a estratégia de escrita em lote, com conversão vetorizada e
 gravação em lotes, e a leitura dos arquivos em blocos, de memória limitada, com tamanhos de
 bloco e de lote configuráveis; e (vi) uma avaliação empírica com dados sintéticos, gerados de
-forma determinística, que quantifica o custo de importar para os cinco paradigmas e o custo
-da validação prévia.
+forma determinística, que quantifica o custo de importar para os cinco paradigmas, a
+escalabilidade da ferramenta com o volume de dados e o custo da validação prévia.
 
-A avaliação (Capítulo~\ref{cap:avaliacao}) confirmou os objetivos traçados. Em cem mil
-linhas, a escrita nos bancos responde por cerca de quatro quintos do tempo de uma importação,
-e a validação prévia dos dados, pelo quinto restante; em troca, nenhum problema que ela
-detecta chega a uma gravação parcial. As medições históricas mostraram que a estratégia em
-lote acelerou a importação em cerca de nove vezes sobre a linha de base ingênua e que a
-leitura em blocos reduziu o pico de memória em mais de doze vezes no maior volume medido, em
-relação à carga do arquivo inteiro na memória --- o que habilita, pelo projeto, a importação
-de arquivos maiores que a memória disponível, desde que os conjuntos de chaves distintas
-caibam nela. A equivalência das contagens entre os dois modos de
-importação, conferida por testes automatizados, permite tratar a escolha entre eles como uma
-questão de organização e de custo, não de correção.
+% TODO-v4preview: paragrafo da avaliacao, com os numeros de 262144 e o veredito de escalabilidade
+A avaliação (Capítulo~\ref{cap:avaliacao}) confirmou os objetivos traçados.
+As medições feitas com uma versão anterior da ferramenta
+(Seção~\ref{sec:estrategias-escrita}) mostram que a estratégia em lote acelera a importação
+em cerca de nove vezes sobre a gravação linha a linha e que a leitura em blocos reduz o pico
+de memória em mais de doze vezes em cem mil linhas, em relação à carga do arquivo inteiro na
+memória --- o que habilita, pelo projeto, a importação de arquivos maiores que a memória
+disponível, desde que os conjuntos de chaves distintas caibam nela. A equivalência das
+contagens entre os dois modos de importação, conferida por testes automatizados, permite
+tratar a escolha entre eles como uma questão de organização e de custo, não de correção.
 
 As limitações reconhecidas dizem respeito sobretudo ao ambiente de avaliação: os experimentos
 correram em uma única máquina, com os cinco SGBDs em contêineres partilhando os mesmos
-recursos, o que penalizou em especial a escrita no Cassandra --- uma restrição do ambiente, e
+recursos, o que penaliza em especial a escrita no Cassandra --- uma restrição do ambiente, e
 não uma propriedade da ferramenta. A validação prévia, por sua vez, não cobre as falhas que
 só aparecem durante a gravação, como a queda de um SGBD no meio da carga, e a ferramenta não
 desfaz o que já foi gravado. Além disso, a suíte de testes permanece majoritariamente
 unitária, sem integração contínua contra os SGBDs conteinerizados.
 
-Como trabalho futuro (Capítulo~\ref{cap:futuros}), destacam-se a edição assistida da
-configuração dentro da interface gráfica, o aprofundamento
-da avaliação em volumes maiores e em ambientes com SGBDs dedicados, e a generalização do núcleo
-de importação a novos destinos. Consolida-se, assim, a \textit{PolyglotImportCSV} como artefato
-de pesquisa e de código aberto alinhado à literatura sobre persistência poliglota e modelagem
-de dados heterogêneos.
+Consolida-se, assim, a \textit{PolyglotImportCSV} como um artefato resultante de uma
+pesquisa na área de modelagem poliglota de dados. Uma vez aplicada uma metodologia para
+projeto poliglota de dados e definidos os modelos de dados alvo sobre os quais os dados
+devem ser persistidos, caso existam fontes de dados exportáveis em CSV, a
+\textit{PolyglotImportCSV} é capaz de realizar a carga de dados dessas fontes respeitando o
+projeto poliglota realizado.
+
+\section{Atividades Futuras}
+\label{sec:futuros}
+
+As atividades que dão continuidade a este trabalho dividem-se entre a ampliação da forma de
+uso, o aprofundamento da avaliação e a extensão das funcionalidades de importação.
+
+\begin{itemize}
+  \item \textbf{Edição assistida da configuração na interface gráfica.} A interface
+        gráfica entregue (Seção~\ref{sec:interface-grafica}) monta e executa o comando de
+        importação, mas não edita os dois arquivos JSON de configuração, que permanecem sob
+        um editor de texto externo. A extensão natural é trazer essa edição para dentro da
+        interface, com validação por \textit{JSON Schema} durante a digitação,
+        pré-visualização do CSV de origem e um editor de mapeamento coluna a coluna,
+        reduzindo ainda mais a barreira de entrada para usuários menos familiarizados com
+        a linha de comando.
+
+  \item \textbf{Aprofundamento da avaliação de desempenho.} A avaliação do
+        Capítulo~\ref{cap:avaliacao} cobriu volumes de até \num{262144} linhas em uma única
+        máquina, com os cinco SGBDs em contêineres partilhando os mesmos recursos. Três
+        extensões se destacam: medir volumes maiores, na ordem de milhões de linhas;
+        aprofundar o caminho de escrita do Cassandra --- a fase dominante do custo --- para
+        além da concorrência já empregada pela estratégia em lote
+        (Seção~\ref{sec:estrategias-escrita}); e repetir os experimentos em um ambiente com
+        SGBDs dedicados e ajustados, isolando o desempenho da ferramenta das restrições do
+        ambiente de contêineres.
+
+  \item \textbf{Suporte a outros formatos de entrada.} Aceitar arquivos TSV e planilhas
+        Excel, além de CSV, reaproveitando o mesmo mapeamento declarativo já existente.
+
+  \item \textbf{Operadores de filtro adicionais e políticas de coerção configuráveis.}
+        Ampliar o vocabulário de seleção de linhas e permitir que o usuário defina como
+        valores ambíguos ou malformados são convertidos aos tipos nativos de cada SGBD.
+
+  \item \textbf{Testes de integração em ambiente conteinerizado.} A suíte de testes atual é
+        majoritariamente unitária; prevê-se automatizar testes de integração contra os cinco
+        SGBDs em \texttt{docker compose}, dentro de um fluxo de integração contínua (CI).
+
+  \item \textbf{Generalização do núcleo de importação.} Estender a arquitetura de portas e
+        adaptadores (Seção~\ref{sec:modelos-execucao}) a novos destinos --- sistemas de
+        mensageria, \textit{data lakes} e outros SGBDs ---, reaproveitando o orquestrador
+        agnóstico de destino sem duplicar a lógica de importação.
+\end{itemize}
