@@ -342,7 +342,8 @@ crescimento linear.
       ymin=5, ymax=1000,
       xtick={1024,16384,65536,262144},
       xticklabels={\num{1024},\num{16384},\num{65536},\num{262144}},
-      legend style={at={(0.5,-0.22)}, anchor=north, legend columns=-1},
+      legend style={at={(0.5,-0.22)}, anchor=north, legend columns=-1,
+        /tikz/every even column/.append style={column sep=0.6cm}},
       legend cell align=left,
       grid=major,
     ]
@@ -363,9 +364,10 @@ linhas ($256$ vezes mais dados), ele cresce $26{,}8$ vezes no modo multifonte (d
 $11{,}2$ para $300{,}0$~MB) e $34{,}7$ vezes no combinado (de $10{,}7$ para $370{,}7$~MB). O
 expoente ajustado da mesma forma, de \num{16384} linhas em diante, é $0{,}63$ no multifonte
 e $0{,}58$ no combinado: cada vez que o volume dobra, o pico cresce, em média, cerca de
-$50\%$. O pico ainda não para de crescer porque, com o bloco de 128~MB, boa parte de
-cada arquivo cabe em um único bloco nesses volumes, de modo que o bloco acompanha o
-arquivo; além do bloco, a memória guarda conjuntos de chaves distintas que crescem com os
+$50\%$. O pico ainda não se estabiliza porque, com o bloco de 128~MB, os arquivos desses
+volumes cabem, inteiros ou quase, em um bloco: no modo multifonte, até \num{131072} linhas
+cada fonte é lida em um único bloco, e em \num{262144} linhas só a maior, \texttt{purchase},
+ocupa dois. O bloco, portanto, ainda acompanha o tamanho do arquivo. Além do bloco, a memória guarda conjuntos de chaves distintas que crescem com os
 dados (seção~\ref{sec:modelos-execucao}). A escolha do tamanho do bloco, que governa esse
 pico, é o objeto da QP5.
 
