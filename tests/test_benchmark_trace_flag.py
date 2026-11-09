@@ -88,7 +88,7 @@ def test_untraced_runs_consolidate_with_an_empty_peak():
     from polyglotimportcsv.benchmark_results import median_results
 
     runs = [{"size": 1000, "mode": "multi",
-             "chunk_mb": 8, "repetition": r, "peak_memory_mb": None,
+             "chunk_mb": 8, "batch_lines": 2048, "repetition": r, "peak_memory_mb": None,
              "records": [{"dbms": "postgres", "entity": "p", "phase": "write",
                           "rows": 10, "seconds": 0.1 * (r + 1)}]}
             for r in range(3)]

@@ -19,7 +19,7 @@ import run_benchmarks as rb  # noqa: E402
 def _labeled(size, mode, chunk_mb, repetition, *, seconds=1.0):
     return {
         "size": size, "mode": mode,
-        "chunk_mb": chunk_mb, "repetition": repetition,
+        "chunk_mb": chunk_mb, "batch_lines": 2048, "repetition": repetition,
         "peak_memory_mb": 1.0,
         "records": [{"dbms": "postgres", "entity": "products",
                      "phase": "write", "rows": 10, "seconds": seconds}],
@@ -28,7 +28,7 @@ def _labeled(size, mode, chunk_mb, repetition, *, seconds=1.0):
 
 def _matrix(tmp_path, seen, **kwargs):
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, source_overrides, chunk_size_mb):
+                      only, source_overrides, chunk_size_mb, batch_size):
         seen.append(config_path)
         collector.record("postgres", "products", "write", rows=10, seconds=0.1)
         return []
@@ -224,3 +224,14 @@ def test_an_old_results_csv_is_refused_before_the_matrix_runs(tmp_path, monkeypa
     assert code == 2
     assert old.read_text(encoding="utf-8") == content
     assert list(out.glob("benchmark_run_*.json")) == []
+
+
+def test_resume_refuses_a_checkpoint_from_before_the_batch_axis(tmp_path):
+    # A checkpoint written before --batch-sizes existed has no batch_sizes and its runs
+    # carry no batch_lines: resuming it would mix batches silently.
+    meta = {"seed": 42, "sizes": [1000], "modes": ["multi"], "trace_memory": True,
+            "chunk_sizes": [16], "repetitions": 3}
+    path = tmp_path / rb.CHECKPOINT_NAME
+    path.write_text(json.dumps({"metadata": meta, "runs": []}), encoding="utf-8")
+    with pytest.raises(ValueError, match="batch_sizes"):
+        rb.resume_runs(path, dict(meta, batch_sizes=[2048]))

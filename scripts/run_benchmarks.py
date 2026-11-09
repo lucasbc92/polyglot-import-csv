@@ -25,6 +25,7 @@ from polyglotimportcsv.config_parser import load_config
 from polyglotimportcsv.metrics import environment_metadata
 from polyglotimportcsv.reporting import kv, setup_reporting
 from polyglotimportcsv.runner import run_import
+from polyglotimportcsv.import_plan import DEFAULT_BATCH_LINES, MAX_BATCH_LINES, MIN_BATCH_LINES
 from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB
 
 _ALL_DBMS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
@@ -34,7 +35,7 @@ CHECKPOINT_NAME = "benchmark_checkpoint.json"
 #: Metadata that has to agree for a checkpoint to be resumable. Runs measured
 #: under different axes describe a different matrix, and mixing them would
 #: silently corrupt the medians.
-RESUME_KEYS = ("seed", "sizes", "modes", "chunk_sizes", "repetitions",
+RESUME_KEYS = ("seed", "sizes", "modes", "chunk_sizes", "batch_sizes", "repetitions",
                "trace_memory")
 
 
@@ -111,6 +112,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help=f"Comma-separated read-block sizes in MB, each from {MIN_CHUNK_MB} to "
                              f"{MAX_CHUNK_MB} (default: {DEFAULT_CHUNK_MB}). Use '16,64,256' to "
                              "compare peak_memory_mb and time across block sizes.")
+    parser.add_argument("--batch-sizes", default=str(DEFAULT_BATCH_LINES),
+                        help=f"Comma-separated write-batch sizes in rows, each from {MIN_BATCH_LINES} "
+                             f"to {MAX_BATCH_LINES} (default: {DEFAULT_BATCH_LINES}). Crossed with "
+                             "--chunk-sizes: every pair is another cell of the matrix.")
     parser.add_argument("--seed", type=int, default=42, help="Generator seed (default: 42).")
     parser.add_argument("--no-trace-memory", dest="trace_memory", action="store_false",
                         help="Do not run imports under tracemalloc. peak_memory_mb is then "
@@ -145,12 +150,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     modes = _parse_str_list(args.modes)
     only = _parse_str_list(args.only) or None
     chunk_sizes = _parse_int_list(args.chunk_sizes)
+    batch_sizes = _parse_int_list(args.batch_sizes)
 
     meta = environment_metadata(args.config_dir, {})
     meta.update({"seed": args.seed, "sizes": sizes, "modes": modes,
                  "trace_memory": args.trace_memory,
                  "repetitions": args.repetitions,
-                 "chunk_sizes": chunk_sizes})
+                 "chunk_sizes": chunk_sizes, "batch_sizes": batch_sizes})
 
     # The results CSV is only appended after the whole matrix ran: refuse an
     # old one now, not hours from now.
@@ -174,7 +180,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
         labeled = run_matrix(
             sizes=sizes, modes=modes, repetitions=args.repetitions,
-            chunk_sizes=chunk_sizes,
+            chunk_sizes=chunk_sizes, batch_sizes=batch_sizes,
             dbms_config_path=args.dbms_config, config_dir=args.config_dir,
             data_dir=args.data_dir, seed=args.seed, only=only,
             cleaners=CLEANERS, importer=run_import, load_cfg=load_config,

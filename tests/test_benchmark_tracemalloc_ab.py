@@ -14,7 +14,7 @@ import benchmark_tracemalloc_ab as ab  # noqa: E402
 
 def _run(chunk_mb, seconds, *, phase="write"):
     return {
-        "chunk_mb": chunk_mb,
+        "chunk_mb": chunk_mb, "batch_lines": 2048,
         "records": [{"dbms": "postgres", "entity": "products",
                      "phase": phase, "rows": 10, "seconds": seconds}],
     }
@@ -89,7 +89,7 @@ def test_run_matrix_without_trace_memory_does_not_trace(tmp_path):
     tracing = []
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, source_overrides, chunk_size_mb):
+                      only, source_overrides, chunk_size_mb, batch_size):
         tracing.append(tracemalloc.is_tracing())
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)
         return []
@@ -111,7 +111,7 @@ def test_run_matrix_traces_by_default(tmp_path):
     tracing = []
 
     def fake_importer(config_path, *, dbms_config_path, collector, show_data,
-                      only, source_overrides, chunk_size_mb):
+                      only, source_overrides, chunk_size_mb, batch_size):
         tracing.append(tracemalloc.is_tracing())
         _ = [0] * 200_000  # allocate inside the traced region so peak > 0
         collector.record("postgres", "products", "write", rows=100, seconds=0.1)

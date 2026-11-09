@@ -11,8 +11,10 @@ from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional
 
 from polyglotimportcsv import benchmark_data
+from polyglotimportcsv.import_plan import DEFAULT_BATCH_LINES, MAX_BATCH_LINES, MIN_BATCH_LINES
 from polyglotimportcsv.metrics import MetricsCollector
 from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB
+from polyglotimportcsv.system_memory import available_mb
 
 _ALL_DBMS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
 
@@ -73,7 +75,7 @@ def _ensure_dataset(data_dir: Path, size: int, seed: int, mode: str, generate) -
 
 def _run_key(run: Dict[str, object]) -> tuple:
     """Identity of a labeled run: which matrix cell, and which repetition of it."""
-    return (run["size"], run["mode"], run["chunk_mb"], run["repetition"])
+    return (run["size"], run["mode"], run["chunk_mb"], run["batch_lines"], run["repetition"])
 
 
 def _overrides(mode: str, dpath: Path) -> Dict[str, str]:
@@ -88,6 +90,7 @@ def run_matrix(
     modes: Iterable[str],
     repetitions: int,
     chunk_sizes: Iterable[int] = (DEFAULT_CHUNK_MB,),
+    batch_sizes: Iterable[int] = (DEFAULT_BATCH_LINES,),
     dbms_config_path: "Optional[str | Path]",
     config_dir: "str | Path",
     data_dir: "str | Path",
@@ -101,11 +104,14 @@ def run_matrix(
     trace_memory: bool = True,
     completed: Optional[List[Dict[str, object]]] = None,
 ) -> List[Dict[str, object]]:
-    """Run repetitions x sizes x modes x chunk sizes, cleaning before each import.
+    """Run repetitions x sizes x modes x chunk sizes x batch sizes, cleaning before each import.
 
     ``chunk_sizes`` are read-block sizes in MB, each within
     ``[MIN_CHUNK_MB, MAX_CHUNK_MB]``: the block size is what an import trades
-    between peak memory and time.
+    between peak memory and time. ``batch_sizes`` are rows per write batch, each
+    within ``[MIN_BATCH_LINES, MAX_BATCH_LINES]``. Every labeled run also records
+    ``free_memory_mb``, the free physical memory read just before its cleanup, so a
+    campaign can show that its runs started under comparable conditions.
 
     One repetition is a full sweep of the (size, mode, chunk size) matrix,
     not a burst of back-to-back runs of the same cell: warm-up then affects every
@@ -145,6 +151,13 @@ def run_matrix(
             f"chunk size(s) out of range: {', '.join(map(str, out_of_range))}. "
             f"Valid: {MIN_CHUNK_MB} to {MAX_CHUNK_MB} MB"
         )
+    batch_sizes = list(batch_sizes)
+    bad_batches = [b for b in batch_sizes if not MIN_BATCH_LINES <= b <= MAX_BATCH_LINES]
+    if bad_batches:
+        raise ValueError(
+            f"batch size(s) out of range: {', '.join(map(str, bad_batches))}. "
+            f"Valid: {MIN_BATCH_LINES} to {MAX_BATCH_LINES} rows"
+        )
     # Prepare every (size, mode) cell up front. Generating datasets and loading
     # configs is not part of any measurement, so it stays out of the repetition
     # passes; it also fails fast when a size cannot be prepared, instead of after
@@ -178,10 +191,11 @@ def run_matrix(
         for cell in cells:
             merged = cell["merged"]
             selected = cell["selected"]
-            for chunk_mb in chunk_sizes:
-                key = (cell["size"], cell["mode"], chunk_mb, rep)
+            for chunk_mb, batch in [(c, b) for c in chunk_sizes for b in batch_sizes]:
+                key = (cell["size"], cell["mode"], chunk_mb, batch, rep)
                 if key in already_measured:
                     continue
+                free_mb = available_mb()
                 for dbms in selected:
                     block = merged.get(dbms)
                     if block is not None and dbms in cleaners:
@@ -200,6 +214,7 @@ def run_matrix(
                     only=selected,
                     source_overrides=cell["overrides"],
                     chunk_size_mb=chunk_mb,
+                    batch_size=batch,
                 )
                 peak_mb: Optional[float] = None
                 if trace_memory:
@@ -207,6 +222,7 @@ def run_matrix(
                     tracemalloc.stop()
                 labeled.append({
                     "size": cell["size"], "mode": cell["mode"], "chunk_mb": chunk_mb,
+                    "batch_lines": batch, "free_memory_mb": free_mb,
                     "repetition": rep,
                     "peak_memory_mb": peak_mb,
                     "records": collector.to_records(),
