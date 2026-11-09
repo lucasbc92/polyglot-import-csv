@@ -73,7 +73,7 @@ Todas medem a escrita em lote com leitura em blocos, a única da ferramenta, com
 ### 3a. Exploratória (escolha da regra automática)
 
 - **Código medido:** depois dos itens 1–2 da Parte 1 (limites e eixo `--batch-sizes`) e antes do modo automático.
-- **Célula:** N = 131072, multifonte (**decisão do Claude:** a maior fonte, `purchase`, ocupa cerca de 105 MB em memória nesse volume, então os blocos de 16, 32 e 64 MB a leem em vários pedaços e os de 128 e 256 MB a leem inteira; com 262144, a campanha dobraria de duração).
+- **Célula:** N = 131072, multifonte (**decisão do Claude:** a maior fonte, `purchase`, ocupa cerca de 95,5 MB em memória nesse volume (medido depois, na própria campanha), então os blocos de 16, 32 e 64 MB a leem em vários pedaços e os de 128 e 256 MB a leem inteira; com 262144, a campanha dobraria de duração).
 - **Eixos (um de cada vez):** bloco ∈ {16, 32, 64, 128, 256} MB com o lote fixo em 2048; lote ∈ {512, 1024, 2048, 4096, 8192} com o bloco fixo em 128 MB. São 9 células distintas.
 - **Repetições:** tempo, 3 por célula; memória, **1** por célula (**decisão do Claude:** na v3, o pico variou menos de 0,2% entre campanhas; a campanha exploratória serve para escolher a regra, e não é a fonte dos números principais do Cap. 5).
 - **Estimativa:** cerca de 2 h para o tempo e 2,5 h para a memória.
@@ -220,22 +220,42 @@ Dados em `benchmarks/v4-explore/` (commits `d5c065f`, `759b8bb`, `2daead8`, `795
 | 4096 | 208,00 | +6,5% | 195,6 |
 | 8192 | 202,80 | +3,8% | 197,1 |
 
+**Tempo total de cada execução, por repetição** (tirado dos logs da sessão; o CSV guarda só as medianas). As células rodam nesta ordem dentro de cada repetição:
+
+| Campanha | Repetição | 16 / 512 | 32 / 1024 | 64 / 2048 | 128 / 4096 | 256 / 8192 |
+|---|---|---:|---:|---:|---:|---:|
+| blocos | 1 | 319,6 | 256,2 | 262,4 | 247,1 | 241,5 |
+| blocos | 2 | 267,4 | 299,4 | 282,1 | 230,6 | 236,4 |
+| blocos | 3 | 302,9 | 352,8 | 387,2 | 471,2 | 324,9 |
+| lotes | 1 | 244,0 | 211,0 | 196,3 | 211,7 | 201,3 |
+| lotes | 2 | 209,1 | 210,3 | 193,8 | 207,4 | 211,4 |
+| lotes | 3 | 195,9 | 194,8 | 189,6 | 195,8 | 187,9 |
+
 **Leituras:**
 
-- **A deriva entre campanhas é grande.** A célula comum (128 MB, 2048) levou 248,00 s numa campanha e 195,34 s na outra, 27% de diferença; o Docker foi reiniciado entre elas. Por isso as comparações valem só **dentro** de cada campanha, em que as repetições alternam as células. A tolerância de 3% do design também se aplica dentro da campanha.
-- **Bloco:** os blocos que leem a maior fonte inteira (128 e 256 MB; a `purchase` precisa de cerca de 95,5 MB em 131072 linhas) são os mais rápidos. Os menores ficam de 11% a 23% atrás, sem ordem clara entre si. O pico satura quando o bloco passa a conter a fonte inteira: 195,5 MB em 128 e em 256 MB.
-- **Pico em função do bloco efetivo** (o menor entre o bloco e o tamanho da maior fonte): `pico ≈ 87,0 + 1,078 × bloco efetivo` (MB), com erro de 1% a 7% nos quatro pontos distintos. A base inclui os conjuntos de chaves desse volume e cresce com os dados.
-- **Lote:** todos ficam a até 8,5% do melhor (2048), perto do ruído. O pico quase não muda (de 195 a 200 MB). O melhor lote de cada SGBD varia (PostgreSQL 8192, Redis 4096, os demais 2048), com diferenças pequenas.
+- **A deriva entre campanhas é grande.** A célula comum (128 MB, 2048) levou 248,00 s numa campanha e 195,34 s na outra, 27% de diferença; o Docker foi reiniciado entre elas. A terceira repetição da campanha de blocos também derivou para cima, com uma execução de 471 s. Dentro de uma campanha, a mesma célula variou de 3,5% a 24% entre repetições na campanha de lotes.
+- **Bloco:** nas repetições 1 e 2, feitas na mesma passada, os blocos que leem a maior fonte inteira (128 e 256 MB; a `purchase` precisa de cerca de 95,5 MB em 131072 linhas) foram de 16% a 30% mais rápidos que os de 16 a 64 MB. A diferença é maior que o ruído medido. Nas medianas, os blocos menores ficam de 11% a 23% atrás. O pico satura quando o bloco passa a conter a fonte inteira: 195,5 MB em 128 e em 256 MB.
+- **Lote:** as medianas ficam a até 8,5% da melhor (2048), dentro do ruído entre repetições. Em cada repetição, nenhum lote é sistematicamente mais rápido. O pico quase não muda (de 195 a 200 MB). Nas campanhas de memória, de uma repetição só, o tempo cai a cada execução nos dois eixos (blocos: 903 → 636 s; lotes: 815 → 621 s). É efeito da ordem de execução, que é sempre a mesma com uma repetição, e não do bloco nem do lote: com o rastreamento ligado, esses tempos não são lidos como desempenho. O melhor lote de escrita de cada SGBD nas medianas (PostgreSQL 8192, Redis 4096, os demais 2048) não se sustenta contra esse ruído.
+- **Nenhum lote foi limitado pelas linhas de um bloco.** Mesmo com 16 MB, um bloco da `purchase` tem 8523 linhas, mais que qualquer lote abaixo de 8192.
+- **Pico em função do bloco efetivo** (o menor entre o bloco e o tamanho da maior fonte), em 131072 linhas: `pico ≈ 87,0 + 1,078 × bloco efetivo` (MB), com erro de até 8% nos quatro pontos distintos.
+- **A base cresce com os dados.** A campanha intermediária (bloco de 128 MB, multifonte, seis volumes) dá base = pico − 1,078 × bloco efetivo, e essa base acompanha o tamanho das fontes em disco: `base ≈ 22,2 + 2,31 × MiB das fontes em disco`. O ajuste é feito de 32768 linhas em diante e acerta 91,0 contra 92,5 MB em 131072 e 161,3 contra 162,0 MB em 262144. Uma base fixa de 87 MB subestimaria o pico de 262144 linhas em cerca de 25%.
 
 **Regra adotada** (substitui a da Parte 1, item 3, onde houver conflito):
 
+- **Tolerância** (decisão do Claude, registrada no ledger): a "variação entre campanhas" da Parte 1 mediu 27% e, aplicada literalmente, escolheria um bloco de 16 MB e um lote de 512. Isso foi descartado, porque esses 27% são deriva do ambiente entre campanhas, e não diferença entre células. As células são comparadas dentro da mesma campanha e da mesma repetição, como mostra a tabela acima. Com essa comparação, o bloco que lê a fonte inteira vence com folga (16% a 30%), e o lote não faz diferença mensurável. Se o autor preferir priorizar a memória, basta trocar o teto por 16 MB; o código fica igual.
 - **bloco automático** = mín(256; MB necessários para ler a maior fonte declarada inteira; limite de segurança), preso a [16, 256] e arredondado para baixo a um inteiro. O "teto de conforto" da Parte 1 virou "ler a maior fonte inteira", porque foi isso que os dados mostraram: o ganho vem de ler a fonte de uma vez.
   - MB necessários de uma fonte = linhas da fonte / linhas por MB, com as linhas por MB tiradas da mesma estimativa de `stream_source.chunk_rows`.
   - O número de linhas exige contar a fonte (uma leitura a mais). Como alternativa, a implementação pode usar `tamanho do arquivo × (MB em memória por MB em disco, medido nas primeiras mil linhas)`, que não exige outra leitura. A escolha fica com o implementador, desde que a estimativa seja documentada.
-- **limite de segurança** = (0,25 × memória livre − 87,0) / 1,078. Com cerca de 890 MB livres, como nesta máquina com o Docker no ar, ele dá cerca de 125 MB; com 2 GB livres, cerca de 383 MB, e aí vale o teto de 256. Constantes nomeadas: `PEAK_BASE_MB = 87.0`, `PEAK_MB_PER_CHUNK_MB = 1.078`, `FREE_MEMORY_FRACTION = 0.25`.
+- **limite de segurança** = (0,25 × memória livre − base) / 1,078, com base = 22,2 + 2,31 × (MiB em disco das fontes que a importação lê). Constantes nomeadas: `PEAK_BASE_MB = 22.2`, `PEAK_BASE_PER_DISK_MB = 2.31`, `PEAK_MB_PER_CHUNK_MB = 1.078`, `FREE_MEMORY_FRACTION = 0.25`.
+  - Os coeficientes vêm de uma máquina, do modo multifonte e de picos de uma repetição, e isso vira ameaça à validade. A fração de 25% é uma margem escolhida, não medida.
   - Se a memória livre for ilegível (`available_mb()` devolve `None`), o limite não se aplica, e o bloco é o necessário para ler a maior fonte inteira, preso a [16, 256]. O motivo é registrado no log.
-- **lote automático** = 2048, fixo. O efeito do lote por SGBD vira atividade futura.
-- **O que muda se a tolerância for outra:** com ela maior que 11%, até o bloco de 16 MB entraria como "tão bom quanto o melhor" e a regra preferiria a memória ao tempo. Os dados não sustentam essa escolha, porque todos os blocos menores ficaram mais de 10% atrás dentro da mesma campanha.
+- **O que a regra dá nesta máquina** (cerca de 890 MiB livres com o Docker no ar):
+  - 131072 linhas (29,9 MiB em disco): base 91 MB, limite 121 MB, fonte inteira 95,5 MB → **bloco de 95 MB**, que lê a `purchase` inteira;
+  - 262144 linhas (60,3 MiB): base 162 MB, limite 56 MB, fonte inteira 191 MB → **bloco de 56 MB**, limitado pela segurança;
+  - com 2048 MiB livres e 262144 linhas: limite 325 MB → bloco de 191 MB.
+
+  O resultado é sensível à memória livre: em 131072 linhas, abaixo de cerca de 776 MiB livres o limite cai abaixo de 95,5 MB, e a `purchase` passa a ser lida em dois blocos. Nesta máquina, a memória livre variou de 717 a 1030 MiB durante as campanhas. Esse é o comportamento pretendido, que troca tempo por memória quando ela falta, e o log registra o motivo. A campanha final resolve o automático uma só vez, no início, e cita o valor e a memória livre.
+- **lote automático** = 2048, fixo. Ele foi o melhor nas medianas e é o do meio do intervalo; nenhum lote mostrou vantagem acima do ruído. O efeito do lote por SGBD vira atividade futura.
 
 ## Etapa 0 — prévia para a reunião de 2026-11-09
 

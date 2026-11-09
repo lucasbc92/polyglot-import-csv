@@ -323,7 +323,7 @@ mismatch) and resumed with `--resume` after a Docker restart.
 
 The shared cell (128 MB, 2048) took 248.00 s in one campaign and 195.34 s in the
 other: compare only within a campaign. Blocks that read the largest source whole
-(about 95.5 MB here) are the fastest; peak ≈ 87.0 + 1.078 × effective block (MB).
+(about 95.5 MB here) are the fastest; peak ≈ 87.0 + 1.078 × effective block (MB) at this volume; the base grows with the data (about 22.2 + 2.31 × MiB of sources on disk, fitted on `v4-preview/`).
 The batch barely moves time or peak. The resulting rule is in
 `docs/superpowers/specs/2026-11-08-revisao-ronaldo-v23-design.md`.
 
@@ -669,6 +669,6 @@ conexão com CRC *mismatch*) e retomada com `--resume` depois de reiniciar o Doc
 
 A célula comum (128 MB, 2048) levou 248,00 s numa campanha e 195,34 s na outra:
 compare só dentro de uma campanha. Os blocos que leem a maior fonte inteira (cerca de
-95,5 MB aqui) são os mais rápidos; pico ≈ 87,0 + 1,078 × bloco efetivo (MB). O lote
+95,5 MB aqui) são os mais rápidos; pico ≈ 87,0 + 1,078 × bloco efetivo (MB) nesse volume; a base cresce com os dados (cerca de 22,2 + 2,31 × MiB das fontes em disco, ajustada sobre `v4-preview/`). O lote
 quase não mexe no tempo nem no pico. A regra resultante está em
 `docs/superpowers/specs/2026-11-08-revisao-ronaldo-v23-design.md`.
