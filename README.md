@@ -49,14 +49,15 @@ polyglotimportcsv-gui
 The window builds the command for you, shows it before running, and streams the
 CLI's output into an integrated console. The command shown is the command that
 runs — you can switch the panel to edit mode and type it yourself. The options
-panel has one control for each option it offers, among them two spin boxes, "Bloco em MB
-(`--chunk-size`)" and "Lote (`--batch-size`)", with the CLI's limits.
+panel has one control for each option it offers. It has none for the read block
+and the write batch: the CLI chooses them for each run (see `--chunk-size` below),
+so the command leaves them out.
 
 The integrated console shows the CLI's colours: with `FORCE_COLOR` set, the CLI
 writes ANSI escapes even into a pipe. The GUI does not offer `--benchmark`, which remains available in the CLI.
 Before a run, the GUI validates both configurations and the CSV headers with
 the CLI's own code; the inference and validation reads run in the CLI itself.
-After a run, **Salvar log…** copies the session log, and clicking the log path in
+After a run, **Save log…** copies the session log, and clicking the log path in
 the status bar opens its folder.
 
 ### Usage
@@ -86,8 +87,8 @@ Options:
 
 - `--only postgres,redis` — run only the listed DBMS. If none of them is configured, the run stops with an error.
 - `--dry-run` — run every check, on the headers and on the data rows, and print the row counts per entity or partition and per relationship, connecting to no DBMS and writing nothing. It reads the files (the inference and validation reads) in chunks, so it also works on large files.
-- `--chunk-size MB` — memory budget of each read chunk, in MB (default 8, minimum 8, maximum 256). The rows per chunk of each source are computed from the width of its rows, measured on its first 1000 rows, so a chunk takes about this much memory. A value out of range is a usage error.
-- `--batch-size N` — rows per write batch (default 1024, minimum 1024, maximum 8192). The batch of an entity is the smaller of N and the rows of one read chunk of its sources.
+- `--chunk-size MB` — memory budget of each read chunk, in MB (minimum 16, maximum 256). The rows per chunk of each source are computed from the width of its rows, measured on its first 1000 rows, so a chunk takes about this much memory. A value out of range is a usage error. Without it, the block is chosen for each run: the one that reads the largest source whole, unless the predicted peak memory would exceed a quarter of the free memory, in which case it is the largest block that fits (`auto_size.py`). The chosen size and the reason are printed and recorded in the session log, e.g. `Read block: 96 MB (auto: largest source read whole (96.1 MB); 1033 MB free)`.
+- `--batch-size N` — rows per write batch (default 2048, minimum 512, maximum 8192). The batch of an entity is the smaller of N and the rows of one read chunk of its sources.
 - `--log-level DEBUG|INFO|WARNING|ERROR` — terminal verbosity (default `INFO`); the session log file under `logs/` always records `DEBUG`.
 - `--show-data` — force the per-entity record dump to show every row; `--no-data` suppresses it entirely. The default (neither flag) is `--sample`, below.
 - `--sample N` — show the first N rows of each entity (default 50). `--show-data` shows every row; `--no-data` none. `--sample` cannot be combined with either.
@@ -213,12 +214,16 @@ import is preceded by a clean, so every measurement is a cold load:
     python scripts/run_benchmarks.py --sizes 1000,10000,100000 \
       --modes multi,combined --repetitions 3
 
-`--chunk-sizes` lists the read chunk sizes to measure, in MB (default `8`; each from
-8 to 256). Every size is another cell of the matrix, which is how a campaign compares
-memory and time across chunk sizes:
+`--chunk-sizes` lists the read chunk sizes to measure, in MB (each from 16 to 256).
+Every size is another cell of the matrix, which is how a campaign compares memory and
+time across chunk sizes. The default, `auto`, is the block the CLI would choose,
+resolved once per (size, mode) when the matrix starts, with one reading of the free
+memory, and saved in the metadata (`auto_chunks`) so that every repetition, and a
+`--resume`, measures the same block. `--batch-sizes` does the same for the write
+batch (default `2048`; each from 512 to 8192):
 
     python scripts/run_benchmarks.py --sizes 100000 --modes multi \
-      --chunk-sizes 8,64,256 --repetitions 3 --out benchmarks/chunk-sizes
+      --chunk-sizes 16,64,256 --repetitions 3 --out benchmarks/chunk-sizes
 
 `benchmarks/` (the default `--out`) keeps the report's campaigns, whose
 `benchmark_results.csv` has an older header (an `execution` column where the new
@@ -260,14 +265,16 @@ overhead does not simply cancel out between them. Measure it before trusting a
 timing comparison:
 
     python scripts/benchmark_tracemalloc_ab.py --size 10000 \
-      --chunk-sizes 8,64,256 --repetitions 3
+      --chunk-sizes 16,64,256 --repetitions 3
 
 It runs the same cell with and without tracing, interleaving the two arms pass by
 pass so both share the warm-up, and prints the overhead per chunk size.
 
 Results land in `benchmarks/`: a `benchmark_run_<timestamp>.json` plus an
-append-only `benchmark_results.csv` (`timestamp,size,mode,chunk_mb,dbms,entity,
-phase,rows,median_seconds,rows_per_second,peak_memory_mb`) for the report graphs.
+append-only `benchmark_results.csv` (`timestamp,size,mode,chunk_mb,batch_lines,dbms,
+entity,phase,rows,median_seconds,rows_per_second,peak_memory_mb,free_memory_mb`) for the
+report graphs. The JSON metadata also records the measured commit (`git_commit`,
+suffixed `-dirty` when `src/` has uncommitted changes).
 The `phase` column holds `infer` and `validate`, once per import, and `write`, once
 per DBMS.
 
@@ -323,13 +330,14 @@ polyglotimportcsv-gui
 A janela monta o comando, mostra-o antes de executar e transmite a saída da CLI
 para um console integrado. O comando exibido é o comando executado — o painel
 pode ser colocado em modo de edição para digitá-lo à mão. O painel de opções
-tem um controle para cada opção que oferece, entre eles dois campos numéricos, "Bloco em MB
-(`--chunk-size`)" e "Lote (`--batch-size`)", com os limites da CLI.
+tem um controle para cada opção que oferece. Não há controle para o bloco de leitura
+nem para o lote de gravação: a CLI os escolhe a cada execução (ver `--chunk-size`
+abaixo), por isso o comando não os inclui. Os textos da janela estão em inglês.
 
 O console integrado mostra as cores da CLI: com `FORCE_COLOR` definido, a CLI
 escreve sequências ANSI mesmo dentro de um *pipe*. A GUI não oferece `--benchmark`, que continua disponível na CLI. Antes de executar, a GUI valida as duas configurações e os
 cabeçalhos dos CSVs com o próprio código da CLI; as leituras de inferência e de
-validação rodam na própria CLI. Depois de executar, **Salvar log…** copia o log
+validação rodam na própria CLI. Depois de executar, **Save log…** copia o log
 da sessão, e clicar no caminho do log na barra de status abre a pasta
 correspondente.
 
@@ -360,8 +368,8 @@ Opções úteis:
 
 - `--only postgres,redis` — executa só os SGBDs listados. Se nenhum deles estiver configurado, a execução termina com erro.
 - `--dry-run` — faz todas as verificações, nos cabeçalhos e nas linhas de dados, e mostra a contagem de linhas por entidade ou partição e por relacionamento, sem conectar a nenhum SGBD e sem gravar nada. Lê os arquivos (as leituras de inferência e de validação) em blocos, então também funciona em arquivos grandes.
-- `--chunk-size MB` — memória reservada a cada bloco de leitura, em MB (padrão 8, mínimo 8, máximo 256). As linhas por bloco de cada fonte são calculadas pela largura das suas linhas, medida nas primeiras 1000, de modo que um bloco ocupa cerca desse tanto de memória. Um valor fora da faixa é erro de uso.
-- `--batch-size N` — linhas por lote de gravação (padrão 1024, mínimo 1024, máximo 8192). O lote de uma entidade é o menor entre N e as linhas de um bloco de leitura das suas fontes.
+- `--chunk-size MB` — memória reservada a cada bloco de leitura, em MB (mínimo 16, máximo 256). As linhas por bloco de cada fonte são calculadas pela largura das suas linhas, medida nas primeiras 1000, de modo que um bloco ocupa cerca desse tanto de memória. Um valor fora da faixa é erro de uso. Sem a opção, o bloco é escolhido a cada execução: o que lê a maior fonte inteira, a menos que o pico de memória previsto passe de um quarto da memória livre; nesse caso, é o maior bloco que cabe (`auto_size.py`). O tamanho escolhido e o motivo aparecem na saída e no log da sessão, por exemplo `Read block: 96 MB (auto: largest source read whole (96.1 MB); 1033 MB free)`.
+- `--batch-size N` — linhas por lote de gravação (padrão 2048, mínimo 512, máximo 8192). O lote de uma entidade é o menor entre N e as linhas de um bloco de leitura das suas fontes.
 - `--log-level DEBUG|INFO|WARNING|ERROR` — verbosidade do terminal (padrão `INFO`); o arquivo de log de sessão em `logs/` sempre grava `DEBUG`.
 - `--show-data` — força a exibição de todos os registros de cada entidade; `--no-data` suprime a exibição por completo. O padrão (sem nenhuma das duas flags) é `--sample`, abaixo.
 - `--sample N` — mostra as primeiras N linhas de cada entidade (padrão 50). `--show-data` mostra todas as linhas; `--no-data`, nenhuma. `--sample` não se combina com nenhuma das duas.
@@ -487,12 +495,16 @@ precedida de uma limpeza, então cada medição é uma carga a frio:
     python scripts/run_benchmarks.py --sizes 1000,10000,100000 \
       --modes multi,combined --repetitions 3
 
-`--chunk-sizes` lista os tamanhos de bloco de leitura a medir, em MB (padrão `8`; cada
-um de 8 a 256). Cada tamanho é mais uma célula da matriz, e é assim que uma campanha
-compara memória e tempo entre tamanhos de bloco:
+`--chunk-sizes` lista os tamanhos de bloco de leitura a medir, em MB (cada um de 16 a
+256). Cada tamanho é mais uma célula da matriz, e é assim que uma campanha compara
+memória e tempo entre tamanhos de bloco. O padrão, `auto`, é o bloco que a CLI
+escolheria, resolvido uma vez por (volume, modo) no início da matriz, com uma só
+leitura da memória livre, e salvo nos metadados (`auto_chunks`), para que todas as
+repetições, e um `--resume`, meçam o mesmo bloco. `--batch-sizes` faz o mesmo com o
+lote de gravação (padrão `2048`; cada um de 512 a 8192):
 
     python scripts/run_benchmarks.py --sizes 100000 --modes multi \
-      --chunk-sizes 8,64,256 --repetitions 3 --out benchmarks/chunk-sizes
+      --chunk-sizes 16,64,256 --repetitions 3 --out benchmarks/chunk-sizes
 
 `benchmarks/` (o `--out` padrão) guarda as campanhas do relatório, cujo
 `benchmark_results.csv` tem um cabeçalho mais antigo (uma coluna `execution` onde o
@@ -535,15 +547,17 @@ porém maiores), então o custo não se cancela entre eles. Meça antes de confi
 comparação de tempo:
 
     python scripts/benchmark_tracemalloc_ab.py --size 10000 \
-      --chunk-sizes 8,64,256 --repetitions 3
+      --chunk-sizes 16,64,256 --repetitions 3
 
 O script roda a mesma célula com e sem rastreamento, intercalando os dois braços a
 cada passada (para que ambos dividam o aquecimento), e imprime o custo por tamanho
 de bloco.
 
 Os resultados vão para `benchmarks/`: um `benchmark_run_<timestamp>.json` e um
-`benchmark_results.csv` append-only (`timestamp,size,mode,chunk_mb,dbms,entity,
-phase,rows,median_seconds,rows_per_second,peak_memory_mb`) para os gráficos do relatório.
+`benchmark_results.csv` append-only (`timestamp,size,mode,chunk_mb,batch_lines,dbms,
+entity,phase,rows,median_seconds,rows_per_second,peak_memory_mb,free_memory_mb`) para os
+gráficos do relatório. Os metadados do JSON também registram o commit medido
+(`git_commit`, com o sufixo `-dirty` quando `src/` tem mudanças não commitadas).
 A coluna `phase` traz `infer` e `validate`, uma vez por importação, e `write`, uma
 vez por SGBD.
 
