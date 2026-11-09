@@ -43,14 +43,14 @@ def test_blank_text_reads_back_as_none(qtbot):
 def test_errors_are_shown_and_cleared(qtbot):
     panel = ConfigPanel()
     qtbot.addWidget(panel)
-    panel.set_errors({"config_path": "Arquivo não encontrado: x"})
-    assert "Arquivo não encontrado: x" in panel.error_label.text()
+    panel.set_errors({"config_path": "File not found: x"})
+    assert "File not found: x" in panel.error_label.text()
     panel.set_errors({})
     assert panel.error_label.text() == ""
 
 
 def test_browsing_to_the_same_path_still_emits_changed(qtbot):
-    """Re-choosing the same file in "Procurar…" leaves the QLineEdit text
+    """Re-choosing the same file in "Browse…" leaves the QLineEdit text
     unchanged, so setText() alone would emit no signal. That must not stop
     the form from refreshing when the person just re-picked a file they
     fixed externally."""
@@ -83,5 +83,5 @@ def test_cancelling_the_browse_dialog_changes_nothing(qtbot):
 def test_unrelated_errors_are_ignored(qtbot):
     panel = ConfigPanel()
     qtbot.addWidget(panel)
-    panel.set_errors({"sources": "Nome de fonte repetido: stock"})
+    panel.set_errors({"sources": "Repeated source name: stock"})
     assert panel.error_label.text() == ""

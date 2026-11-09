@@ -84,3 +84,18 @@ def test_mismatched_header_writes_nothing(tmp_path):
         )
     assert list(tmp_path.glob("j_*.json")) == []
     assert csv_path.read_text(encoding="utf-8") == content
+
+
+def test_environment_metadata_records_the_git_commit():
+    import re
+    commit = metrics.environment_metadata(Path("cfg.json"), {})["git_commit"]
+    assert commit is None or re.fullmatch(r"[0-9a-f]{40}(-dirty)?", commit)
+    assert commit is not None  # the test suite runs inside the repository
+
+
+def test_environment_metadata_without_git(monkeypatch):
+    def broken(*args, **kwargs):
+        raise OSError("git not found")
+
+    monkeypatch.setattr(metrics.subprocess, "run", broken)
+    assert metrics.environment_metadata(Path("cfg.json"), {})["git_commit"] is None

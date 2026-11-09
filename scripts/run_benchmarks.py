@@ -26,7 +26,7 @@ from polyglotimportcsv.metrics import environment_metadata
 from polyglotimportcsv.reporting import kv, setup_reporting
 from polyglotimportcsv.runner import run_import
 from polyglotimportcsv.import_plan import DEFAULT_BATCH_LINES, MAX_BATCH_LINES, MIN_BATCH_LINES
-from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB
+from polyglotimportcsv.stream_source import MAX_CHUNK_MB, MIN_CHUNK_MB
 
 _ALL_DBMS = ("postgres", "mongodb", "cassandra", "redis", "neo4j")
 
@@ -43,7 +43,10 @@ def resume_runs(path: Path, meta: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Labeled runs from an interrupted matrix at ``path``, if it matches ``meta``.
 
     Returns an empty list when there is no checkpoint — asking to resume a matrix
-    that never ran just starts it.
+    that never ran just starts it. The automatic blocks the checkpoint saved
+    (``auto_chunks``) are copied into ``meta["auto_chunks"]`` so the resumed matrix
+    keeps them. When the checkpoint was written at another commit, the commit the
+    matrix started on is kept as ``meta["git_commit_started"]``.
     """
     if not Path(path).is_file():
         return []
@@ -60,6 +63,18 @@ def resume_runs(path: Path, meta: Dict[str, Any]) -> List[Dict[str, Any]]:
             f"({details}). Re-run with matching flags, or delete the checkpoint "
             "to start over."
         )
+    started = saved.get("git_commit_started", saved.get("git_commit"))
+    if started is not None and started != meta.get("git_commit"):
+        # The runs of the checkpoint were measured on another commit: keep the one the
+        # matrix started on, next to the commit that finishes it.
+        meta["git_commit_started"] = started
+        logging.getLogger(__name__).warning(
+            "resuming a matrix started on commit %s at commit %s", started, meta.get("git_commit")
+        )
+    if "auto_chunks" in saved and "auto_chunks" in meta:
+        # The automatic block was resolved when the matrix started; re-resolving it
+        # now would read another free memory and measure the same cell twice over.
+        meta["auto_chunks"].update(saved["auto_chunks"])
     runs = payload.get("runs") or []
     removed = sorted({str(run["strategy"]) for run in runs
                       if run.get("strategy", "optimized") != "optimized"})
@@ -108,14 +123,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help="Runs per (size, mode); the median is reported (default: 3).")
     parser.add_argument("--only", default="",
                         help=f"Comma-separated DBMS (default: all). Choices: {', '.join(_ALL_DBMS)}.")
-    parser.add_argument("--chunk-sizes", default=str(DEFAULT_CHUNK_MB),
+    parser.add_argument("--chunk-sizes", default="auto",
                         help=f"Comma-separated read-block sizes in MB, each from {MIN_CHUNK_MB} to "
-                             f"{MAX_CHUNK_MB} (default: {DEFAULT_CHUNK_MB}). Use '16,64,256' to "
-                             "compare peak_memory_mb and time across block sizes.")
+                             f"{MAX_CHUNK_MB}, or 'auto' (default): the block the CLI would "
+                             "choose, resolved once per (size, mode) when the matrix starts and "
+                             "saved in the metadata. Use '16,64,256' to compare peak_memory_mb "
+                             "and time across block sizes.")
     parser.add_argument("--batch-sizes", default=str(DEFAULT_BATCH_LINES),
                         help=f"Comma-separated write-batch sizes in rows, each from {MIN_BATCH_LINES} "
                              f"to {MAX_BATCH_LINES} (default: {DEFAULT_BATCH_LINES}). Crossed with "
                              "--chunk-sizes: every pair is another cell of the matrix.")
+    parser.add_argument("--auto-chunks-from", type=Path, default=None,
+                        help="Campaign JSON (benchmark_run_*.json or a checkpoint) whose "
+                             "automatic blocks (metadata 'auto_chunks') this matrix reuses "
+                             "instead of resolving them again: the memory campaign then "
+                             "measures the blocks the timing campaign measured. Needs "
+                             "--chunk-sizes auto.")
     parser.add_argument("--seed", type=int, default=42, help="Generator seed (default: 42).")
     parser.add_argument("--no-trace-memory", dest="trace_memory", action="store_false",
                         help="Do not run imports under tracemalloc. peak_memory_mb is then "
@@ -149,14 +172,27 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     sizes = _parse_int_list(args.sizes)
     modes = _parse_str_list(args.modes)
     only = _parse_str_list(args.only) or None
-    chunk_sizes = _parse_int_list(args.chunk_sizes)
+    chunk_sizes = None if args.chunk_sizes.strip() == "auto" else _parse_int_list(args.chunk_sizes)
     batch_sizes = _parse_int_list(args.batch_sizes)
 
     meta = environment_metadata(args.config_dir, {})
     meta.update({"seed": args.seed, "sizes": sizes, "modes": modes,
                  "trace_memory": args.trace_memory,
                  "repetitions": args.repetitions,
-                 "chunk_sizes": chunk_sizes, "batch_sizes": batch_sizes})
+                 "chunk_sizes": "auto" if chunk_sizes is None else chunk_sizes,
+                 "batch_sizes": batch_sizes})
+    if chunk_sizes is None:
+        meta["auto_chunks"] = {}
+    if args.auto_chunks_from is not None:
+        if chunk_sizes is None:
+            saved = json.loads(args.auto_chunks_from.read_text(encoding="utf-8"))
+            meta["auto_chunks"].update((saved.get("metadata") or {}).get("auto_chunks") or {})
+            meta["auto_chunks_from"] = str(args.auto_chunks_from)
+        else:
+            logging.getLogger(__name__).error(
+                "--auto-chunks-from reuses automatic blocks; it needs --chunk-sizes auto."
+            )
+            return 2
 
     # The results CSV is only appended after the whole matrix ran: refuse an
     # old one now, not hours from now.
@@ -187,6 +223,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             on_run=_checkpoint_writer(args.out, meta),
             completed=completed,
             trace_memory=args.trace_memory,
+            auto_chunks=meta.get("auto_chunks"),
         )
     except Exception:
         # A matrix over large sizes runs for tens of minutes: the failure that

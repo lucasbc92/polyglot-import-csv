@@ -11,8 +11,8 @@ from polyglotimportcsv.gui.state import (
 
 def test_defaults_mirror_the_cli_defaults():
     options = RunOptions()
-    assert options.chunk_size_mb == 128
-    assert options.batch_size == 2048
+    assert not hasattr(options, "chunk_size_mb")
+    assert not hasattr(options, "batch_size")
     assert not hasattr(options, "create_schema")
     assert options.log_level == "INFO"
     assert options.show_data is None
@@ -36,7 +36,7 @@ def test_sample_size_out_of_range_is_reported(tmp_path, size):
     cfg = tmp_path / "import_config.json"
     cfg.write_text("{}", encoding="utf-8")
     errors = validate(RunOptions(config_path=cfg, sample_size=size))
-    assert errors["sample_size"] == "O tamanho da amostra deve estar entre 1 e 1000000."
+    assert errors["sample_size"] == "The sample size must be between 1 and 1000000."
 
 
 def test_the_exports_cover_the_form_state_only():
@@ -45,44 +45,6 @@ def test_the_exports_cover_the_form_state_only():
         "DBMS_NAMES", "LOG_LEVELS", "DEFAULT_SAMPLE_SIZE", "MAX_SAMPLE_SIZE",
         "RunOptions", "validate",
     }
-
-
-@pytest.mark.parametrize("size", [16, 64, 256])
-def test_chunk_sizes_inside_the_range_pass(tmp_path, size):
-    cfg = tmp_path / "import_config.json"
-    cfg.write_text("{}", encoding="utf-8")
-    assert validate(RunOptions(config_path=cfg, chunk_size_mb=size)) == {}
-
-
-@pytest.mark.parametrize("size", [15, 257, 0, -8])
-def test_chunk_size_out_of_range_is_reported(tmp_path, size):
-    cfg = tmp_path / "import_config.json"
-    cfg.write_text("{}", encoding="utf-8")
-    errors = validate(RunOptions(config_path=cfg, chunk_size_mb=size))
-    assert errors == {"chunk_size_mb": "O bloco deve ter entre 16 e 256 MB."}
-
-
-@pytest.mark.parametrize("size", [512, 4096, 8192])
-def test_batch_sizes_inside_the_range_pass(tmp_path, size):
-    cfg = tmp_path / "import_config.json"
-    cfg.write_text("{}", encoding="utf-8")
-    assert validate(RunOptions(config_path=cfg, batch_size=size)) == {}
-
-
-@pytest.mark.parametrize("size", [511, 8193, 0, -1024])
-def test_batch_size_out_of_range_is_reported(tmp_path, size):
-    cfg = tmp_path / "import_config.json"
-    cfg.write_text("{}", encoding="utf-8")
-    errors = validate(RunOptions(config_path=cfg, batch_size=size))
-    assert errors == {"batch_size": "O lote deve ter entre 512 e 8192 linhas."}
-
-
-def test_validate_rejects_sizes_out_of_range(tmp_path):
-    cfg = tmp_path / "import_config.json"
-    cfg.write_text("{}", encoding="utf-8")
-    errors = validate(RunOptions(config_path=cfg, chunk_size_mb=15, batch_size=8193))
-    assert errors["chunk_size_mb"] == "O bloco deve ter entre 16 e 256 MB."
-    assert errors["batch_size"] == "O lote deve ter entre 512 e 8192 linhas."
 
 
 def test_sample_size_is_ignored_when_not_sampling(tmp_path):
@@ -94,7 +56,7 @@ def test_sample_size_is_ignored_when_not_sampling(tmp_path):
 def test_missing_config_is_reported():
     errors = validate(RunOptions())
     assert "config_path" in errors
-    assert errors["config_path"] == "Selecione a configuração de importação."
+    assert errors["config_path"] == "Choose the import configuration."
 
 
 def test_existing_config_passes(tmp_path):
@@ -106,21 +68,21 @@ def test_existing_config_passes(tmp_path):
 def test_nonexistent_config_is_reported(tmp_path):
     cfg = tmp_path / "ausente.json"
     errors = validate(RunOptions(config_path=cfg))
-    assert errors["config_path"].startswith("Arquivo não encontrado")
+    assert errors["config_path"].startswith("File not found")
 
 
 def test_nonexistent_dbms_config_is_reported(tmp_path):
     cfg = tmp_path / "import_config.json"
     cfg.write_text("{}", encoding="utf-8")
     errors = validate(RunOptions(config_path=cfg, dbms_config_path=tmp_path / "x.json"))
-    assert errors["dbms_config_path"].startswith("Arquivo não encontrado")
+    assert errors["dbms_config_path"].startswith("File not found")
 
 
 def test_unknown_dbms_is_reported(tmp_path):
     cfg = tmp_path / "import_config.json"
     cfg.write_text("{}", encoding="utf-8")
     errors = validate(RunOptions(config_path=cfg, only=("postgres", "oracle")))
-    assert errors["only"] == "SGBD desconhecido: oracle"
+    assert errors["only"] == "Unknown DBMS: oracle"
 
 
 def test_known_dbms_names_are_the_cli_ones():
@@ -130,8 +92,8 @@ def test_known_dbms_names_are_the_cli_ones():
 @pytest.mark.parametrize(
     "name, expected",
     [
-        ("", "O nome da fonte não pode ficar vazio."),
-        ("a=b", "O nome da fonte não pode conter '=': a=b"),
+        ("", "The source name cannot be empty."),
+        ("a=b", "The source name cannot contain '=': a=b"),
     ],
 )
 def test_bad_source_names_are_reported(tmp_path, name, expected):
@@ -149,11 +111,11 @@ def test_duplicate_source_name_is_reported(tmp_path):
     csv = tmp_path / "stock.csv"
     csv.write_text("a\n", encoding="utf-8")
     errors = validate(RunOptions(config_path=cfg, sources=(("stock", csv), ("stock", csv))))
-    assert errors["sources"] == "Nome de fonte repetido: stock"
+    assert errors["sources"] == "Repeated source name: stock"
 
 
 def test_missing_source_file_is_reported(tmp_path):
     cfg = tmp_path / "import_config.json"
     cfg.write_text("{}", encoding="utf-8")
     errors = validate(RunOptions(config_path=cfg, sources=(("stock", tmp_path / "x.csv"),)))
-    assert errors["sources"].startswith("Arquivo não encontrado")
+    assert errors["sources"].startswith("File not found")

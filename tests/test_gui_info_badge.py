@@ -14,7 +14,7 @@ def test_the_text_is_the_tooltip(qtbot):
     badge = InfoBadge("Explica a opção.")
     qtbot.addWidget(badge)
     assert badge.toolTip() == "Explica a opção."
-    assert badge.accessibleName() == "Ajuda"
+    assert badge.accessibleName() == "Help"
 
 
 def test_clicking_shows_the_tip(qtbot):

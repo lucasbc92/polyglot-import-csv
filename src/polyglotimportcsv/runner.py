@@ -13,6 +13,7 @@ from rich.table import Table
 from rich.text import Text
 
 from polyglotimportcsv import casting, metrics
+from polyglotimportcsv.auto_size import auto_chunk_mb
 from polyglotimportcsv.business_exception import (
     ConfigError,
     DataValidationError,
@@ -48,10 +49,10 @@ from polyglotimportcsv.reporting import (
 )
 from polyglotimportcsv.sinks import default_sink_factories
 from polyglotimportcsv.stream_source import (
-    DEFAULT_CHUNK_MB,
     check_source_overrides,
     read_source_headers,
 )
+from polyglotimportcsv.system_memory import available_mb
 from polyglotimportcsv.validation import DBMS_NAMES, validate_headers
 
 logger = logging.getLogger(__name__)
@@ -235,6 +236,7 @@ def _print_summary(
     benchmark: bool,
     config_path: Path,
     plan: ImportPlan,
+    sizes: Dict[str, object],
 ) -> None:
     for line in lines:
         _print_dbms_line(line)
@@ -243,9 +245,39 @@ def _print_summary(
         meta = metrics.environment_metadata(
             config_path, {name: profile.rows for name, profile in plan.profiles.items()}
         )
+        meta.update(sizes)
         json_path, csv_path = metrics.write_benchmark_files(collector, meta)
         kv("Benchmark JSON", json_path)
         kv("Benchmark CSV", csv_path)
+
+
+def _resolve_sizes(
+    config: Dict[str, object],
+    base_dir: Path,
+    dbms_names: List[str],
+    overrides: Optional[Dict[str, str]],
+    chunk_size_mb: Optional[float],
+    batch_size: Optional[int],
+) -> Dict[str, object]:
+    """The read block and write batch of this run, each with why it was chosen.
+
+    A size left at ``None`` is automatic: the block comes from ``auto_chunk_mb`` and
+    the free memory, read only then; the batch is ``DEFAULT_BATCH_LINES``.
+    """
+    free_mb: Optional[float] = None
+    if chunk_size_mb is None:
+        free_mb = available_mb()
+        choice = auto_chunk_mb(config, base_dir, dbms_names, overrides, free_mb)
+        chunk_mb, chunk_reason = choice.mb, choice.reason
+    else:
+        chunk_mb, chunk_reason = chunk_size_mb, "--chunk-size"
+    return {
+        "chunk_mb": chunk_mb,
+        "chunk_reason": chunk_reason,
+        "batch_lines": DEFAULT_BATCH_LINES if batch_size is None else batch_size,
+        "batch_reason": "auto" if batch_size is None else "--batch-size",
+        "free_memory_mb": free_mb,
+    }
 
 
 def run_import(
@@ -259,8 +291,8 @@ def run_import(
     sample_size: int = DEFAULT_SAMPLE_SIZE,
     collector: Optional[metrics.MetricsCollector] = None,
     benchmark: bool = False,
-    chunk_size_mb: float = DEFAULT_CHUNK_MB,
-    batch_size: int = DEFAULT_BATCH_LINES,
+    chunk_size_mb: Optional[float] = None,
+    batch_size: Optional[int] = None,
     sink_factories: Optional[Dict[str, SinkFactory]] = None,
 ) -> List[str]:
     """
@@ -272,10 +304,10 @@ def run_import(
 
     The headers are checked first, then the target DBMS (not in a dry-run). The
     inference read profiles every source the selected DBMS use, in read blocks of
-    about ``chunk_size_mb``; the validation read checks every row the write would
+    about ``chunk_size_mb`` (``None``: chosen by ``auto_size``); the validation read checks every row the write would
     send, through the write's own engine. Any problem stops the run before anything
     is written. The write read streams one DBMS at a time through its sink, in
-    batches of up to ``batch_size`` rows, and its counts are compared with those of
+    batches of up to ``batch_size`` rows (``None``: ``DEFAULT_BATCH_LINES``), and its counts are compared with those of
     the validation read. A dry-run stops after the validation read.
 
     ``show_data`` and ``sample_size`` choose the per-partition data display:
@@ -307,11 +339,16 @@ def run_import(
     if not dry_run:
         _require_dbms(config_path, dbms_config_path, config, only)
 
+    sizes = _resolve_sizes(config, config_path.parent, dbms_names, source_overrides,
+                           chunk_size_mb, batch_size)
+    kv("Read block", f"{sizes['chunk_mb']} MB ({sizes['chunk_reason']})")
+    kv("Write batch", f"{sizes['batch_lines']} rows ({sizes['batch_reason']})")
+
     step("Infer types")
     start = time.perf_counter()
     plan = plan_import(
         config, config_path.parent, dbms_names=dbms_names, overrides=source_overrides,
-        chunk_mb=chunk_size_mb, batch_size=batch_size,
+        chunk_mb=sizes["chunk_mb"], batch_size=sizes["batch_lines"],
     )
     rows = sum(profile.rows for profile in plan.profiles.values())
     collector.record("(sources)", "*", "infer", rows=rows, seconds=time.perf_counter() - start)
@@ -339,7 +376,7 @@ def run_import(
     if dry_run:
         preview.finish()
         lines = _summary_lines(expected)
-        _print_summary(lines, collector, benchmark, config_path, plan)
+        _print_summary(lines, collector, benchmark, config_path, plan, sizes)
         success("Finished dry-run — nothing was written")
         return lines
 
@@ -363,6 +400,6 @@ def run_import(
                     f"but the validation read counted {validated.get(partition, 0)}"
                 )
     lines = _summary_lines(counts)
-    _print_summary(lines, collector, benchmark, config_path, plan)
+    _print_summary(lines, collector, benchmark, config_path, plan, sizes)
     success(f"Finished import — {len(lines)} partition(s) written")
     return lines

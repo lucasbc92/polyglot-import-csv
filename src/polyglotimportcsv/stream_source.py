@@ -69,6 +69,24 @@ def chunk_rows(name: str, path: Path, chunk_mb: float) -> int:
     return max(1, int(chunk_mb * 2**20 // bytes_per_row))
 
 
+def source_memory_mb(name: str, path: Path) -> float:
+    """MB of memory to hold source ``name`` whole, read as strings like every read here.
+
+    Estimated without reading the file a second time: its size on disk times the
+    ratio between the memory and the disk bytes of its first ``PROBE_ROWS`` rows
+    (the same probe as ``chunk_rows``). Approximate in the same way: a file whose rows
+    change width further down is misjudged. A file without rows gives ``0.0``.
+    """
+    probe = _read_csv(name, path, nrows=PROBE_ROWS)
+    if len(probe) == 0:
+        return 0.0
+    with open(path, "rb") as fh:
+        next(fh)  # header
+        disk_bytes = sum(len(line) for _, line in zip(range(len(probe)), fh))
+    memory_bytes = probe.memory_usage(deep=True, index=False).sum()
+    return path.stat().st_size * memory_bytes / disk_bytes / 2**20
+
+
 def source_file(
     name: str, decl: "str | Dict[str, Any]", base_dir: "str | Path", overrides: Dict[str, str]
 ) -> Path:

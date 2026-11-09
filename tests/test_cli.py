@@ -102,8 +102,8 @@ def test_cli_chunk_and_batch_defaults(monkeypatch):
     captured = _capture_run_import(monkeypatch)
     res = CliRunner().invoke(main, ["--config", str(ECOMMERCE / "import_config.json"), "--dry-run"])
     assert res.exit_code == 0, res.output
-    assert captured["chunk_size_mb"] == 128
-    assert captured["batch_size"] == 2048
+    assert captured["chunk_size_mb"] is None
+    assert captured["batch_size"] is None
     assert "execution" not in captured
 
 
@@ -160,13 +160,16 @@ def test_cli_option_help_and_metadata():
     options = {p.name: p for p in main.params}
     chunk, batch = options["chunk_size_mb"], options["batch_size"]
     assert chunk.opts == ["--chunk-size"] and batch.opts == ["--batch-size"]
-    assert (chunk.metavar, chunk.show_default, chunk.default) == ("MB", True, 128)
-    assert (batch.metavar, batch.show_default, batch.default) == ("N", True, 2048)
+    assert (chunk.metavar, chunk.show_default, chunk.default) == ("MB", False, None)
+    assert (batch.metavar, batch.show_default, batch.default) == ("N", False, None)
     assert chunk.help == (
-        "Memory budget of each read chunk, in MB (16-256). "
-        "Rows per chunk follow each file's row width."
+        "Memory budget of each read chunk, in MB (16-256). Default: chosen for each run "
+        "from the largest source and the free memory. Rows per chunk follow each file's "
+        "row width."
     )
-    assert batch.help == "Rows per write batch (512-8192), capped at the rows of one read chunk."
+    assert batch.help == (
+        "Rows per write batch (512-8192), capped at the rows of one read chunk. Default: 2048."
+    )
     assert options["dry_run"].help == (
         "Run every check, on headers and on the data rows, and print the row counts; "
         "do not connect to databases."

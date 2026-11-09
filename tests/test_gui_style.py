@@ -69,7 +69,7 @@ def test_selected_rows_stay_highlighted_without_focus():
 
 
 def test_disabled_console_buttons_are_visibly_muted():
-    """A disabled "Salvar log…" must not look identical to an enabled one.
+    """A disabled "Save log…" must not look identical to an enabled one.
 
     ``QFrame#consolePanel QPushButton`` sets ``color: #D6DCE5`` (an ID
     selector), which beats the generic ``QPushButton:disabled`` rule's
@@ -84,7 +84,7 @@ def test_disabled_console_buttons_are_visibly_muted():
     )
     assert match is not None, (
         "no QFrame#consolePanel QPushButton:disabled rule: a disabled button "
-        "in the console (e.g. \"Salvar log…\") looks identical to an enabled one"
+        "in the console (e.g. \"Save log…\") looks identical to an enabled one"
     )
     body = match.group(1)
     color_match = re.search(r"color:\s*(#[0-9A-Fa-f]{6})", body)

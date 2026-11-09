@@ -23,18 +23,18 @@ from polyglotimportcsv.gui.command import PROGRAM
 from polyglotimportcsv.gui.launcher import MIN_COLUMNS
 from polyglotimportcsv.gui.widgets.command_highlighter import CommandHighlighter
 
-READ_ONLY_BADGE = "somente leitura"
-EDITING_BADGE = "modo de edição"
-RUNNING_BADGE = "em execução"
-DISCARD_TITLE = "Descartar o comando editado"
+READ_ONLY_BADGE = "read-only"
+EDITING_BADGE = "editing"
+RUNNING_BADGE = "running"
+DISCARD_TITLE = "Discard the edited command"
 DISCARD_QUESTION = (
-    "O comando foi alterado à mão. Voltar ao formulário descarta o texto "
-    "digitado e remonta o comando a partir dos controles. Descartar mesmo assim?"
+    "The command was edited by hand. Going back to the form disregards the typed "
+    "text and replaces it with the command the form represents. Go back anyway?"
 )
 LAUNCHER_TOOLTIP = (
-    "O comando exibido começa por «{program}», que é o que se digitaria em um "
-    "terminal. O processo realmente iniciado usa o prefixo resolvido para esta "
-    "instalação:\n\n{prefix}\n\nO restante dos argumentos é idêntico ao exibido."
+    "The command shown starts with «{program}», which is what one would type in a "
+    "terminal. The process actually started uses the prefix resolved for this "
+    "installation:\n\n{prefix}\n\nThe remaining arguments are identical to the ones shown."
 )
 # MIN_COLUMNS is re-exported from launcher rather than redefined: it is the
 # same floor the child's COLUMNS environment variable is clamped to, and two
@@ -85,21 +85,21 @@ class ConsolePanel(QFrame):
 
         self.badge_label = QLabel(READ_ONLY_BADGE, self)
         self.badge_label.setObjectName("badgeLabel")
-        self.edit_button = QPushButton("Editar comando", self)
-        self.copy_button = QPushButton("Copiar", self)
-        self.run_button = QPushButton("▶  Executar", self)
+        self.edit_button = QPushButton("Edit command", self)
+        self.copy_button = QPushButton("Copy", self)
+        self.run_button = QPushButton("▶  Run", self)
         self.run_button.setObjectName("runButton")
-        self.check_button = QPushButton("Verificar SGBDs", self)
+        self.check_button = QPushButton("Check DBMSs", self)
         self.check_button.setObjectName("checkButton")
         self.check_button.setToolTip(
-            "Testa se os SGBDs de destino respondem, sem importar nada (--check-dbms). "
-            "Para os que não respondem, o console mostra o comando que os inicia, "
-            "para ser copiado para um terminal."
+            "Tests whether the target DBMSs answer, without importing anything "
+            "(--check-dbms). For those that do not, the console shows the command that "
+            "starts them, to be copied into a terminal."
         )
         self.check_button.clicked.connect(self.check_requested)
-        self.save_log_button = QPushButton("Salvar log…", self)
+        self.save_log_button = QPushButton("Save log…", self)
         self.save_log_button.setToolTip(
-            "Salvar uma cópia do arquivo de log desta execução (nível DEBUG, sem cores)"
+            "Save a copy of this run's log file (DEBUG level, no colours)"
         )
         self.save_log_button.setEnabled(False)
         self.save_log_button.clicked.connect(self.save_log_requested)
@@ -164,7 +164,7 @@ class ConsolePanel(QFrame):
 
     def set_editing(self, editing: bool) -> None:
         if self._running:
-            # The command must stay locked and the "em execução" badge must
+            # The command must stay locked and the "running" badge must
             # stay in force while a child process is running, regardless of
             # what a caller asks for. Task 10's MainWindow already disables
             # edit_button while running, but the panel enforces the
@@ -172,14 +172,14 @@ class ConsolePanel(QFrame):
             return
         if editing == self._editing:
             return
-        # I2 / §5: "Voltar ao formulário" discards whatever was typed, so it
+        # I2 / §5: "Back to the form" discards whatever was typed, so it
         # asks first whenever the text actually differs from the generated
         # command. Cancelling leaves edit mode — and the typed text — intact.
         if not editing and self.has_manual_edits() and not self.confirm_discard():
             return
         self._editing = editing
         self.command_edit.setReadOnly(not editing)
-        self.edit_button.setText("Voltar ao formulário" if editing else "Editar comando")
+        self.edit_button.setText("Back to the form" if editing else "Edit command")
         self.badge_label.setText(EDITING_BADGE if editing else READ_ONLY_BADGE)
         if not editing:
             self.command_edit.setPlainText(self._generated)
@@ -191,7 +191,7 @@ class ConsolePanel(QFrame):
 
     def set_running(self, running: bool) -> None:
         self._running = running
-        self.run_button.setText("■  Interromper" if running else "▶  Executar")
+        self.run_button.setText("■  Stop" if running else "▶  Run")
         self.run_button.setProperty("running", running)
         self._update_run_enabled()
         self._update_check_enabled()
@@ -208,7 +208,7 @@ class ConsolePanel(QFrame):
     def set_run_enabled(self, enabled: bool) -> None:
         """Enable or disable the run button, unless a run is in progress.
 
-        While ``_running`` is true, this same button is the Interromper
+        While ``_running`` is true, this same button is the Stop
         button, so disabling it here would strand the user with no way to
         stop the child process. The requested state is remembered so that
         ``set_running(False)`` can restore it instead of unconditionally
@@ -218,12 +218,12 @@ class ConsolePanel(QFrame):
         self._update_run_enabled()
 
     def set_check_enabled(self, enabled: bool) -> None:
-        """Offer "Verificar SGBDs" when the configuration files allow a check."""
+        """Offer "Check DBMSs" when the configuration files allow a check."""
         self._check_enabled = enabled
         self._update_check_enabled()
 
     def set_log_available(self, available: bool) -> None:
-        """Offer "Salvar log…" once a finished run has left a log behind."""
+        """Offer "Save log…" once a finished run has left a log behind."""
         self._log_available = available
         self.save_log_button.setEnabled(available and not self._running)
 
@@ -312,7 +312,7 @@ class ConsolePanel(QFrame):
     def _update_run_enabled(self) -> None:
         """Decide whether the main button can be pressed, in every state."""
         if self._running:
-            # It is the Interromper button now: it must always be pressable.
+            # It is the Stop button now: it must always be pressable.
             self.run_button.setEnabled(True)
         elif self._editing:
             # I6: edit mode declares the typed text the source of truth and

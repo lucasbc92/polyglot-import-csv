@@ -25,7 +25,7 @@ class InfoBadge(QWidget):
         super().__init__(parent)
         self.setFixedSize(SIDE, SIDE)
         self.setToolTip(text)
-        self.setAccessibleName("Ajuda")
+        self.setAccessibleName("Help")
         self.setCursor(Qt.WhatsThisCursor)
         self.show_tip = self._show_tip
 

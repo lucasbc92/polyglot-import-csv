@@ -14,7 +14,7 @@ from polyglotimportcsv.dbms_check import not_ready_message
 from polyglotimportcsv.import_plan import DEFAULT_BATCH_LINES, MAX_BATCH_LINES, MIN_BATCH_LINES
 from polyglotimportcsv.reporting import DEFAULT_SAMPLE_SIZE, error, kv, setup_reporting
 from polyglotimportcsv.runner import run_check, run_import
-from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB
+from polyglotimportcsv.stream_source import MAX_CHUNK_MB, MIN_CHUNK_MB
 
 logger = logging.getLogger(__name__)
 
@@ -83,20 +83,22 @@ def _parse_source_overrides(pairs: Tuple[str, ...]) -> Dict[str, str]:
     "--chunk-size",
     "chunk_size_mb",
     type=click.IntRange(MIN_CHUNK_MB, MAX_CHUNK_MB),
-    default=DEFAULT_CHUNK_MB,
-    show_default=True,
+    default=None,
+    show_default=False,
     metavar="MB",
-    help="Memory budget of each read chunk, in MB (16-256). "
-    "Rows per chunk follow each file's row width.",
+    help="Memory budget of each read chunk, in MB (16-256). Default: chosen for each run "
+    "from the largest source and the free memory. Rows per chunk follow each file's "
+    "row width.",
 )
 @click.option(
     "--batch-size",
     "batch_size",
     type=click.IntRange(MIN_BATCH_LINES, MAX_BATCH_LINES),
-    default=DEFAULT_BATCH_LINES,
-    show_default=True,
+    default=None,
+    show_default=False,
     metavar="N",
-    help="Rows per write batch (512-8192), capped at the rows of one read chunk.",
+    help="Rows per write batch (512-8192), capped at the rows of one read chunk. "
+    f"Default: {DEFAULT_BATCH_LINES}.",
 )
 @click.option(
     "--source",
@@ -139,8 +141,8 @@ def main(
     dry_run: bool,
     check_dbms_only: bool,
     only: str,
-    chunk_size_mb: int,
-    batch_size: int,
+    chunk_size_mb: Optional[int],
+    batch_size: Optional[int],
     source_pairs: Tuple[str, ...],
     log_level: str,
     show_data: Optional[bool],

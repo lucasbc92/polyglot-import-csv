@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import run_benchmarks as rb  # noqa: E402
 
 from polyglotimportcsv import benchmark_runner as brun  # noqa: E402
-from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB  # noqa: E402
+from polyglotimportcsv.stream_source import MAX_CHUNK_MB, MIN_CHUNK_MB  # noqa: E402
 
 
 def _run_main(monkeypatch, tmp_path, argv):
@@ -37,10 +37,13 @@ def _saved_metadata(tmp_path):
     return json.loads(path.read_text(encoding="utf-8"))["metadata"]
 
 
-def test_chunk_sizes_default_to_the_default_block(monkeypatch, tmp_path):
+def test_chunk_sizes_default_to_the_automatic_block(monkeypatch, tmp_path):
     captured = _run_main(monkeypatch, tmp_path, [])
-    assert captured["chunk_sizes"] == [DEFAULT_CHUNK_MB] == [128]
-    assert _saved_metadata(tmp_path)["chunk_sizes"] == [128]
+    assert captured["chunk_sizes"] is None
+    assert captured["auto_chunks"] == {}
+    meta = _saved_metadata(tmp_path)
+    assert meta["chunk_sizes"] == "auto"
+    assert meta["auto_chunks"] == {}
 
 
 def test_chunk_sizes_flag_becomes_a_list_of_ints_for_the_matrix(monkeypatch, tmp_path):
@@ -75,3 +78,25 @@ def test_run_matrix_accepts_the_largest_block_and_rejects_the_next(tmp_path):
     with pytest.raises(ValueError, match=r"chunk size\(s\) out of range: 257"):
         _matrix(tmp_path, [MAX_CHUNK_MB + 1], seen)
     assert seen == [16, 256]  # nothing ran
+
+
+def test_auto_chunks_from_reuses_the_blocks_of_another_campaign(monkeypatch, tmp_path):
+    """The memory campaign must measure the blocks the timing campaign measured."""
+    blocks = {"1000/multi": {"chunk_mb": 40, "reason": "auto: x", "free_memory_mb": 900.0}}
+    source = tmp_path / "timings.json"
+    source.write_text(json.dumps({"metadata": {"auto_chunks": blocks}}), encoding="utf-8")
+    captured = _run_main(monkeypatch, tmp_path, ["--auto-chunks-from", str(source)])
+    assert captured["chunk_sizes"] is None
+    assert captured["auto_chunks"] == blocks
+    meta = _saved_metadata(tmp_path)
+    assert meta["auto_chunks"] == blocks
+    assert meta["auto_chunks_from"] == str(source)
+
+
+def test_auto_chunks_from_needs_the_automatic_block(monkeypatch, tmp_path):
+    source = tmp_path / "timings.json"
+    source.write_text(json.dumps({"metadata": {"auto_chunks": {}}}), encoding="utf-8")
+    monkeypatch.setattr(rb, "run_matrix", lambda **kwargs: [])
+    code = rb.main(["--auto-chunks-from", str(source), "--chunk-sizes", "64",
+                    "--sizes", "1000", "--out", str(tmp_path / "out")])
+    assert code == 2

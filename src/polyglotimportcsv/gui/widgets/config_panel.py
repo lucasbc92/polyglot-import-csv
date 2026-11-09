@@ -17,9 +17,9 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal
 
 HINT = (
-    "Ambos os arquivos são validados por JSON Schema antes da execução. "
-    "A configuração de importação só pode referenciar SGBDs declarados na "
-    "configuração de conexão."
+    "Both files are validated against a JSON Schema before the run. "
+    "The import configuration may only refer to DBMSs declared in the "
+    "connection configuration."
 )
 FIELDS = ("config_path", "dbms_config_path")
 
@@ -30,7 +30,7 @@ class ConfigPanel(QGroupBox):
     changed = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super().__init__("Arquivos de configuração", parent)
+        super().__init__("Configuration files", parent)
         self.config_edit = QLineEdit(self)
         self.dbms_edit = QLineEdit(self)
         self.error_label = QLabel("", self)
@@ -41,16 +41,16 @@ class ConfigPanel(QGroupBox):
         hint.setObjectName("hintLabel")
         hint.setWordWrap(True)
 
-        config_button = QPushButton("Procurar…", self)
-        dbms_button = QPushButton("Procurar…", self)
+        config_button = QPushButton("Browse…", self)
+        dbms_button = QPushButton("Browse…", self)
         config_button.clicked.connect(self._browse_config)
         dbms_button.clicked.connect(self._browse_dbms)
 
         layout = QGridLayout(self)
-        layout.addWidget(QLabel("Configuração de importação (--config)", self), 0, 0)
+        layout.addWidget(QLabel("Import configuration (--config)", self), 0, 0)
         layout.addWidget(self.config_edit, 0, 1)
         layout.addWidget(config_button, 0, 2)
-        layout.addWidget(QLabel("Configuração de SGBDs (--dbms-config)", self), 1, 0)
+        layout.addWidget(QLabel("DBMS configuration (--dbms-config)", self), 1, 0)
         layout.addWidget(self.dbms_edit, 1, 1)
         layout.addWidget(dbms_button, 1, 2)
         layout.addWidget(hint, 2, 0, 1, 3)
@@ -85,10 +85,10 @@ class ConfigPanel(QGroupBox):
     # -- internals --------------------------------------------------------
 
     def _browse_config(self) -> None:
-        self._browse(self.config_edit, "Escolher a configuração de importação")
+        self._browse(self.config_edit, "Choose the import configuration")
 
     def _browse_dbms(self) -> None:
-        self._browse(self.dbms_edit, "Escolher a configuração de SGBDs")
+        self._browse(self.dbms_edit, "Choose the DBMS configuration")
 
     def _browse(self, edit: QLineEdit, title: str) -> None:
         start = edit.text() or ""
@@ -98,14 +98,14 @@ class ConfigPanel(QGroupBox):
         text = str(Path(chosen))
         if text == edit.text():
             # setText() below would be a no-op and emit no textChanged, but
-            # the person just confirmed this same file again in "Procurar…"
+            # the person just confirmed this same file again in "Browse…"
             # (e.g. after fixing it externally): the form must still refresh.
             self.changed.emit()
         else:
             edit.setText(text)
 
     def _ask_for_file(self, title: str, start: str) -> str:
-        chosen, _ = QFileDialog.getOpenFileName(self, title, start, "JSON (*.json);;Todos (*)")
+        chosen, _ = QFileDialog.getOpenFileName(self, title, start, "JSON (*.json);;All files (*)")
         return chosen
 
 

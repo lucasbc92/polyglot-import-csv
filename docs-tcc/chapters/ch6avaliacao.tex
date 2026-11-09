@@ -423,14 +423,105 @@ estrangeira do PostgreSQL ou uma aresta do Neo4j que aponta para uma chave inexi
 \subsection{Tamanhos do Bloco e do Lote (QP5)}
 \label{sec:res-bloco}
 
-Esta questão está \textbf{em andamento}. Uma campanha exploratória, em \num{131072} linhas
-no modo multifonte, vai medir o tempo e o pico de memória com blocos de leitura de 16, 32,
-64, 128 e 256~MB e com lotes de gravação de 512 a \num{8192} linhas, variando um de cada
-vez. Desses resultados sai a regra com que a ferramenta passará a escolher os dois valores
-sozinha: o menor bloco a partir do qual o tempo deixa de melhorar, limitado de modo que o
-pico de memória previsto caiba em uma fração da memória livre do computador. Uma medição
-anterior, com blocos de 8, 64 e 256~MB (Tabela~\ref{tab:bloco}), já indicava que blocos
-maiores reduzem pouco o tempo e aumentam bastante o pico de memória.
+Uma campanha exploratória mediu o efeito dos dois tamanhos em \num{131072} linhas, no modo
+multifonte, variando um de cada vez: blocos de leitura de 16, 32, 64, 128 e 256~MB, com o
+lote fixo em \num{2048} linhas, e lotes de gravação de 512, \num{1024}, \num{2048},
+\num{4096} e \num{8192} linhas, com o bloco fixo em 128~MB. Como nas demais campanhas, o
+tempo é a mediana de três repetições sem o registro de alocações, e o pico vem de execuções
+com o registro (uma por célula). Nesse volume, a maior fonte, \texttt{purchase}, ocupa
+cerca de 95{,}5~MB na memória: os blocos de 16 a 64~MB a leem em vários pedaços, e os de 128
+e 256~MB, inteira. A Tabela~\ref{tab:qp5-bloco} mostra o eixo do bloco.
+
+\begin{table}[H]
+  \caption{Efeito do tamanho do bloco de leitura ($N = \num{131072}$, multifonte, lote de \num{2048} linhas).}
+  \label{tab:qp5-bloco}
+  \centering
+  \begin{tabular}{r r r r}
+    \toprule
+    \textbf{Bloco (MB)} & \textbf{Tempo total (s)} & \textbf{Em relação ao melhor} & \textbf{Pico (MB)} \\
+    \midrule
+     16 & 275{,}08 & $+10{,}9\%$ & 103{,}6 \\
+     32 & 304{,}36 & $+22{,}7\%$ & 127{,}9 \\
+     64 & 282{,}19 & $+13{,}8\%$ & 144{,}9 \\
+    128 & 248{,}00 & ---         & 195{,}5 \\
+    256 & 251{,}00 & $+1{,}2\%$  & 195{,}5 \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026). Tempos de \texttt{benchmarks/v4-explore/chunks-timings/}; picos de \texttt{benchmarks/v4-explore/chunks-memory/}.}
+\end{table}
+
+As medianas misturam repetições feitas em momentos diferentes, e o ambiente variou entre
+elas: na terceira passada pela matriz, todas as células ficaram mais lentas, e uma execução
+chegou a 471~s. A comparação mais justa é, portanto, dentro de uma mesma passada. Nas duas
+primeiras, cada bloco de 16 a 64~MB foi mais lento que cada um dos dois blocos que leem a
+fonte inteira; em média, os blocos menores levaram $14\%$ a mais na primeira passada e $21\%$
+a mais na segunda. O pico de memória cresce com o bloco até que ele contenha a maior fonte
+inteira e, a partir daí, para de crescer: é o mesmo, 195{,}5~MB, com 128 e com 256~MB. Ler
+a maior fonte de uma vez é, assim, o que torna a importação mais rápida, e um bloco maior
+que ela só ocupa memória.
+
+O lote de gravação, ao contrário, não teve efeito mensurável, como mostra a
+Tabela~\ref{tab:qp5-lote}. As medianas ficaram a até $8{,}5\%$ da melhor, e o pico de memória
+quase não variou.
+
+\begin{table}[H]
+  \caption{Efeito do tamanho do lote de gravação ($N = \num{131072}$, multifonte, bloco de 128~MB).}
+  \label{tab:qp5-lote}
+  \centering
+  \begin{tabular}{r r r r}
+    \toprule
+    \textbf{Lote (linhas)} & \textbf{Tempo total (s)} & \textbf{Em relação ao melhor} & \textbf{Pico (MB)} \\
+    \midrule
+       512 & 211{,}97 & $+8{,}5\%$ & 200{,}4 \\
+    \num{1024} & 206{,}57 & $+5{,}8\%$ & 197{,}0 \\
+    \num{2048} & 195{,}34 & ---        & 195{,}5 \\
+    \num{4096} & 208{,}00 & $+6{,}5\%$ & 195{,}6 \\
+    \num{8192} & 202{,}80 & $+3{,}8\%$ & 197{,}1 \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize Fonte: Elaborado pelo autor (2026). Tempos de \texttt{benchmarks/v4-explore/batches-timings/}; picos de \texttt{benchmarks/v4-explore/batches-memory/}.}
+\end{table}
+
+O lote de \num{2048} linhas foi o mais rápido em duas das três passadas, por margens de
+$2{,}5\%$ e $7{,}0\%$, e o de \num{8192} linhas, na terceira. Essas margens são da mesma
+ordem da variação de uma mesma célula entre passadas, que foi de $3{,}5\%$ a $24\%$ nessa
+campanha. Nenhum lote mostrou, portanto, vantagem acima do ruído da medição.
+
+Desses resultados sai a \textbf{escolha automática} dos dois tamanhos, descrita na
+seção~\ref{sec:modelos-execucao}. O lote fica fixo em \num{2048} linhas, o melhor nas medianas
+e o do meio do intervalo permitido. O bloco é o que lê a maior fonte inteira, a menos que a
+memória livre do computador não comporte o pico previsto; nesse caso, é o maior bloco que
+cabe. Para prever o pico, a campanha exploratória e a campanha de escalabilidade forneceram
+um modelo simples: o pico cresce cerca de 1,08~MB por MB de bloco e tem uma base que cresce
+com o tamanho dos arquivos em disco. O pico previsto deve caber em $25\%$ da memória livre
+lida no início da execução.
+
+A Tabela~\ref{tab:qp5-auto} mostra o bloco que a regra escolheu para cada volume na campanha
+deste capítulo, com cerca de 920~MB livres no início. Até \num{131072} linhas no modo
+multifonte, o bloco lê a maior fonte inteira; nos volumes maiores, sobretudo no modo
+combinado, cujo único arquivo contém todas as linhas, a memória livre passa a limitar o bloco.
+
+\begin{table}[H]
+  \caption{Bloco de leitura escolhido pela regra automática na campanha final, em MB, com cerca de 920~MB de memória livre.}
+  \label{tab:qp5-auto}
+  \centering
+  \begin{tabular}{r r r}
+    \toprule
+    \textbf{Volume ($N$)} & \textbf{Multifonte} & \textbf{Combinado} \\
+    \midrule
+    \num{1024}   & 16 & 16 \\
+    \num{16384}  & 16 & 35 \\
+    \num{32768}  & 24 & 71 \\
+    \num{65536}  & 48 & 141 \\
+    \num{131072} & 97 & 116$^{*}$ \\
+    \num{262144} & 63$^{*}$ & 38$^{*}$ \\
+    \bottomrule
+  \end{tabular}
+  \par\vspace{4pt}
+  {\footnotesize $^{*}$ Limitado pela memória livre; nos demais, o bloco lê a maior fonte inteira (16~MB é o mínimo). Fonte: Elaborado pelo autor (2026), a partir dos metadados de \texttt{benchmarks/v4/timings/}.}
+\end{table}
 
 \section{Análise e Discussão}
 \label{sec:discussao-avaliacao}
@@ -454,7 +545,9 @@ volume de dados nos volumes medidos (QP3): a partir de \num{16384} linhas, o tem
 fica estável, e o expoente do crescimento é próximo de 1 nos dois modos.
 O pico de memória cresce menos que o volume, com expoente de $0{,}63$ e $0{,}58$, e chega a
 $300{,}0$~MB no multifonte em \num{262144} linhas. A validação prévia dos dados custa entre $15\%$ e $20\%$ do tempo da
-importação (QP4), e a escolha dos tamanhos do bloco e do lote está em andamento (QP5).
+importação (QP4). Ler a maior fonte de uma só vez é o que torna a importação mais rápida, e
+o tamanho do lote não tem efeito mensurável; daí sai a escolha automática dos dois tamanhos
+(QP5).
 
 \subsection{Ameaças à Validade}
 \label{sec:ameacas-validade}

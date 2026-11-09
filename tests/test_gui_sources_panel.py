@@ -198,8 +198,8 @@ def test_an_unrecognised_file_keeps_its_stem(qtbot, tmp_path):
 def test_errors_are_shown(qtbot):
     panel = SourcesPanel()
     qtbot.addWidget(panel)
-    panel.set_errors({"sources": "Nome de fonte repetido: stock"})
-    assert panel.error_label.text() == "Nome de fonte repetido: stock"
+    panel.set_errors({"sources": "Repeated source name: stock"})
+    assert panel.error_label.text() == "Repeated source name: stock"
     panel.set_errors({})
     assert panel.error_label.text() == ""
 
@@ -257,7 +257,7 @@ def test_a_multi_config_allows_many_files_and_folders(qtbot):
     qtbot.addWidget(panel)
     panel.set_source_kind("multi", {"stock": "s.csv", "purchase": "p.csv"})
     assert panel.add_button.isEnabled()
-    assert panel.add_button.text() == "+ Adicionar arquivos"
+    assert panel.add_button.text() == "+ Add files"
     assert panel.add_folder_button.isEnabled()
     assert panel.kind_label.text() == module.MULTI_TEXT
     assert panel.table.selectionMode() == QAbstractItemView.ExtendedSelection
@@ -267,7 +267,7 @@ def test_a_combined_config_takes_one_file_named_after_the_source(qtbot, tmp_path
     panel = SourcesPanel()
     qtbot.addWidget(panel)
     _combined(panel)
-    assert panel.add_button.text() == "+ Adicionar arquivo"
+    assert panel.add_button.text() == "+ Add file"
     assert not panel.add_folder_button.isEnabled()
     assert panel.add_folder_button.toolTip()
     assert panel.kind_label.text() == module.COMBINED_TEXT
@@ -308,7 +308,7 @@ def test_dropping_a_folder_on_a_combined_config_is_reported_as_a_folder(qtbot, t
     added = panel.drop_paths([folder])
     assert added == 0
     assert panel.error_label.text() == (
-        "1 pasta ignorada (a configuração combinada aceita um único arquivo)"
+        "1 folder ignored (the combined configuration takes a single file)"
     )
 
 
@@ -323,7 +323,7 @@ def test_dropping_two_folders_on_a_combined_config_pluralizes(qtbot, tmp_path):
     added = panel.drop_paths([first, second])
     assert added == 0
     assert panel.error_label.text() == (
-        "2 pastas ignoradas (a configuração combinada aceita um único arquivo)"
+        "2 folders ignored (the combined configuration takes a single file)"
     )
 
 
@@ -338,8 +338,8 @@ def test_dropping_a_folder_and_a_non_csv_file_on_a_combined_config_reports_both(
     added = panel.drop_paths([folder, tmp_path / "notas.txt"])
     assert added == 0
     text = panel.error_label.text()
-    assert "1 arquivo ignorado (não é CSV)" in text
-    assert "1 pasta ignorada (a configuração combinada aceita um único arquivo)" in text
+    assert "1 file ignored (not a CSV)" in text
+    assert "1 folder ignored (the combined configuration takes a single file)" in text
 
 
 def test_dropping_files_attaches_the_csv_ones(qtbot, tmp_path):
@@ -349,7 +349,7 @@ def test_dropping_files_attaches_the_csv_ones(qtbot, tmp_path):
     added = panel.drop_paths([tmp_path / "a.csv", tmp_path / "notas.txt"])
     assert added == 1
     assert [name for name, _ in panel.sources()] == ["a"]
-    assert "1 arquivo ignorado" in panel.error_label.text()
+    assert "1 file ignored" in panel.error_label.text()
 
 
 def test_dropping_a_folder_on_a_multi_config_attaches_its_csvs(qtbot, tmp_path):
@@ -407,4 +407,4 @@ def test_the_empty_table_paints_its_placeholder(qtbot):
     panel.set_source_kind("multi", {})
     panel.show()
     assert panel.table.grab().toImage().width() > 0  # paintEvent ran without error
-    assert "Arraste" in module.CsvDropTable.PLACEHOLDER
+    assert "Drop CSV files" in module.CsvDropTable.PLACEHOLDER

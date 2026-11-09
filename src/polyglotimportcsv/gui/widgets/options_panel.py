@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from PySide6.QtCore import Qt
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -20,7 +19,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QRadioButton,
     QSpinBox,
-    QSlider,
     QWidget,
 )
 
@@ -31,139 +29,57 @@ from polyglotimportcsv.gui.state import (
     MAX_SAMPLE_SIZE,
 )
 from polyglotimportcsv.gui.widgets.info_badge import InfoBadge
-from polyglotimportcsv.import_plan import DEFAULT_BATCH_LINES, MAX_BATCH_LINES, MIN_BATCH_LINES
-from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB
 
 SHOW_DATA_CHOICES = (
-    ("sample", "Amostra (--sample)"),
-    ("all", "Todos os dados (--show-data)"),
-    ("none", "Nenhum dado (--no-data)"),
+    ("sample", "Sample (--sample)"),
+    ("all", "All rows (--show-data)"),
+    ("none", "No data (--no-data)"),
 )
 _SHOW_DATA_VALUES = {"sample": None, "all": True, "none": False}
 
 HELP = {
-    "chunk_size": (
-        "Memória de cada bloco de leitura, em MB (8 a 256). A ferramenta calcula quantas "
-        "linhas cabem no bloco pela largura das linhas de cada arquivo. Blocos maiores "
-        "usam mais memória."
-    ),
-    "batch_size": (
-        "Linhas por lote de gravação (1024 a 8192). O lote nunca passa das linhas de um "
-        "bloco de leitura."
-    ),
     "dry_run": (
-        "Faz todas as verificações, inclusive a leitura dos dados, e mostra quantos "
-        "registros iriam para cada destino, sem conectar a nenhum SGBD."
+        "Runs every check, including the read of the data rows, and shows how many "
+        "records would go to each target, without connecting to any DBMS."
     ),
     "log_level": (
-        "Quanto detalhe aparece no console. O arquivo de log da sessão sempre registra "
-        "tudo (DEBUG)."
+        "How much detail the console shows. The session log file always records "
+        "everything (DEBUG)."
     ),
     "show_data": (
-        "Amostra: as primeiras N linhas de cada entidade. Todos os dados: todas as "
-        "linhas; lento em arquivos grandes. Nenhum dado: só as contagens."
+        "Sample: the first N rows of each entity. All rows: every row; slow on large "
+        "files. No data: only the counts."
     ),
 }
 
 
 class OptionsPanel(QGroupBox):
-    """Checkboxes, radios, a combo and spin boxes, one per CLI option."""
+    """Checkboxes, radios, a combo and a spin box, one per CLI option the GUI sets.
+
+    The read block and the write batch have none: the CLI chooses them.
+    """
 
     changed = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super().__init__("Opções de execução", parent)
+        super().__init__("Run options", parent)
         self.dbms_boxes = {}  # type: Dict[str, QCheckBox]
         self.show_data_buttons = {}  # type: Dict[str, QRadioButton]
         self.info_badges = {}  # type: Dict[str, InfoBadge]
         self._groups = []  # type: List[QButtonGroup]
 
         layout = QGridLayout(self)
-        layout.addWidget(QLabel("Bancos de dados (--only)", self), 0, 0)
+        layout.addWidget(QLabel("Databases (--only)", self), 0, 0)
         layout.addLayout(self._build_dbms_row(), 0, 1)
 
-        # Chunk size slider
-        self.chunk_slider = QSlider(Qt.Orientation.Horizontal, self)
-
-        self.chunk_slider.setRange(
-            0,
-            (MAX_CHUNK_MB - MIN_CHUNK_MB) / MIN_CHUNK_MB
-        )
-        self.chunk_slider.setSingleStep(1)
-        self.chunk_slider.setPageStep(1)
-
-        self.chunk_slider.setValue(
-            DEFAULT_CHUNK_MB / MIN_CHUNK_MB
-        )
-
-        self.chunk_value_label = QLabel(self)
-        self.chunk_value_label.setMinimumWidth(65)
-        self.chunk_value_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-
-        self.chunk_slider.valueChanged.connect(
-            lambda value: self.chunk_value_label.setText(
-                f"{MIN_CHUNK_MB + value * MIN_CHUNK_MB} MB"
-            )
-        )
-        self.chunk_slider.valueChanged.connect(self.changed)
-
-        self.chunk_value_label.setText(f"{DEFAULT_CHUNK_MB} MB")
-
-        layout.addWidget(QLabel("Bloco lido por vez:", self), 1, 0)
-        layout.addLayout(
-            self._build_slider_row(
-                self.chunk_slider,
-                self.chunk_value_label,
-                "chunk_size"
-            ),
-            1, 1
-        )
-
-        # Batch size slider
-        self.batch_slider = QSlider(Qt.Orientation.Horizontal, self)
-
-        self.batch_slider.setRange(
-            0,
-            (MAX_BATCH_LINES - MIN_BATCH_LINES) / MIN_BATCH_LINES
-        )
-        self.batch_slider.setSingleStep(1)
-        self.batch_slider.setPageStep(1)
-
-        self.batch_slider.setValue(
-            DEFAULT_BATCH_LINES / MIN_BATCH_LINES
-        )
-
-        self.batch_value_label = QLabel(self)
-        self.batch_value_label.setMinimumWidth(85)
-        self.batch_value_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-
-        self.batch_slider.valueChanged.connect(
-            lambda value: self.batch_value_label.setText(
-                f"{MIN_BATCH_LINES + value * MIN_BATCH_LINES} linhas"
-            )
-        )
-        self.batch_slider.valueChanged.connect(self.changed)
-
-        self.batch_value_label.setText(f"{DEFAULT_BATCH_LINES} linhas")
-
-        layout.addWidget(QLabel("Lote gravado por vez:", self), 2, 0)
-        layout.addLayout(
-            self._build_slider_row(
-                self.batch_slider,
-                self.batch_value_label,
-                "batch_size"
-            ),
-            2, 1
-        )
-
-        self.dry_run_box = QCheckBox("Simulação (--dry-run)", self)
+        self.dry_run_box = QCheckBox("Dry run (--dry-run)", self)
         self.dry_run_box.toggled.connect(self.changed)
         modifiers = QHBoxLayout()
         modifiers.addWidget(self.dry_run_box)
         modifiers.addWidget(self._badge("dry_run"))
         modifiers.addStretch(1)
-        layout.addWidget(QLabel("Modificadores", self), 3, 0)
-        layout.addLayout(modifiers, 3, 1)
+        layout.addWidget(QLabel("Modifiers", self), 1, 0)
+        layout.addLayout(modifiers, 1, 1)
 
         self.log_combo = QComboBox(self)
         self.log_combo.addItems(list(LOG_LEVELS))
@@ -173,27 +89,21 @@ class OptionsPanel(QGroupBox):
         log_row.addWidget(self.log_combo)
         log_row.addWidget(self._badge("log_level"))
         log_row.addStretch(1)
-        layout.addWidget(QLabel("Nível de log (--log-level)", self), 4, 0)
-        layout.addLayout(log_row, 4, 1)
+        layout.addWidget(QLabel("Log level (--log-level)", self), 2, 0)
+        layout.addLayout(log_row, 2, 1)
 
-        layout.addWidget(QLabel("Exibição de dados", self), 5, 0)
-        layout.addLayout(self._build_show_data_row(), 5, 1)
+        layout.addWidget(QLabel("Data display", self), 3, 0)
+        layout.addLayout(self._build_show_data_row(), 3, 1)
 
         self.error_label = QLabel("", self)
         self.error_label.setObjectName("errorLabel")
-        layout.addWidget(self.error_label, 6, 0, 1, 2)
+        layout.addWidget(self.error_label, 4, 0, 1, 2)
         layout.setColumnStretch(1, 1)
 
     # -- reading ----------------------------------------------------------
 
     def only(self) -> Tuple[str, ...]:
         return tuple(name for name in DBMS_NAMES if self.dbms_boxes[name].isChecked())
-
-    def chunk_size_mb(self) -> int:
-        return MIN_CHUNK_MB + self.chunk_slider.value() * MIN_CHUNK_MB
-
-    def batch_size(self) -> int:
-        return MIN_BATCH_LINES + self.batch_slider.value() * MIN_BATCH_LINES
 
     def dry_run(self) -> bool:
         return self.dry_run_box.isChecked()
@@ -218,7 +128,7 @@ class OptionsPanel(QGroupBox):
                 box.setChecked(False)
 
     def set_errors(self, errors: Dict[str, str]) -> None:
-        keys = ("only", "chunk_size_mb", "batch_size", "sample_size")
+        keys = ("only", "sample_size")
         messages = [errors[key] for key in keys if key in errors]
         self.error_label.setText("  ·  ".join(messages))
 
@@ -239,22 +149,6 @@ class OptionsPanel(QGroupBox):
         row.addStretch(1)
         return row
 
-    def _build_slider_row(
-        self,
-        slider: QSlider,
-        value_label: QLabel,
-        help_key: str
-    ) -> QHBoxLayout:
-        row = QHBoxLayout()
-
-        slider.setMinimumWidth(300)
-        row.addWidget(slider)
-        row.addWidget(value_label)
-        row.addWidget(self._badge(help_key))
-        row.addStretch(1)
-
-        return row
-
     def _build_show_data_row(self) -> QHBoxLayout:
         row = QHBoxLayout()
         group = QButtonGroup(self)
@@ -262,7 +156,7 @@ class OptionsPanel(QGroupBox):
         self.sample_spin = QSpinBox(self)
         self.sample_spin.setRange(1, MAX_SAMPLE_SIZE)
         self.sample_spin.setValue(DEFAULT_SAMPLE_SIZE)
-        self.sample_spin.setToolTip("Linhas mostradas por entidade (--sample N)")
+        self.sample_spin.setToolTip("Rows shown per entity (--sample N)")
         self.sample_spin.valueChanged.connect(self.changed)
         for key, label in SHOW_DATA_CHOICES:
             button = QRadioButton(label, self)

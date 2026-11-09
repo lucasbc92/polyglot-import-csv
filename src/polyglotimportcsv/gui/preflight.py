@@ -96,7 +96,7 @@ def check(options: RunOptions) -> Preflight:
         # A file that is not valid UTF-8 (e.g. saved as cp1252) or cannot be
         # opened (permissions) must be reported, not raised: the window calls
         # check on every click.
-        return Preflight(errors={"config_path": "Não foi possível ler {0}: {1}".format(path, exc)})
+        return Preflight(errors={"config_path": "Could not read {0}: {1}".format(path, exc)})
 
     sources_cfg = import_cfg.get("sources") or {}
     kind = classify_sources(sources_cfg)
@@ -134,8 +134,8 @@ def _check_dbms(options: RunOptions, import_path: Path, import_cfg: Dict[str, An
         dbms_path = import_path.with_name(DEFAULT_DBMS_CONFIG_NAME)
         if not dbms_path.is_file():
             return (
-                "Configuração de SGBDs não informada e {0} não encontrado ao lado "
-                "da configuração de importação.".format(DEFAULT_DBMS_CONFIG_NAME)
+                "DBMS configuration not given and {0} not found next to "
+                "the import configuration.".format(DEFAULT_DBMS_CONFIG_NAME)
             )
     elif not dbms_path.is_file():
         return ""  # state.validate already reports this
@@ -145,16 +145,16 @@ def _check_dbms(options: RunOptions, import_path: Path, import_cfg: Dict[str, An
     except BusinessException as exc:
         return str(exc)
     except (OSError, ValueError) as exc:
-        return "Não foi possível ler {0}: {1}".format(dbms_path, exc)
+        return "Could not read {0}: {1}".format(dbms_path, exc)
     return ""
 
 
 def _check_overrides(options: RunOptions, kind: str, declared: Dict[str, str]) -> str:
     if kind == COMBINED and len(options.sources) > 1:
-        return "A configuração combinada aceita um único arquivo CSV."
+        return "The combined configuration takes a single CSV file."
     for name, _path in options.sources:
         if name and name not in declared:
-            return "Fonte não declarada na configuração de importação: {0}".format(name)
+            return "Source not declared in the import configuration: {0}".format(name)
     return ""
 
 
@@ -237,11 +237,11 @@ def _read_and_validate_headers(
     for name, decl in sources_cfg.items():
         csv_path = csv_paths[name]
         if not csv_path.is_file():
-            return key, "Fonte '{0}': arquivo CSV não encontrado: {1}".format(name, csv_path)
+            return key, "Source '{0}': CSV file not found: {1}".format(name, csv_path)
         try:
             header = _cached("header", csv_path, _read_header)
         except (OSError, ValueError, pd.errors.ParserError) as exc:
-            return key, "Fonte '{0}': não foi possível ler o cabeçalho de {1}: {2}".format(
+            return key, "Source '{0}': could not read the header of {1}: {2}".format(
                 name, csv_path, exc
             )
         if not isinstance(decl, str):
