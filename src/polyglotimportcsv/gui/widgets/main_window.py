@@ -168,8 +168,6 @@ class MainWindow(QMainWindow):
             config_path=self.config_panel.config_path(),
             dbms_config_path=self.config_panel.dbms_config_path(),
             only=self.options_panel.only(),
-            chunk_size_mb=self.options_panel.chunk_size_mb(),
-            batch_size=self.options_panel.batch_size(),
             dry_run=self.options_panel.dry_run(),
             log_level=self.options_panel.log_level(),
             show_data=self.options_panel.show_data(),

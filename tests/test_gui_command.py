@@ -12,14 +12,12 @@ def test_the_default_state_spells_every_option_out():
     """Q1: a control at its default value must still appear in the command.
 
     The command spells out every option, not only those that differ from the
-    CLI defaults: otherwise setting a size spin box back to its initial value
+    CLI defaults: otherwise setting a control back to its initial value
     would change nothing visible and the control would look dead. Verbosity is the point here: the
     shown command is a teaching aid, not the shortest line a person could type.
     """
     assert build_argv(RunOptions(config_path=CFG)) == [
         "--config", str(CFG),
-        "--chunk-size", "8",
-        "--batch-size", "1024",
         "--log-level", "INFO",
         "--sample", "50",
     ]
@@ -37,25 +35,20 @@ def test_only_is_comma_joined():
     assert argv[argv.index("--only") + 1] == "postgres,redis"
 
 
-def test_argv_always_carries_chunk_and_batch():
-    argv = build_argv(RunOptions(config_path=CFG))
-    assert argv[argv.index("--chunk-size") + 1] == "8"
-    assert argv[argv.index("--batch-size") + 1] == "1024"
-
-
-def test_chunk_and_batch_follow_the_form_right_after_only():
-    argv = build_argv(
-        RunOptions(config_path=CFG, only=("redis",), chunk_size_mb=64, batch_size=4096)
-    )
-    assert argv[argv.index("--only") + 2:argv.index("--only") + 6] == [
-        "--chunk-size", "64", "--batch-size", "4096",
-    ]
+def test_command_never_carries_chunk_or_batch():
+    """The read block and the write batch are automatic: the GUI leaves them to the CLI."""
+    for options in (
+        RunOptions(config_path=CFG),
+        RunOptions(config_path=CFG, only=("redis",), dry_run=True, show_data=False),
+    ):
+        argv = build_argv(options)
+        assert "--chunk-size" not in argv and "--batch-size" not in argv
 
 
 def test_no_combination_of_options_writes_strategy():
     for options in (
         RunOptions(config_path=CFG),
-        RunOptions(config_path=CFG, chunk_size_mb=64, dry_run=True),
+        RunOptions(config_path=CFG, dry_run=True),
         RunOptions(config_path=CFG, show_data=True, only=("redis",)),
         RunOptions(config_path=CFG, show_data=False),
     ):
@@ -113,8 +106,6 @@ def test_argv_follows_the_order_of_the_spec_table():
         config_path=CFG,
         dbms_config_path=dbms,
         only=("postgres", "redis"),
-        chunk_size_mb=64,
-        batch_size=2048,
         dry_run=True,
         log_level="DEBUG",
         show_data=True,
@@ -124,8 +115,6 @@ def test_argv_follows_the_order_of_the_spec_table():
         "--config", str(CFG),
         "--dbms-config", str(dbms),
         "--only", "postgres,redis",
-        "--chunk-size", "64",
-        "--batch-size", "2048",
         "--dry-run",
         "--log-level", "DEBUG",
         "--show-data",
@@ -142,8 +131,6 @@ def test_every_option_changes_the_command_when_toggled():
     """
     base = RunOptions(config_path=CFG)
     flipped = (
-        RunOptions(config_path=CFG, chunk_size_mb=64),
-        RunOptions(config_path=CFG, batch_size=2048),
         RunOptions(config_path=CFG, dry_run=True),
         RunOptions(config_path=CFG, log_level="DEBUG"),
         RunOptions(config_path=CFG, show_data=True),
@@ -161,8 +148,6 @@ def test_argv_order_is_stable_when_options_are_at_their_defaults():
     assert argv == [
         "--config", str(CFG),
         "--only", "postgres",
-        "--chunk-size", "8",
-        "--batch-size", "1024",
         "--log-level", "INFO",
         "--sample", "50",
     ]
@@ -254,7 +239,7 @@ def test_build_check_argv_keeps_only_what_the_check_uses():
     dbms = Path("/proj/dbms.json")
     options = RunOptions(
         config_path=CFG, dbms_config_path=dbms, only=("redis", "neo4j"),
-        dry_run=True, chunk_size_mb=64, batch_size=2048, log_level="DEBUG", show_data=True,
+        dry_run=True, log_level="DEBUG", show_data=True,
         sources=(("stock", Path("/x.csv")),),
     )
     assert build_check_argv(options) == [

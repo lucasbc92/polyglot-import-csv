@@ -55,21 +55,13 @@ def test_window_opens_showing_the_defaults_it_would_run_with(window):
     """Q1: no configuration chosen yet, but the options still have values.
 
     The command shows the options at their defaults instead of the bare
-    program name, so it is clear that a run already has a chunk size and a log
-    level picked out for it.
+    program name, so it is clear that a run already has a log level and a data
+    display picked out for it. The read block and the write batch are automatic,
+    so the command leaves them to the CLI.
     """
     assert window.console_panel.command_text() == (
-        "polyglotimportcsv --chunk-size 8 --batch-size 1024 "
-        "--log-level INFO --sample 50"
+        "polyglotimportcsv --log-level INFO --sample 50"
     )
-
-
-def test_main_window_command_shows_the_new_options(window):
-    window.options_panel.chunk_spin.setValue(64)
-    window.options_panel.batch_spin.setValue(4096)
-    assert "--chunk-size 64 --batch-size 4096" in window.console_panel.command_text()
-    assert window.options().chunk_size_mb == 64
-    assert window.options().batch_size == 4096
 
 
 def test_choosing_a_config_updates_the_command(window, config_files):

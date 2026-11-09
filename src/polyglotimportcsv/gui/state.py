@@ -12,9 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
-from polyglotimportcsv.import_plan import DEFAULT_BATCH_LINES, MAX_BATCH_LINES, MIN_BATCH_LINES
 from polyglotimportcsv.reporting import DEFAULT_SAMPLE_SIZE
-from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB
 
 DBMS_NAMES = ("postgres", "redis", "mongodb", "cassandra", "neo4j")
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
@@ -30,6 +28,8 @@ __all__ = [
 class RunOptions:
     """Every CLI option the GUI can set. Defaults mirror ``cli.main``.
 
+    The read block and the write batch are not here: the CLI chooses them.
+
     ``show_data`` follows the CLI tri-state: ``None`` is the sample of
     ``sample_size`` rows, ``True`` every row, ``False`` none.
     """
@@ -37,8 +37,6 @@ class RunOptions:
     config_path: Optional[Path] = None
     dbms_config_path: Optional[Path] = None
     only: Tuple[str, ...] = ()
-    chunk_size_mb: int = DEFAULT_CHUNK_MB
-    batch_size: int = DEFAULT_BATCH_LINES
     dry_run: bool = False
     log_level: str = "INFO"
     show_data: Optional[bool] = None
@@ -66,14 +64,6 @@ def validate(options: RunOptions) -> Dict[str, str]:
         if name not in DBMS_NAMES:
             errors["only"] = "SGBD desconhecido: {0}".format(name)
             break
-
-    if not MIN_CHUNK_MB <= options.chunk_size_mb <= MAX_CHUNK_MB:
-        errors["chunk_size_mb"] = "O bloco deve ter entre {0} e {1} MB.".format(MIN_CHUNK_MB, MAX_CHUNK_MB)
-
-    if not MIN_BATCH_LINES <= options.batch_size <= MAX_BATCH_LINES:
-        errors["batch_size"] = "O lote deve ter entre {0} e {1} linhas.".format(
-            MIN_BATCH_LINES, MAX_BATCH_LINES
-        )
 
     if options.show_data is None and not 1 <= options.sample_size <= MAX_SAMPLE_SIZE:
         errors["sample_size"] = "O tamanho da amostra deve estar entre 1 e {0}.".format(
