@@ -110,7 +110,7 @@ versões indicadas na Tabela~\ref{tab:ambiente-sgbds}, dentro de uma máquina vi
 $3{,}88$~GiB e 8 processadores, que partilha a memória do computador com a ferramenta. O
 Cassandra opera em um único nó, com fator de replicação 1 e \textit{heap} de 1~GB --- uma
 restrição de ambiente que se mostra relevante na fase de escrita. Com os contêineres no ar,
-restavam cerca de «livre»~MB de memória livre no computador no início das campanhas.
+restavam cerca de 800~MB de memória livre no computador no início das campanhas.
 
 \begin{table}[H]
   \caption{Imagens Docker dos SGBDs utilizadas na avaliação.}
@@ -262,7 +262,7 @@ arquivos, às leituras de inferência e de validação, ao tempo total e ao pico
     Inferência (s)             & 27{,}80  & 36{,}73 \\
     Validação (s)              & 69{,}62  & 71{,}16 \\
     Tempo total (s)            & 555{,}10 & 593{,}92 \\
-    Pico de memória (MB)       & «pm262»   & «pc262» \\
+    Pico de memória (MB)       & 300{,}0   & 370{,}7 \\
     \bottomrule
   \end{tabular}
   \par\vspace{4pt}
@@ -278,7 +278,8 @@ arquivo: na gravação, cada SGBD relê as fontes de que precisa (seção~\ref{s
 No modo multifonte, o Redis relê apenas os arquivos de seleções e de carrinhos ($15{,}30$~MB),
 enquanto no combinado relê o arquivo inteiro ($75{,}92$~MB) --- e a sua escrita passa de
 $14{,}88$ para $33{,}87$~s. No total, a importação combinada leva $7\%$ mais tempo.
-«frase-pico-modos»
+O pico de memória do combinado também é maior ($370{,}7$ contra $300{,}0$~MB); a causa
+dessa diferença não foi investigada neste trabalho.
 
 Além do desempenho, o modo multifonte tem vantagens de \textbf{organização}. Cada arquivo
 traz apenas as colunas do seu tipo de evento, o que o torna mais fácil de ler, de validar e
@@ -305,12 +306,12 @@ seis volumes, nos dois modos.
     \cmidrule(lr){2-4} \cmidrule(lr){5-7}
     \textbf{Linhas} & \textbf{Tempo (s)} & \textbf{ms/linha} & \textbf{Pico (MB)} & \textbf{Tempo (s)} & \textbf{ms/linha} & \textbf{Pico (MB)} \\
     \midrule
-    \num{1024}   &   9{,}35 & 9{,}13 & «m1» &   8{,}87 & 8{,}66 & «c1» \\
-    \num{16384}  &  45{,}36 & 2{,}77 & «m2» &  43{,}08 & 2{,}63 & «c2» \\
-    \num{32768}  &  75{,}17 & 2{,}29 & «m3» &  80{,}53 & 2{,}46 & «c3» \\
-    \num{65536}  & 135{,}34 & 2{,}07 & «m4» & 162{,}20 & 2{,}47 & «c4» \\
-    \num{131072} & 294{,}19 & 2{,}24 & «m5» & 353{,}14 & 2{,}69 & «c5» \\
-    \num{262144} & 555{,}10 & 2{,}12 & «m6» & 593{,}92 & 2{,}27 & «c6» \\
+    \num{1024}   &   9{,}35 & 9{,}13 & 11{,}2 &   8{,}87 & 8{,}66 & 10{,}7 \\
+    \num{16384}  &  45{,}36 & 2{,}77 & 55{,}2 &  43{,}08 & 2{,}63 & 74{,}3 \\
+    \num{32768}  &  75{,}17 & 2{,}29 & 72{,}4 &  80{,}53 & 2{,}46 & 99{,}0 \\
+    \num{65536}  & 135{,}34 & 2{,}07 & 97{,}8 & 162{,}20 & 2{,}47 & 143{,}8 \\
+    \num{131072} & 294{,}19 & 2{,}24 & 195{,}5 & 353{,}14 & 2{,}69 & 225{,}1 \\
+    \num{262144} & 555{,}10 & 2{,}12 & 300{,}0 & 593{,}92 & 2{,}27 & 370{,}7 \\
     \bottomrule
   \end{tabular}
   \par\vspace{4pt}
@@ -357,7 +358,16 @@ crescimento linear.
   {\footnotesize Fonte: Elaborado pelo autor (2026), a partir da pasta \texttt{timings}.}
 \end{figure}
 
-«frase-pico-escala»
+O \textbf{pico de memória cresce menos que o volume}. De \num{1024} para \num{262144}
+linhas ($256$ vezes mais dados), ele cresce $26{,}8$ vezes no modo multifonte (de
+$11{,}2$ para $300{,}0$~MB) e $34{,}7$ vezes no combinado (de $10{,}7$ para $370{,}7$~MB). O
+expoente ajustado da mesma forma, de \num{16384} linhas em diante, é $0{,}63$ no multifonte
+e $0{,}58$ no combinado: cada vez que o volume dobra, o pico cresce, em média, cerca de
+$50\%$. O pico ainda não para de crescer porque, com o bloco de 128~MB, boa parte de
+cada arquivo cabe em um único bloco nesses volumes, de modo que o bloco acompanha o
+arquivo; além do bloco, a memória guarda conjuntos de chaves distintas que crescem com os
+dados (seção~\ref{sec:modelos-execucao}). A escolha do tamanho do bloco, que governa esse
+pico, é o objeto da QP5.
 
 \subsection{Custo da Validação Prévia (QP4)}
 \label{sec:res-validacao}
@@ -427,7 +437,8 @@ com $44\%$ de células vazias, e, na gravação, cada SGBD relê o arquivo intei
 tem ainda vantagens de organização (QP2). A ferramenta \textbf{escala linearmente} com o
 volume de dados nos volumes medidos (QP3): a partir de \num{16384} linhas, o tempo por linha
 fica estável, e o expoente do crescimento é próximo de 1 nos dois modos.
-«frase-pico-discussao» A validação prévia dos dados custa cerca de um sexto do tempo da
+O pico de memória cresce menos que o volume, com expoente de $0{,}63$ e $0{,}58$, e chega a
+$300{,}0$~MB no multifonte em \num{262144} linhas. A validação prévia dos dados custa cerca de um sexto do tempo da
 importação (QP4), e a escolha dos tamanhos do bloco e do lote está em andamento (QP5).
 
 \subsection{Ameaças à Validade}
