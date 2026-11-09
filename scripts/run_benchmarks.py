@@ -109,7 +109,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help=f"Comma-separated DBMS (default: all). Choices: {', '.join(_ALL_DBMS)}.")
     parser.add_argument("--chunk-sizes", default=str(DEFAULT_CHUNK_MB),
                         help=f"Comma-separated read-block sizes in MB, each from {MIN_CHUNK_MB} to "
-                             f"{MAX_CHUNK_MB} (default: {DEFAULT_CHUNK_MB}). Use '8,64,256' to "
+                             f"{MAX_CHUNK_MB} (default: {DEFAULT_CHUNK_MB}). Use '16,64,256' to "
                              "compare peak_memory_mb and time across block sizes.")
     parser.add_argument("--seed", type=int, default=42, help="Generator seed (default: 42).")
     parser.add_argument("--no-trace-memory", dest="trace_memory", action="store_false",

@@ -30,7 +30,7 @@ def _entities(**by_name):
 
 
 def test_batch_size_constants():
-    assert (MIN_BATCH_LINES, DEFAULT_BATCH_LINES, MAX_BATCH_LINES) == (1024, 1024, 8192)
+    assert (MIN_BATCH_LINES, DEFAULT_BATCH_LINES, MAX_BATCH_LINES) == (512, 2048, 8192)
 
 
 def test_only_reads_the_sources_the_selected_dbms_use(tmp_path):

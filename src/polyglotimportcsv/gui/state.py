@@ -68,10 +68,12 @@ def validate(options: RunOptions) -> Dict[str, str]:
             break
 
     if not MIN_CHUNK_MB <= options.chunk_size_mb <= MAX_CHUNK_MB:
-        errors["chunk_size_mb"] = "O bloco deve ter entre 8 e 256 MB."
+        errors["chunk_size_mb"] = "O bloco deve ter entre {0} e {1} MB.".format(MIN_CHUNK_MB, MAX_CHUNK_MB)
 
     if not MIN_BATCH_LINES <= options.batch_size <= MAX_BATCH_LINES:
-        errors["batch_size"] = "O lote deve ter entre 1024 e 8192 linhas."
+        errors["batch_size"] = "O lote deve ter entre {0} e {1} linhas.".format(
+            MIN_BATCH_LINES, MAX_BATCH_LINES
+        )
 
     if options.show_data is None and not 1 <= options.sample_size <= MAX_SAMPLE_SIZE:
         errors["sample_size"] = "O tamanho da amostra deve estar entre 1 e {0}.".format(

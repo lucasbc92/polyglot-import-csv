@@ -125,8 +125,8 @@ def _probe_answers(value, seen=None):
 def test_run_import_takes_chunk_and_batch_sizes_not_importers_or_execution():
     params = inspect.signature(run_import).parameters
     assert "importers" not in params and "execution" not in params
-    assert params["chunk_size_mb"].default == 8
-    assert params["batch_size"].default == 1024
+    assert params["chunk_size_mb"].default == 128
+    assert params["batch_size"].default == 2048
 
 
 def test_a_validation_error_stops_before_any_sink_is_built(tmp_path, capsys):

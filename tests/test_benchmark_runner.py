@@ -114,7 +114,7 @@ def test_repetitions_sweep_the_whole_matrix_instead_of_repeating_one_cell(tmp_pa
 
     labeled = brun.run_matrix(
         sizes=[1000], modes=["multi", "combined"], repetitions=3,
-        chunk_sizes=[8, 64],
+        chunk_sizes=[16, 64],
         dbms_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
         seed=1, only=["postgres"], cleaners={},
         importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
@@ -252,17 +252,17 @@ def test_matrix_sweeps_chunk_sizes_and_labels_runs(tmp_path):
 
     labeled = brun.run_matrix(
         sizes=[1000], modes=["multi"], repetitions=1,
-        chunk_sizes=(8, 64),
+        chunk_sizes=(16, 64),
         dbms_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
         seed=1, only=["postgres"], cleaners={},
         importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
         generate=lambda out_dir, rows, seed, mode: None,
     )
-    assert seen == [8, 64]  # the importer reads each run's chunk size
-    assert [r["chunk_mb"] for r in labeled] == [8, 64]
+    assert seen == [16, 64]  # the importer reads each run's chunk size
+    assert [r["chunk_mb"] for r in labeled] == [16, 64]
     assert all("execution" not in r for r in labeled)
     res = median_results(labeled)
-    assert {r["chunk_mb"] for r in res} == {8, 64}
+    assert {r["chunk_mb"] for r in res} == {16, 64}
 
 
 def test_run_matrix_records_peak_memory(tmp_path):

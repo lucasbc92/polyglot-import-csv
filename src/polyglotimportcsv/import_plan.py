@@ -18,9 +18,9 @@ from polyglotimportcsv.stream_binding import EntityBinding, bind_entity, entity_
 from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, chunk_rows, source_path
 
 #: Rows per write batch: the default and the bounds a user may choose within.
-MIN_BATCH_LINES = 256
-MAX_BATCH_LINES = MIN_BATCH_LINES*16
-DEFAULT_BATCH_LINES = MIN_BATCH_LINES*8
+MIN_BATCH_LINES = 512
+MAX_BATCH_LINES = 8192
+DEFAULT_BATCH_LINES = 2048
 
 @dataclass
 class ImportPlan:
