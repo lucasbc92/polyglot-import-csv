@@ -1501,7 +1501,9 @@ No TCC2, a ferramenta evoluiu para a estratégia \textbf{em lote} (\textit{batch
 amortiza esses dois custos processando os dados em blocos. A conversão de tipos passou a
 ser \textbf{vetorizada}: realizada uma vez por coluna, sobre todo o conjunto de valores, em
 vez de célula a célula, produzindo exatamente os mesmos valores e tipos que a conversão
-individual. A gravação passou a ser feita em \textbf{lotes}: um único comando carrega
+individual. Concretamente, uma única operação da biblioteca de dados (pandas) converte
+todos os valores de uma coluna de uma vez; nenhuma estrutura de índice é criada para isso.
+A gravação passou a ser feita em \textbf{lotes}: um único comando carrega
 muitos registros de uma vez, reduzindo drasticamente o número de idas e vindas à rede. A
 estratégia em lote é a única da ferramenta; não há opção para escolher outra.
 
@@ -1521,9 +1523,17 @@ carregado, e a importação falharia por falta de memória. Essa limitação mot
 em blocos, descrita a seguir, que conviveu com a materialização durante o TCC2 e é o único
 modelo de execução da versão final da ferramenta.
 
-A estratégia ingênua e a materialização permanecem descritas neste trabalho porque são as
-\textit{linhas de base} contra as quais o Capítulo~\ref{cap:avaliacao} mede, com números
-históricos, o ganho da estratégia em lote e a redução de memória da leitura em blocos.
+As duas mudanças foram decididas com base em medições feitas com uma versão anterior da
+ferramenta, que ainda oferecia a estratégia ingênua e a materialização, sobre a carga do
+cenário exemplo sem a coleção \texttt{orders} do MongoDB. Em uma importação de dez mil
+linhas com materialização, a estratégia em lote foi $9{,}3$ vezes mais rápida que a ingênua
+no modo multifonte ($14{,}54$ contra $135{,}74$~s) e $8{,}5$ vezes no combinado ($16{,}30$
+contra $138{,}44$~s). Em cem mil linhas, a leitura em blocos atingiu um pico de memória
+$12{,}5$ vezes menor que o da materialização ($75{,}9$ contra $950{,}7$~MB), a um custo de
+apenas $10\%$ a mais de tempo ($165{,}03$ contra $149{,}93$~s); e, enquanto o pico da
+materialização cresceu quase na mesma proporção que o arquivo, o da leitura em blocos
+cresceu bem menos. Esses números justificam as duas decisões e são citados aqui apenas para
+isso: o Capítulo~\ref{cap:avaliacao} mede somente a versão final da ferramenta.
 
 \subsection{Modelo de Execução: Leitura em Blocos}
 \label{sec:modelos-execucao}
@@ -1531,13 +1541,13 @@ históricos, o ganho da estratégia em lote e a redução de memória da leitura
 Na \textbf{leitura em blocos} (em inglês, \textit{streaming}), nenhum arquivo é carregado
 inteiro: cada uma das leituras do fluxo (seção~\ref{sec:algoritmo}) percorre o arquivo em
 \textbf{blocos} de linhas, e cada bloco é tratado antes de o próximo ser lido. O tamanho do
-bloco é dado em memória, pela opção \texttt{-{}-chunk-size} (8~MB, por padrão, de 8 a
-256~MB). Para convertê-lo em linhas, a ferramenta lê as primeiras mil linhas de cada
+bloco é dado em memória, pela opção \texttt{-{}-chunk-size} (128~MB, por padrão). Para convertê-lo em linhas, a ferramenta lê as primeiras mil linhas de cada
 arquivo, mede quanto cada linha ocupa na memória e divide o orçamento do bloco por esse
 valor; a estimativa é aproximada, pois um arquivo cujas linhas fiquem mais largas adiante
 ultrapassa o orçamento. Na gravação, as linhas de cada destino acumulam-se até completar um
-\textbf{lote} de \texttt{-{}-batch-size} linhas (1024, por padrão, de 1024 a 8192), limitado
-às linhas de um bloco, para que um lote não retenha vários blocos na memória.
+\textbf{lote} de \texttt{-{}-batch-size} linhas (2048, por padrão), limitado às linhas de um
+bloco, para que um lote não retenha vários blocos na memória. A escolha automática desses
+dois valores, conforme a memória da máquina, está em desenvolvimento.
 
 O pico de memória acompanha, assim, o tamanho do bloco, e não o do arquivo. Além do
 bloco, a memória guarda os agregados por coluna da leitura de inferência, que resumem o
@@ -1573,8 +1583,8 @@ bloco de 256~MB, portanto, cada fonte já é lida inteira de uma vez. Em relaç�
 8~MB, o de 64~MB dobra o pico de memória e reduz o tempo total em 5{,}4\%; o de 256~MB
 eleva o pico 2{,}3 vezes e reduz o tempo em 6{,}4\%. O ganho concentra-se nas leituras de
 inferência e de validação, que leem mais linhas por bloco; a escrita, que domina o
-tempo, quase não muda. O padrão de 8~MB privilegia, portanto, a memória, e blocos maiores
-compensam pouco.
+tempo, quase não muda. Blocos maiores reduzem, portanto, pouco o tempo e aumentam bastante
+o pico de memória.
 
 A arquitetura que viabiliza a leitura em blocos segue o padrão \textbf{portas e
 adaptadores} (\textit{ports and adapters}). Um \textbf{orquestrador} agnóstico de SGBD
@@ -1631,18 +1641,19 @@ descreve o efeito da opção; o do bloco, por exemplo, explica que blocos maiore
 memória. Uma opção da CLI
 não aparece no formulário: o registro de métricas de \textit{benchmark}, instrumento da
 avaliação de desempenho do Capítulo~\ref{cap:avaliacao}, e não do uso cotidiano da
-ferramenta, que continua disponível na linha de comando. O terceiro cartão contém a tabela
-de sobrescrita
-de caminhos das fontes CSV. Na metade inferior está o console integrado, que exibe o comando
-montado e, abaixo dele, a saída da execução.
+ferramenta, que continua disponível na linha de comando. O terceiro cartão recebe os
+\textbf{arquivos CSV de entrada}: se ficar vazio, valem os caminhos declarados no bloco
+\texttt{sources} da configuração de importação; cada arquivo escolhido substitui o caminho
+da fonte correspondente (opção \texttt{-{}-source}). Na metade inferior está o console
+integrado, que exibe o comando montado e, abaixo dele, a saída da execução.
 
 O cartão de fontes adapta-se ao arquivo de importação escolhido. Sem uma configuração de
-importação válida, ele não aceita fontes, pois uma sobrescrita só faz sentido diante das
-fontes que a configuração declara. Com uma configuração \textbf{multifonte}, aceita vários
+importação válida, ele não aceita arquivos, pois um arquivo só pode ser associado a uma
+fonte que a configuração declara. Com uma configuração \textbf{multifonte}, aceita vários
 arquivos --- escolhidos um a um, de uma pasta inteira ou arrastados sobre a tabela ---, e o
 nome de cada fonte é deduzido comparando o arquivo com o bloco \texttt{sources}, de modo que
-a sobrescrita gerada se refira a uma fonte que de fato existe. Com uma configuração
-\textbf{combinada}, aceita um único arquivo, associado à única fonte declarada. Trocar de
+cada arquivo se refira a uma fonte que de fato existe. Uma configuração
+\textbf{combinada} aceita um único arquivo, associado à única fonte declarada. Trocar de
 configuração não descarta as linhas já escolhidas: as que deixam de caber na nova
 configuração são apontadas como erro até que o usuário as remova.
 
@@ -1670,21 +1681,16 @@ antes de gravar qualquer dado.
 \end{figure}
 
 O comando montado é, por padrão, \textbf{somente leitura}, e \textbf{explicita todas as
-opções}, inclusive aquelas mantidas no valor padrão da CLI. A alternativa --- omitir o que
-coincide com o padrão, de modo a permanecer tão curto quanto aquilo que uma pessoa realmente
-digitaria --- contraria o propósito didático da interface: um controle deixado no padrão não
-produziria alteração visível no texto, e o clique pareceria ter sido ignorado. Escrever a
-opção por extenso custa alguns caracteres e devolve ao comando a propriedade que justifica
-exibi-lo --- a de que cada controle do formulário tem um correspondente literal na linha de
-comando. Para facilitar a leitura, o comando é colorido: o nome do programa, as opções e os
+opções}, inclusive aquelas mantidas no valor padrão da CLI. Para facilitar a leitura, o comando é colorido: o nome do programa, as opções e os
 seus valores recebem cores distintas. Um \textbf{modo de edição} permite editar o texto
 diretamente; ao entrá-lo, o formulário é \textbf{bloqueado}, sinalizando que o texto passou
 a ser a fonte da verdade. Essa decisão é intencional e tem uma razão precisa: \textbf{não
 existe analisador de comando} na ferramenta. O caminho do formulário para o texto é de mão
 única, e manter os dois editáveis ao mesmo tempo exigiria reconstruir o estado do formulário
 a partir de uma cadeia de caracteres arbitrária --- precisamente o tipo de acoplamento que a
-interface se propõe a evitar. Ao sair do modo de edição, o texto digitado é descartado
-mediante confirmação e o comando é remontado a partir dos controles.
+interface se propõe a evitar. Enquanto o modo de edição está ativo, é o texto digitado que
+será executado. Ao sair dele, mediante confirmação, esse texto é desconsiderado e
+substituído pelo comando que a interface representa.
 
 Durante a execução, o formulário permanece desabilitado, o botão principal passa a oferecer
 a interrupção do processo e a saída da CLI chega ao console de forma incremental, com as
@@ -1708,8 +1714,8 @@ sessão, em nível \texttt{DEBUG}, e não apenas o texto exibido no console.
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.95\textwidth]{images/figure14-gui-sucesso}
-  \caption{Execução concluída com sucesso, com o tempo total e o arquivo de \textit{log} da
-  sessão na barra de estado.}
+  \caption{Simulação (\texttt{-{}-dry-run}) concluída com sucesso, com o tempo total e o
+  arquivo de \textit{log} da sessão na barra de estado.}
   \label{fig:gui-sucesso}
   \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
@@ -1748,8 +1754,9 @@ Figura~\ref{fig:gui-verificacao} mostra uma verificação com dois SGBDs fora do
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.95\textwidth]{images/figure16-gui-verificacao}
-  \caption{Verificação dos SGBDs pela interface gráfica: MongoDB e Neo4j fora do ar e,
-  abaixo da tabela de estados, os comandos que os iniciam.}
+  \caption{Verificação dos SGBDs pela interface gráfica: o botão \textbf{Verificar SGBDs},
+  acionado, aparece destacado em vermelho; no console, MongoDB e Neo4j fora do ar e, abaixo
+  da tabela de estados, os comandos que os iniciam.}
   \label{fig:gui-verificacao}
   \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026).}
