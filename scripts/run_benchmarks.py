@@ -133,6 +133,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help=f"Comma-separated write-batch sizes in rows, each from {MIN_BATCH_LINES} "
                              f"to {MAX_BATCH_LINES} (default: {DEFAULT_BATCH_LINES}). Crossed with "
                              "--chunk-sizes: every pair is another cell of the matrix.")
+    parser.add_argument("--auto-chunks-from", type=Path, default=None,
+                        help="Campaign JSON (benchmark_run_*.json or a checkpoint) whose "
+                             "automatic blocks (metadata 'auto_chunks') this matrix reuses "
+                             "instead of resolving them again: the memory campaign then "
+                             "measures the blocks the timing campaign measured. Needs "
+                             "--chunk-sizes auto.")
     parser.add_argument("--seed", type=int, default=42, help="Generator seed (default: 42).")
     parser.add_argument("--no-trace-memory", dest="trace_memory", action="store_false",
                         help="Do not run imports under tracemalloc. peak_memory_mb is then "
@@ -177,6 +183,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                  "batch_sizes": batch_sizes})
     if chunk_sizes is None:
         meta["auto_chunks"] = {}
+    if args.auto_chunks_from is not None:
+        if chunk_sizes is None:
+            saved = json.loads(args.auto_chunks_from.read_text(encoding="utf-8"))
+            meta["auto_chunks"].update((saved.get("metadata") or {}).get("auto_chunks") or {})
+            meta["auto_chunks_from"] = str(args.auto_chunks_from)
+        else:
+            logging.getLogger(__name__).error(
+                "--auto-chunks-from reuses automatic blocks; it needs --chunk-sizes auto."
+            )
+            return 2
 
     # The results CSV is only appended after the whole matrix ran: refuse an
     # old one now, not hours from now.

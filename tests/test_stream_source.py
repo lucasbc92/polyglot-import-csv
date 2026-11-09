@@ -265,3 +265,12 @@ def test_source_memory_mb_of_a_header_only_file_is_zero(tmp_path):
     path = tmp_path / "empty.csv"
     path.write_text("id,name\n", encoding="utf-8")
     assert ss.source_memory_mb("empty", path) == 0.0
+
+
+def test_a_block_of_the_whole_source_rounded_up_reads_it_in_one_chunk(tmp_path):
+    import math
+    path = tmp_path / "items.csv"
+    lines = ["id,name,price"] + [f"{i:05d},product number {i:05d},{i % 100:02d}.50" for i in range(5000)]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    block = math.ceil(ss.source_memory_mb("items", path))
+    assert ss.chunk_rows("items", path, block) >= 5000

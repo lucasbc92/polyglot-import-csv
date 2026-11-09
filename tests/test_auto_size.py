@@ -9,7 +9,7 @@ from polyglotimportcsv.stream_source import source_memory_mb
 
 def test_whole_source_wins_when_memory_allows():  # 131072 rows on the campaign machine
     c = choose_chunk_mb(95.5, 29.9, 890.0)
-    assert c.mb == 95
+    assert c.mb == 96  # rounded up, so the source fits in one block
     assert "largest source read whole (95.5 MB)" in c.reason
     assert "890 MB free" in c.reason
 
@@ -22,6 +22,22 @@ def test_free_memory_limits_the_block():  # 262144 rows on the campaign machine
 
 def test_more_memory_reads_the_larger_source_whole():
     assert choose_chunk_mb(191.0, 60.3, 2048.0).mb == 191
+
+
+def test_a_whole_source_block_is_rounded_up():
+    # 17.91 MB rounded down to 17 read the source in two blocks (final review, etapa 2).
+    assert choose_chunk_mb(17.91, 30.0, 890.0).mb == 18
+
+
+def test_a_memory_limited_block_is_rounded_down():
+    c = choose_chunk_mb(191.0, 60.3, 890.0)  # limit 56.6 MB
+    assert c.mb == 56
+
+
+def test_rounding_up_never_crosses_the_memory_limit():
+    # whole 56.3 MB, limit 56.6 MB: 57 would exceed the limit, so the limit decides.
+    c = choose_chunk_mb(56.3, 60.3, 890.0)
+    assert c.mb == 56 and "limited by free memory" in c.reason
 
 
 def test_source_larger_than_the_maximum_gets_256():

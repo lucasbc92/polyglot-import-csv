@@ -78,3 +78,25 @@ def test_run_matrix_accepts_the_largest_block_and_rejects_the_next(tmp_path):
     with pytest.raises(ValueError, match=r"chunk size\(s\) out of range: 257"):
         _matrix(tmp_path, [MAX_CHUNK_MB + 1], seen)
     assert seen == [16, 256]  # nothing ran
+
+
+def test_auto_chunks_from_reuses_the_blocks_of_another_campaign(monkeypatch, tmp_path):
+    """The memory campaign must measure the blocks the timing campaign measured."""
+    blocks = {"1000/multi": {"chunk_mb": 40, "reason": "auto: x", "free_memory_mb": 900.0}}
+    source = tmp_path / "timings.json"
+    source.write_text(json.dumps({"metadata": {"auto_chunks": blocks}}), encoding="utf-8")
+    captured = _run_main(monkeypatch, tmp_path, ["--auto-chunks-from", str(source)])
+    assert captured["chunk_sizes"] is None
+    assert captured["auto_chunks"] == blocks
+    meta = _saved_metadata(tmp_path)
+    assert meta["auto_chunks"] == blocks
+    assert meta["auto_chunks_from"] == str(source)
+
+
+def test_auto_chunks_from_needs_the_automatic_block(monkeypatch, tmp_path):
+    source = tmp_path / "timings.json"
+    source.write_text(json.dumps({"metadata": {"auto_chunks": {}}}), encoding="utf-8")
+    monkeypatch.setattr(rb, "run_matrix", lambda **kwargs: [])
+    code = rb.main(["--auto-chunks-from", str(source), "--chunk-sizes", "64",
+                    "--sizes", "1000", "--out", str(tmp_path / "out")])
+    assert code == 2

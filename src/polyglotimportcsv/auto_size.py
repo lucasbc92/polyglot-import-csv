@@ -13,6 +13,7 @@ peaks; ``FREE_MEMORY_FRACTION`` is a chosen margin, not a measurement.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
@@ -45,16 +46,24 @@ def choose_chunk_mb(
 ) -> AutoChunk:
     """The block that reads the largest source whole, capped at ``MAX_CHUNK_MB`` and
     by the safety limit of the free memory, within ``[MIN_CHUNK_MB, MAX_CHUNK_MB]``.
+    A block that reads the source whole is rounded up to whole MB; any other, down.
 
     ``free_mb`` of ``None`` (unreadable) drops the safety limit.
     """
     candidates = [(largest_source_mb, "whole"), (float(MAX_CHUNK_MB), "max")]
+    limit = None
     if free_mb is not None:
         base = PEAK_BASE_MB + PEAK_BASE_PER_DISK_MB * sources_disk_mb
         limit = (FREE_MEMORY_FRACTION * free_mb - base) / PEAK_MB_PER_CHUNK_MB
         candidates.append((limit, "limit"))
     # min() keeps the first of equal values, so a tie goes to reading the source whole.
     raw, binding = min(candidates, key=lambda c: c[0])
+    # The whole-source block is rounded up, so the source fits in one block; the other
+    # bounds are rounded down, so the block never crosses them. When rounding up would
+    # cross the memory limit, the limit decides.
+    if binding == "whole" and limit is not None and math.ceil(raw) > limit:
+        raw, binding = limit, "limit"
+    rounded = math.ceil(raw) if binding == "whole" else math.floor(raw)
     if binding == "whole":
         core = f"auto: largest source read whole ({largest_source_mb:.1f} MB)"
     elif binding == "limit":
@@ -67,7 +76,7 @@ def choose_chunk_mb(
     if raw < MIN_CHUNK_MB:
         core += f" (raised to the {MIN_CHUNK_MB} MB minimum)"
     suffix = f"; {free_mb:.0f} MB free" if free_mb is not None else "; free memory unknown"
-    mb = int(min(max(raw, MIN_CHUNK_MB), MAX_CHUNK_MB))
+    mb = int(min(max(rounded, MIN_CHUNK_MB), MAX_CHUNK_MB))
     return AutoChunk(mb, core + suffix)
 
 

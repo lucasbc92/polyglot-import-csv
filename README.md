@@ -219,8 +219,10 @@ Every size is another cell of the matrix, which is how a campaign compares memor
 time across chunk sizes. The default, `auto`, is the block the CLI would choose,
 resolved once per (size, mode) when the matrix starts, with one reading of the free
 memory, and saved in the metadata (`auto_chunks`) so that every repetition, and a
-`--resume`, measures the same block. `--batch-sizes` does the same for the write
-batch (default `2048`; each from 512 to 8192):
+`--resume`, measures the same block; `--auto-chunks-from <campaign JSON>` reuses the
+blocks of another campaign, so a memory campaign measures the blocks its timing
+campaign measured. `--batch-sizes` lists the write batches to measure (default `2048`;
+each from 512 to 8192):
 
     python scripts/run_benchmarks.py --sizes 100000 --modes multi \
       --chunk-sizes 16,64,256 --repetitions 3 --out benchmarks/chunk-sizes
@@ -500,8 +502,10 @@ precedida de uma limpeza, então cada medição é uma carga a frio:
 memória e tempo entre tamanhos de bloco. O padrão, `auto`, é o bloco que a CLI
 escolheria, resolvido uma vez por (volume, modo) no início da matriz, com uma só
 leitura da memória livre, e salvo nos metadados (`auto_chunks`), para que todas as
-repetições, e um `--resume`, meçam o mesmo bloco. `--batch-sizes` faz o mesmo com o
-lote de gravação (padrão `2048`; cada um de 512 a 8192):
+repetições, e um `--resume`, meçam o mesmo bloco; `--auto-chunks-from <JSON de uma
+campanha>` reaproveita os blocos de outra campanha, para que a campanha de memória meça
+os blocos que a de tempo mediu. `--batch-sizes` lista os lotes de gravação a medir
+(padrão `2048`; cada um de 512 a 8192):
 
     python scripts/run_benchmarks.py --sizes 100000 --modes multi \
       --chunk-sizes 16,64,256 --repetitions 3 --out benchmarks/chunk-sizes
