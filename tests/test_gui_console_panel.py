@@ -15,7 +15,7 @@ def test_command_is_read_only_by_default(qtbot):
     assert panel.command_edit.isReadOnly()
     assert panel.is_editing() is False
     assert panel.command_text() == "polyglotimportcsv --config a.json"
-    assert "somente leitura" in panel.badge_label.text()
+    assert "read-only" in panel.badge_label.text()
 
 
 def test_entering_edit_mode_unlocks_the_text(qtbot):
@@ -26,7 +26,7 @@ def test_entering_edit_mode_unlocks_the_text(qtbot):
     assert blocker.args == [True]
     assert panel.is_editing() is True
     assert not panel.command_edit.isReadOnly()
-    assert panel.edit_button.text() == "Voltar ao formulário"
+    assert panel.edit_button.text() == "Back to the form"
 
 
 def test_leaving_edit_mode_restores_the_generated_command_after_confirmation(qtbot):
@@ -63,7 +63,7 @@ def test_cancelling_the_confirmation_keeps_the_edited_command(qtbot):
     assert panel.is_editing() is True
     assert panel.command_text() == "qualquer coisa"
     assert changes == []
-    assert panel.edit_button.text() == "Voltar ao formulário"
+    assert panel.edit_button.text() == "Back to the form"
 
 
 def test_leaving_edit_mode_unchanged_does_not_ask(qtbot):
@@ -97,12 +97,12 @@ def test_running_state_swaps_the_button(qtbot):
     panel = ConsolePanel()
     qtbot.addWidget(panel)
     panel.set_running(True)
-    assert "Interromper" in panel.run_button.text()
+    assert "Stop" in panel.run_button.text()
     assert not panel.edit_button.isEnabled()
     with qtbot.waitSignal(panel.stop_requested, timeout=1000):
         panel.run_button.click()
     panel.set_running(False)
-    assert "Executar" in panel.run_button.text()
+    assert "Run" in panel.run_button.text()
     assert panel.edit_button.isEnabled()
 
 
@@ -245,7 +245,7 @@ def test_set_editing_is_ignored_while_running(qtbot):
     panel.set_editing(True)
     assert panel.is_editing() is False
     assert panel.command_edit.isReadOnly()
-    assert "em execução" in panel.badge_label.text()
+    assert "running" in panel.badge_label.text()
 
 
 # -- fix round 2: edit mode governs the run button, and the launcher prefix
@@ -327,7 +327,7 @@ def test_typed_text_is_coloured_too(qtbot):
 def test_save_log_starts_disabled(qtbot):
     panel = ConsolePanel()
     qtbot.addWidget(panel)
-    assert panel.save_log_button.text() == "Salvar log…"
+    assert panel.save_log_button.text() == "Save log…"
     assert not panel.save_log_button.isEnabled()
 
 

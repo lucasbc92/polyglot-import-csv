@@ -24,22 +24,23 @@ from PySide6.QtWidgets import (
 from polyglotimportcsv.gui.preflight import COMBINED, MULTI
 
 HINT = (
-    "Deixe a tabela vazia para usar os caminhos declarados no bloco \"sources\" "
-    "da configuração de importação. O nome de cada fonte é deduzido do arquivo "
-    "escolhido e pode ser corrigido na tabela."
+    "Leave the table empty to use the paths declared in the \"sources\" block of "
+    "the import configuration. Each file chosen here replaces the path of the source "
+    "with the same name; the name is taken from the file and can be corrected in "
+    "the table."
 )
-CSV_FILTER = "CSV (*.csv);;Todos (*)"
-NO_CONFIG_TEXT = "Escolha a configuração de importação para anexar fontes."
-MULTI_TEXT = "Configuração multifonte: um CSV por conjunto de dados."
-COMBINED_TEXT = "Configuração combinada: um único CSV."
-ONE_FILE_ERROR = "A configuração combinada aceita um único arquivo CSV."
-FOLDER_COMBINED_TIP = "Uma configuração combinada lê um único arquivo; escolha-o com o botão ao lado."
+CSV_FILTER = "CSV (*.csv);;All files (*)"
+NO_CONFIG_TEXT = "Choose the import configuration to attach CSV files."
+MULTI_TEXT = "Multi-source configuration: one CSV per data set."
+COMBINED_TEXT = "Combined configuration: a single CSV."
+ONE_FILE_ERROR = "The combined configuration takes a single CSV file."
+FOLDER_COMBINED_TIP = "A combined configuration reads a single file; choose it with the button beside."
 
 
 class CsvDropTable(QTableWidget):
     """The sources table: accepts files dropped on it, and says so while empty."""
 
-    PLACEHOLDER = "Arraste arquivos CSV para cá ou use os botões acima"
+    PLACEHOLDER = "Drop CSV files here or use the buttons above"
 
     paths_dropped = Signal(list)
 
@@ -90,7 +91,7 @@ class SourcesPanel(QGroupBox):
     changed = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super().__init__("Fontes CSV — sobrescrita de caminhos (--source)", parent)
+        super().__init__("CSV files (--source)", parent)
         #: preflight.MULTI, preflight.COMBINED, or None while no valid import
         #: configuration is chosen. Without one, nothing can be added: an
         #: override only makes sense against the sources it declares.
@@ -99,7 +100,7 @@ class SourcesPanel(QGroupBox):
         self._known = None  # type: Optional[Dict[str, str]]
 
         self.table = CsvDropTable(self)
-        self.table.setHorizontalHeaderLabels(["Nome da fonte", "Arquivo CSV"])
+        self.table.setHorizontalHeaderLabels(["Source name", "CSV file"])
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -115,13 +116,13 @@ class SourcesPanel(QGroupBox):
         self.choose_files = self._ask_for_files
         self.choose_folder = self._ask_for_folder
 
-        self.add_button = QPushButton("+ Adicionar arquivos", self)
-        self.add_button.setToolTip("Escolher um ou mais arquivos CSV")
-        self.add_folder_button = QPushButton("+ Adicionar pasta", self)
+        self.add_button = QPushButton("+ Add files", self)
+        self.add_button.setToolTip("Choose one or more CSV files")
+        self.add_folder_button = QPushButton("+ Add folder", self)
         self.add_folder_button.setToolTip(
-            "Anexar de uma vez todos os arquivos .csv de uma pasta"
+            "Attach every .csv file of a folder at once"
         )
-        self.remove_button = QPushButton("− Remover", self)
+        self.remove_button = QPushButton("− Remove", self)
         self.add_button.clicked.connect(self.add_files)
         self.add_folder_button.clicked.connect(self.add_folder)
         self.remove_button.clicked.connect(self.remove_selected_rows)
@@ -203,17 +204,17 @@ class SourcesPanel(QGroupBox):
             messages = []
             if ignored_files:
                 messages.append(
-                    "{0} arquivo ignorado (não é CSV)".format(ignored_files)
+                    "{0} file ignored (not a CSV)".format(ignored_files)
                     if ignored_files == 1
-                    else "{0} arquivos ignorados (não são CSV)".format(ignored_files)
+                    else "{0} files ignored (not CSVs)".format(ignored_files)
                 )
             if ignored_folders:
                 messages.append(
-                    "{0} pasta ignorada (a configuração combinada aceita um único "
-                    "arquivo)".format(ignored_folders)
+                    "{0} folder ignored (the combined configuration takes a single "
+                    "file)".format(ignored_folders)
                     if ignored_folders == 1
-                    else "{0} pastas ignoradas (a configuração combinada aceita um "
-                    "único arquivo)".format(ignored_folders)
+                    else "{0} folders ignored (the combined configuration takes a "
+                    "single file)".format(ignored_folders)
                 )
             self.error_label.setText("  ·  ".join(messages))
         return added
@@ -309,13 +310,13 @@ class SourcesPanel(QGroupBox):
         self.kind_label.setText(
             {MULTI: MULTI_TEXT, COMBINED: COMBINED_TEXT}.get(self._kind, NO_CONFIG_TEXT)
         )
-        self.add_button.setText("+ Adicionar arquivo" if combined else "+ Adicionar arquivos")
+        self.add_button.setText("+ Add file" if combined else "+ Add files")
         self.add_button.setToolTip(
-            "Escolher o arquivo CSV combinado" if combined else "Escolher um ou mais arquivos CSV"
+            "Choose the combined CSV file" if combined else "Choose one or more CSV files"
         )
         self.add_folder_button.setToolTip(
             FOLDER_COMBINED_TIP if combined
-            else "Anexar de uma vez todos os arquivos .csv de uma pasta"
+            else "Attach every .csv file of a folder at once"
         )
         self.table.setSelectionMode(
             QAbstractItemView.SingleSelection if combined else QAbstractItemView.ExtendedSelection
@@ -373,17 +374,17 @@ class SourcesPanel(QGroupBox):
     def _ask_for_files(self) -> Sequence[str]:
         if self._kind == COMBINED:
             chosen, _ = QFileDialog.getOpenFileName(
-                self, "Escolher o arquivo CSV combinado", self._start_directory(), CSV_FILTER
+                self, "Choose the combined CSV file", self._start_directory(), CSV_FILTER
             )
             return [chosen] if chosen else []
         chosen, _ = QFileDialog.getOpenFileNames(
-            self, "Escolher arquivos CSV", self._start_directory(), CSV_FILTER
+            self, "Choose CSV files", self._start_directory(), CSV_FILTER
         )
         return chosen
 
     def _ask_for_folder(self) -> str:
         return QFileDialog.getExistingDirectory(
-            self, "Escolher a pasta com os arquivos CSV", self._start_directory()
+            self, "Choose the folder with the CSV files", self._start_directory()
         )
 
     def _cell(self, row: int, column: int) -> str:
@@ -397,7 +398,7 @@ class SourcesPanel(QGroupBox):
         if item.column() != 1:
             return
         chosen, _ = QFileDialog.getOpenFileName(
-            self, "Escolher o arquivo CSV", item.text(), CSV_FILTER
+            self, "Choose the CSV file", item.text(), CSV_FILTER
         )
         if chosen:
             item.setText(str(Path(chosen)))

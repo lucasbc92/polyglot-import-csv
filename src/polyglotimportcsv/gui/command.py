@@ -51,7 +51,7 @@ def build_argv(options: RunOptions) -> List[str]:
 
 
 def build_check_argv(options: RunOptions) -> List[str]:
-    """Arguments of "Verificar SGBDs": what ``--check-dbms`` reads, nothing else."""
+    """Arguments of "Check DBMSs": what ``--check-dbms`` reads, nothing else."""
     argv = []  # type: List[str]
     if options.config_path is not None:
         argv += ["--config", str(options.config_path)]

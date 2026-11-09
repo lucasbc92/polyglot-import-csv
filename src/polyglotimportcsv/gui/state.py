@@ -45,7 +45,7 @@ class RunOptions:
 
 
 def _missing(path: Path) -> str:
-    return "Arquivo não encontrado: {0}".format(path)
+    return "File not found: {0}".format(path)
 
 
 def validate(options: RunOptions) -> Dict[str, str]:
@@ -53,7 +53,7 @@ def validate(options: RunOptions) -> Dict[str, str]:
     errors = {}  # type: Dict[str, str]
 
     if options.config_path is None:
-        errors["config_path"] = "Selecione a configuração de importação."
+        errors["config_path"] = "Choose the import configuration."
     elif not options.config_path.is_file():
         errors["config_path"] = _missing(options.config_path)
 
@@ -62,24 +62,24 @@ def validate(options: RunOptions) -> Dict[str, str]:
 
     for name in options.only:
         if name not in DBMS_NAMES:
-            errors["only"] = "SGBD desconhecido: {0}".format(name)
+            errors["only"] = "Unknown DBMS: {0}".format(name)
             break
 
     if options.show_data is None and not 1 <= options.sample_size <= MAX_SAMPLE_SIZE:
-        errors["sample_size"] = "O tamanho da amostra deve estar entre 1 e {0}.".format(
+        errors["sample_size"] = "The sample size must be between 1 and {0}.".format(
             MAX_SAMPLE_SIZE
         )
 
     seen = set()
     for name, path in options.sources:
         if not name:
-            errors["sources"] = "O nome da fonte não pode ficar vazio."
+            errors["sources"] = "The source name cannot be empty."
             break
         if "=" in name:
-            errors["sources"] = "O nome da fonte não pode conter '=': {0}".format(name)
+            errors["sources"] = "The source name cannot contain '=': {0}".format(name)
             break
         if name in seen:
-            errors["sources"] = "Nome de fonte repetido: {0}".format(name)
+            errors["sources"] = "Repeated source name: {0}".format(name)
             break
         seen.add(name)
         if not path.is_file():

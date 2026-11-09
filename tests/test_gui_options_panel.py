@@ -60,18 +60,18 @@ def test_options_panel_has_no_size_controls(qtbot):
         assert not hasattr(panel, name)
     # The only radios left are the three ways of showing data.
     assert {button.text() for button in panel.findChildren(QRadioButton)} == {
-        "Amostra (--sample)", "Todos os dados (--show-data)", "Nenhum dado (--no-data)",
+        "Sample (--sample)", "All rows (--show-data)", "No data (--no-data)",
     }
     flag_labels = {label.text() for label in panel.findChildren(QLabel) if "(--" in label.text()}
-    assert flag_labels == {"Bancos de dados (--only)", "Nível de log (--log-level)"}
+    assert flag_labels == {"Databases (--only)", "Log level (--log-level)"}
 
 
 def test_data_display_modes_and_labels(qtbot):
     panel = OptionsPanel()
     qtbot.addWidget(panel)
-    assert panel.show_data_buttons["sample"].text() == "Amostra (--sample)"
-    assert panel.show_data_buttons["all"].text() == "Todos os dados (--show-data)"
-    assert panel.show_data_buttons["none"].text() == "Nenhum dado (--no-data)"
+    assert panel.show_data_buttons["sample"].text() == "Sample (--sample)"
+    assert panel.show_data_buttons["all"].text() == "All rows (--show-data)"
+    assert panel.show_data_buttons["none"].text() == "No data (--no-data)"
     panel.show_data_buttons["all"].setChecked(True)
     assert panel.show_data() is True
     panel.show_data_buttons["none"].setChecked(True)
@@ -112,17 +112,17 @@ def test_every_unclear_option_has_a_help_badge(qtbot):
         "dry_run", "log_level", "show_data",
     }
     assert panel.info_badges["dry_run"].toolTip() == (
-        "Faz todas as verificações, inclusive a leitura dos dados, e mostra quantos "
-        "registros iriam para cada destino, sem conectar a nenhum SGBD."
+        "Runs every check, including the read of the data rows, and shows how many "
+        "records would go to each target, without connecting to any DBMS."
     )
-    assert "lento" in panel.info_badges["show_data"].toolTip()
+    assert "slow" in panel.info_badges["show_data"].toolTip()
 
 
 def test_sample_size_errors_are_shown(qtbot):
     panel = OptionsPanel()
     qtbot.addWidget(panel)
-    panel.set_errors({"sample_size": "O tamanho da amostra deve estar entre 1 e 1000000."})
-    assert "amostra" in panel.error_label.text()
+    panel.set_errors({"sample_size": "The sample size must be between 1 and 1000000."})
+    assert "sample size" in panel.error_label.text()
 
 
 def test_log_level_combo(qtbot):

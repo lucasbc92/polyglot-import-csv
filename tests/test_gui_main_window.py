@@ -87,7 +87,7 @@ def test_run_is_disabled_until_the_form_is_valid(window, config_files):
 
 def test_validation_errors_reach_the_panels(window, tmp_path):
     window.config_panel.set_paths(tmp_path / "ausente.json", None)
-    assert "Arquivo não encontrado" in window.config_panel.error_label.text()
+    assert "File not found" in window.config_panel.error_label.text()
 
 
 def test_edit_mode_disables_the_form(window, config_files):
@@ -128,7 +128,7 @@ def test_reactivating_the_window_reruns_preflight_after_an_external_fix(window, 
 def test_reactivating_the_window_does_not_refresh_while_a_run_is_in_progress(
     window, config_files, monkeypatch
 ):
-    """The Run button doubles as Interromper while a process runs; a
+    """The Run button doubles as Stop while a process runs; a
     reactivation-triggered refresh must not touch the form then."""
     cfg, dbms = config_files
     window.config_panel.set_paths(cfg, dbms)
@@ -241,14 +241,14 @@ def test_finishing_with_zero_sets_a_success_status(window, config_files):
     cfg, _ = config_files
     window.config_panel.set_paths(cfg, None)
     window._on_finished(0)
-    assert "Concluído" in window.status_label.text()
+    assert "Finished" in window.status_label.text()
 
 
 def test_finishing_with_non_zero_sets_an_error_status(window, config_files):
     cfg, _ = config_files
     window.config_panel.set_paths(cfg, None)
     window._on_finished(2)
-    assert "código de saída 2" in window.status_label.text()
+    assert "exit code 2" in window.status_label.text()
 
 
 # The real shape printed by reporting.kv("Log file", log_path): a leading
@@ -320,7 +320,7 @@ def test_on_run_rejects_unbalanced_quotes_in_edit_mode(window, config_files):
     window.console_panel.set_editing(True)
     window.console_panel.command_edit.setPlainText('polyglotimportcsv --config "C:\\a b.json')
     window.on_run()
-    assert "inválido" in window.status_label.text().lower()
+    assert "invalid" in window.status_label.text().lower()
     assert not window.process.is_running()
 
 
@@ -343,7 +343,7 @@ def test_a_full_run_shows_the_child_output_in_the_console(qtbot, window, config_
 
     The whole chain had never been exercised: every earlier test called
     on_run() only on its rejection path or poked _on_finished() directly, so
-    a run whose console stayed completely blank still reported "Concluído"
+    a run whose console stayed completely blank still reported "Finished"
     and passed. This test asserts the child's own text is visible, which is
     what C1 (CRLF wiping every line) made false.
     """
@@ -359,7 +359,7 @@ def test_a_full_run_shows_the_child_output_in_the_console(qtbot, window, config_
     with qtbot.waitSignal(window.process.finished, timeout=15000) as blocker:
         window.on_run()
     assert blocker.args == [0]
-    qtbot.waitUntil(lambda: "Concluído" in window.status_label.text(), timeout=5000)
+    qtbot.waitUntil(lambda: "Finished" in window.status_label.text(), timeout=5000)
 
     text = window.console_panel.log_view.toPlainText()
     assert "primeira linha" in text
@@ -369,7 +369,7 @@ def test_a_full_run_shows_the_child_output_in_the_console(qtbot, window, config_
     assert "progresso 10%" not in text
     # And no line the child wrote was erased by its own CRLF terminator.
     body = [line for line in text.splitlines() if line.strip()]
-    assert len(body) >= 4  # "Executando: …" plus the three child lines
+    assert len(body) >= 4  # "Running: …" plus the three child lines
 
 
 def test_a_full_run_re_enables_the_form_and_clears_the_running_badge(
@@ -387,9 +387,9 @@ def test_a_full_run_re_enables_the_form_and_clears_the_running_badge(
 
     with qtbot.waitSignal(window.process.finished, timeout=15000):
         window.on_run()
-    qtbot.waitUntil(lambda: "código de saída 3" in window.status_label.text(), timeout=5000)
+    qtbot.waitUntil(lambda: "exit code 3" in window.status_label.text(), timeout=5000)
     assert window.config_panel.isEnabled()
-    assert "Executar" in window.console_panel.run_button.text()
+    assert "Run" in window.console_panel.run_button.text()
 
 
 # -- Task 9: preflight, source kind, save log, clickable path --------------
@@ -408,7 +408,7 @@ def test_choosing_a_config_tells_the_sources_card_its_kind(window, config_files)
     assert not window.sources_panel.add_button.isEnabled()
     window.config_panel.set_paths(cfg, None)
     assert window.sources_panel.add_button.isEnabled()
-    assert "multifonte" in window.sources_panel.kind_label.text()
+    assert "Multi-source" in window.sources_panel.kind_label.text()
 
 
 def test_switching_to_a_combined_config_keeps_rows_and_blocks_the_run(
@@ -433,7 +433,7 @@ def test_switching_to_a_combined_config_keeps_rows_and_blocks_the_run(
     assert window.sources_panel.table.rowCount() == 2, "nothing is thrown away"
     assert not window.sources_panel.add_button.isEnabled()
     assert window.sources_panel.error_label.text() == (
-        "A configuração combinada aceita um único arquivo CSV."
+        "The combined configuration takes a single CSV file."
     )
     assert not window.console_panel.run_button.isEnabled()
 
@@ -557,10 +557,10 @@ def test_a_passing_check_says_so_in_the_status_bar(qtbot, window, config_files, 
     cfg, dbms = config_files
     window.config_panel.set_paths(cfg, dbms)
     _run_fake_check(qtbot, window, monkeypatch, 0)
-    qtbot.waitUntil(lambda: "Todos os SGBDs estão respondendo" in window.status_label.text(),
+    qtbot.waitUntil(lambda: "All DBMSs are answering" in window.status_label.text(),
                     timeout=5000)
     text = window.console_panel.log_view.toPlainText()
-    assert text.startswith("Verificando: polyglotimportcsv")
+    assert text.startswith("Checking: polyglotimportcsv")
     assert "--check-dbms" in text.splitlines()[0]
     assert "primeira linha" in text  # the child's own output follows
 
@@ -569,9 +569,9 @@ def test_a_failing_check_says_so_in_the_status_bar(qtbot, window, config_files, 
     cfg, dbms = config_files
     window.config_panel.set_paths(cfg, dbms)
     _run_fake_check(qtbot, window, monkeypatch, 1)
-    qtbot.waitUntil(lambda: "Verificação não passou" in window.status_label.text(), timeout=5000)
+    qtbot.waitUntil(lambda: "Check failed" in window.status_label.text(), timeout=5000)
     assert window.config_panel.isEnabled()
-    assert "Executar" in window.console_panel.run_button.text()
+    assert "Run" in window.console_panel.run_button.text()
 
 
 def test_a_run_after_a_check_reports_like_a_run(window, config_files):
@@ -579,9 +579,9 @@ def test_a_run_after_a_check_reports_like_a_run(window, config_files):
     window.config_panel.set_paths(cfg, None)
     window._checking = True
     window._on_finished(1)
-    assert "Verificação não passou" in window.status_label.text()
+    assert "Check failed" in window.status_label.text()
     window._on_finished(0)
-    assert "Concluído" in window.status_label.text()
+    assert "Finished" in window.status_label.text()
 
 
 def test_stopping_a_check_does_not_ask_for_confirmation(window, monkeypatch):

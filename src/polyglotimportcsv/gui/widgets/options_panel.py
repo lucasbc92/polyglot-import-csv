@@ -31,24 +31,24 @@ from polyglotimportcsv.gui.state import (
 from polyglotimportcsv.gui.widgets.info_badge import InfoBadge
 
 SHOW_DATA_CHOICES = (
-    ("sample", "Amostra (--sample)"),
-    ("all", "Todos os dados (--show-data)"),
-    ("none", "Nenhum dado (--no-data)"),
+    ("sample", "Sample (--sample)"),
+    ("all", "All rows (--show-data)"),
+    ("none", "No data (--no-data)"),
 )
 _SHOW_DATA_VALUES = {"sample": None, "all": True, "none": False}
 
 HELP = {
     "dry_run": (
-        "Faz todas as verificações, inclusive a leitura dos dados, e mostra quantos "
-        "registros iriam para cada destino, sem conectar a nenhum SGBD."
+        "Runs every check, including the read of the data rows, and shows how many "
+        "records would go to each target, without connecting to any DBMS."
     ),
     "log_level": (
-        "Quanto detalhe aparece no console. O arquivo de log da sessão sempre registra "
-        "tudo (DEBUG)."
+        "How much detail the console shows. The session log file always records "
+        "everything (DEBUG)."
     ),
     "show_data": (
-        "Amostra: as primeiras N linhas de cada entidade. Todos os dados: todas as "
-        "linhas; lento em arquivos grandes. Nenhum dado: só as contagens."
+        "Sample: the first N rows of each entity. All rows: every row; slow on large "
+        "files. No data: only the counts."
     ),
 }
 
@@ -62,23 +62,23 @@ class OptionsPanel(QGroupBox):
     changed = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super().__init__("Opções de execução", parent)
+        super().__init__("Run options", parent)
         self.dbms_boxes = {}  # type: Dict[str, QCheckBox]
         self.show_data_buttons = {}  # type: Dict[str, QRadioButton]
         self.info_badges = {}  # type: Dict[str, InfoBadge]
         self._groups = []  # type: List[QButtonGroup]
 
         layout = QGridLayout(self)
-        layout.addWidget(QLabel("Bancos de dados (--only)", self), 0, 0)
+        layout.addWidget(QLabel("Databases (--only)", self), 0, 0)
         layout.addLayout(self._build_dbms_row(), 0, 1)
 
-        self.dry_run_box = QCheckBox("Simulação (--dry-run)", self)
+        self.dry_run_box = QCheckBox("Dry run (--dry-run)", self)
         self.dry_run_box.toggled.connect(self.changed)
         modifiers = QHBoxLayout()
         modifiers.addWidget(self.dry_run_box)
         modifiers.addWidget(self._badge("dry_run"))
         modifiers.addStretch(1)
-        layout.addWidget(QLabel("Modificadores", self), 1, 0)
+        layout.addWidget(QLabel("Modifiers", self), 1, 0)
         layout.addLayout(modifiers, 1, 1)
 
         self.log_combo = QComboBox(self)
@@ -89,10 +89,10 @@ class OptionsPanel(QGroupBox):
         log_row.addWidget(self.log_combo)
         log_row.addWidget(self._badge("log_level"))
         log_row.addStretch(1)
-        layout.addWidget(QLabel("Nível de log (--log-level)", self), 2, 0)
+        layout.addWidget(QLabel("Log level (--log-level)", self), 2, 0)
         layout.addLayout(log_row, 2, 1)
 
-        layout.addWidget(QLabel("Exibição de dados", self), 3, 0)
+        layout.addWidget(QLabel("Data display", self), 3, 0)
         layout.addLayout(self._build_show_data_row(), 3, 1)
 
         self.error_label = QLabel("", self)
@@ -156,7 +156,7 @@ class OptionsPanel(QGroupBox):
         self.sample_spin = QSpinBox(self)
         self.sample_spin.setRange(1, MAX_SAMPLE_SIZE)
         self.sample_spin.setValue(DEFAULT_SAMPLE_SIZE)
-        self.sample_spin.setToolTip("Linhas mostradas por entidade (--sample N)")
+        self.sample_spin.setToolTip("Rows shown per entity (--sample N)")
         self.sample_spin.valueChanged.connect(self.changed)
         for key, label in SHOW_DATA_CHOICES:
             button = QRadioButton(label, self)

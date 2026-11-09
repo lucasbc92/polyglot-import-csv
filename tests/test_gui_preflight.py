@@ -120,7 +120,7 @@ def test_an_override_naming_an_undeclared_source_is_reported(ecommerce):
     csv = ecommerce / "ecommerce_stock.csv"
     result = _check(ecommerce, sources=(("ecommerce_stock", csv),))
     assert result.errors["sources"] == (
-        "Fonte não declarada na configuração de importação: ecommerce_stock"
+        "Source not declared in the import configuration: ecommerce_stock"
     )
 
 
@@ -130,7 +130,7 @@ def test_a_combined_config_accepts_a_single_file(ecommerce):
         ecommerce, "import_config_combined.json",
         sources=(("ecommerce", join), ("outra", join)),
     )
-    assert result.errors["sources"] == "A configuração combinada aceita um único arquivo CSV."
+    assert result.errors["sources"] == "The combined configuration takes a single CSV file."
 
 
 def test_a_missing_declared_file_is_reported(ecommerce):
@@ -211,7 +211,7 @@ def test_a_non_utf8_import_config_is_reported_not_raised(ecommerce):
     text = path.read_text(encoding="utf-8").replace('"product_name"', '"descrição"', 1)
     path.write_bytes(text.encode("cp1252"))
     result = _check(ecommerce)
-    assert result.errors["config_path"].startswith("Não foi possível ler")
+    assert result.errors["config_path"].startswith("Could not read")
 
 
 def test_a_non_utf8_dbms_config_is_reported_not_raised(ecommerce):
@@ -219,7 +219,7 @@ def test_a_non_utf8_dbms_config_is_reported_not_raised(ecommerce):
     text = path.read_text(encoding="utf-8").replace("{", '{"nota": "descrição",', 1)
     path.write_bytes(text.encode("cp1252"))
     result = _check(ecommerce)
-    assert result.errors["dbms_config_path"].startswith("Não foi possível ler")
+    assert result.errors["dbms_config_path"].startswith("Could not read")
 
 
 def test_a_mixed_config_with_two_combined_files_uses_their_header_union(ecommerce):

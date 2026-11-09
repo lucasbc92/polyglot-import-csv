@@ -49,11 +49,11 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 # Bounds the tail kept across chunks while still hunting for the log path
 # line, in case readyReadStandardOutput ever splits it mid-token.
 _LOG_SEARCH_LIMIT = 4096
-IDLE_STATUS = "Pronto — nenhuma importação em execução"
-INVALID_EDIT_STATUS = "Comando inválido: aspas não fechadas"
-CHECK_OK_STATUS = "Todos os SGBDs estão respondendo"
-CHECK_FAILED_STATUS = "Verificação não passou — veja o console"
-#: Form fields whose errors block "Verificar SGBDs"; the other fields concern
+IDLE_STATUS = "Ready — no import running"
+INVALID_EDIT_STATUS = "Invalid command: unclosed quotes"
+CHECK_OK_STATUS = "All DBMSs are answering"
+CHECK_FAILED_STATUS = "Check failed — see the console"
+#: Form fields whose errors block "Check DBMSs"; the other fields concern
 #: the CSV sources, which the check does not read.
 CHECK_FIELDS = ("config_path", "dbms_config_path", "only")
 
@@ -114,7 +114,7 @@ class MainWindow(QMainWindow):
         self.status_label = QLabel(IDLE_STATUS, self)
         self.log_path_label = _PathLabel("", self)
         self.log_path_label.setCursor(Qt.PointingHandCursor)
-        self.log_path_label.setToolTip("Abrir a pasta do log")
+        self.log_path_label.setToolTip("Open the log folder")
         self.log_path_label.clicked.connect(self._open_log_folder)
         status = QStatusBar(self)
         status.addWidget(self.status_label, 1)
@@ -149,7 +149,7 @@ class MainWindow(QMainWindow):
 
         # I3 / §6.1: the resolved launcher prefix is the one divergence between
         # the command shown and the process spawned, and the spec mitigates it
-        # with a tooltip as well as the "Executando:" log line.
+        # with a tooltip as well as the "Running:" log line.
         self.console_panel.set_launcher_prefix(" ".join(launcher.resolve()))
 
         # Injection points, so tests never open a real dialog or file manager.
@@ -208,7 +208,7 @@ class MainWindow(QMainWindow):
         return prefix + command_module.build_argv(self.options())
 
     def argv_for_check(self) -> List[str]:
-        """Full argv of "Verificar SGBDs": launcher prefix plus the check arguments."""
+        """Full argv of "Check DBMSs": launcher prefix plus the check arguments."""
         return launcher.resolve() + command_module.build_check_argv(self.options())
 
     # -- running ----------------------------------------------------------
@@ -224,13 +224,13 @@ class MainWindow(QMainWindow):
             self.status_label.setText(INVALID_EDIT_STATUS)
             return
         self._checking = False
-        self._start(argv, "Executando: {0} …\n".format(" ".join(launcher.resolve())))
+        self._start(argv, "Running: {0} …\n".format(" ".join(launcher.resolve())))
 
     def on_check(self) -> None:
         argv = self.argv_for_check()
         shown = command_module.to_display(command_module.build_check_argv(self.options()))
         self._checking = True
-        self._start(argv, "Verificando: {0}\n".format(shown))
+        self._start(argv, "Checking: {0}\n".format(shown))
 
     def _start(self, argv: List[str], header: str) -> None:
         self.console_panel.clear_output()
@@ -254,9 +254,9 @@ class MainWindow(QMainWindow):
             return
         confirmed = QMessageBox.question(
             self,
-            "Interromper a importação",
-            "A importação pode parar pela metade e deixar dados parcialmente "
-            "gravados. Interromper mesmo assim?",
+            "Stop the import",
+            "The import may stop halfway and leave data partly written. "
+            "Stop anyway?",
         )
         if confirmed == QMessageBox.Yes:
             self.process.stop()
@@ -309,9 +309,9 @@ class MainWindow(QMainWindow):
             self._checking = False
             self.status_label.setText(CHECK_OK_STATUS if code == 0 else CHECK_FAILED_STATUS)
         elif code == 0:
-            self.status_label.setText("Concluído — {0:.2f} s".format(elapsed))
+            self.status_label.setText("Finished — {0:.2f} s".format(elapsed))
         else:
-            self.status_label.setText("Falhou — código de saída {0}".format(code))
+            self.status_label.setText("Failed — exit code {0}".format(code))
 
     def _on_failed(self, message: str) -> None:
         self._checking = False
@@ -324,7 +324,7 @@ class MainWindow(QMainWindow):
         # status, so nothing withheld by the renderer is lost.
         self.console_panel.flush_output()
         self.console_panel.append_output("\x1b[31m{0}\x1b[0m\n".format(message))
-        self.status_label.setText("Falhou — {0}".format(message))
+        self.status_label.setText("Failed — {0}".format(message))
 
     def _on_edit_mode_changed(self, editing: bool) -> None:
         self._set_form_enabled(not editing)
@@ -337,9 +337,9 @@ class MainWindow(QMainWindow):
 
     def _tick(self) -> None:
         elapsed = int(time.monotonic() - self._started_at)
-        verb = "Verificando" if self._checking else "Executando"
+        verb = "Checking" if self._checking else "Running"
         self.status_label.setText(
-            "{0} — {1:02d}:{2:02d} decorridos".format(verb, elapsed // 60, elapsed % 60)
+            "{0} — {1:02d}:{2:02d} elapsed".format(verb, elapsed // 60, elapsed % 60)
         )
 
     # -- internals --------------------------------------------------------
@@ -376,18 +376,18 @@ class MainWindow(QMainWindow):
         try:
             shutil.copyfile(str(source), target)
         except OSError as exc:
-            self.show_error("Não foi possível salvar o log: {0}".format(exc))
+            self.show_error("Could not save the log: {0}".format(exc))
             return
-        self.status_label.setText("Log salvo em {0}".format(target))
+        self.status_label.setText("Log saved to {0}".format(target))
 
     def _ask_log_destination(self, suggested: Path) -> str:
         chosen, _ = QFileDialog.getSaveFileName(
-            self, "Salvar log", suggested.name, "Log (*.log);;Todos (*)"
+            self, "Save log", suggested.name, "Log (*.log);;All files (*)"
         )
         return chosen
 
     def _show_error(self, message: str) -> None:
-        QMessageBox.warning(self, "Salvar log", message)
+        QMessageBox.warning(self, "Save log", message)
 
     def _open_log_folder(self) -> None:
         text = self.log_path_label.text()

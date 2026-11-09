@@ -10,7 +10,7 @@ would raise. Nothing is mocked.
 Figures 12-14 are one ``--dry-run``, so no database has to be up; figure 15
 never runs at all, because the pre-run validation blocks it.
 
-Figure 16 is a real ``--check-dbms`` run from the "Verificar SGBDs" button,
+Figure 16 is a real ``--check-dbms`` run from the "Check DBMSs" button,
 with the example stack up except MongoDB and Neo4j
 (``docker compose stop mongodb neo4j``); the script refuses to run otherwise.
 
@@ -175,7 +175,7 @@ def main() -> int:
         grab(failing, "figure15-gui-erro.png")
         failing.hide()
 
-        # Figure 16: "Verificar SGBDs" with the Windows connection file while
+        # Figure 16: "Check DBMSs" with the Windows connection file while
         # MongoDB and Neo4j are stopped: the states, the net start commands and
         # the status bar saying the check did not pass.
         checking = new_window(app, settings_path, CONFIG, DBMS_WINDOWS)
