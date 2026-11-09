@@ -7,6 +7,7 @@ an import into it: ``infer`` and ``validate`` once each, ``write`` once per DBMS
 from __future__ import annotations
 
 import platform
+import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime
@@ -62,6 +63,27 @@ class MetricsCollector:
 _CSV_FIELDS = ("timestamp", "dbms", "entity", "phase", "rows", "seconds", "rows_per_second")
 
 
+_PACKAGE_DIR = Path(__file__).resolve().parent
+
+
+def _git(*args: str) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=_PACKAGE_DIR, capture_output=True, text=True, check=False,
+    ).stdout.strip()
+
+
+def git_commit() -> Optional[str]:
+    """The commit of the code being measured: ``HEAD``, with ``-dirty`` when ``src/``
+    has uncommitted changes. ``None`` outside a git checkout or without git."""
+    try:
+        head = _git("rev-parse", "HEAD")
+        if not head:
+            return None
+        return head + ("-dirty" if _git("status", "--porcelain", "--", ":/src") else "")
+    except OSError:
+        return None
+
+
 def environment_metadata(
     config_path: "str | Path", source_rows: Dict[str, int]
 ) -> Dict[str, object]:
@@ -72,6 +94,7 @@ def environment_metadata(
         "platform": platform.platform(),
         "config": str(config_path),
         "source_rows": source_rows,
+        "git_commit": git_commit(),
     }
 
 

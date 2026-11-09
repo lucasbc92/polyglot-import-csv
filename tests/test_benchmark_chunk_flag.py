@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import run_benchmarks as rb  # noqa: E402
 
 from polyglotimportcsv import benchmark_runner as brun  # noqa: E402
-from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB  # noqa: E402
+from polyglotimportcsv.stream_source import MAX_CHUNK_MB, MIN_CHUNK_MB  # noqa: E402
 
 
 def _run_main(monkeypatch, tmp_path, argv):
@@ -37,10 +37,13 @@ def _saved_metadata(tmp_path):
     return json.loads(path.read_text(encoding="utf-8"))["metadata"]
 
 
-def test_chunk_sizes_default_to_the_default_block(monkeypatch, tmp_path):
+def test_chunk_sizes_default_to_the_automatic_block(monkeypatch, tmp_path):
     captured = _run_main(monkeypatch, tmp_path, [])
-    assert captured["chunk_sizes"] == [DEFAULT_CHUNK_MB] == [128]
-    assert _saved_metadata(tmp_path)["chunk_sizes"] == [128]
+    assert captured["chunk_sizes"] is None
+    assert captured["auto_chunks"] == {}
+    meta = _saved_metadata(tmp_path)
+    assert meta["chunk_sizes"] == "auto"
+    assert meta["auto_chunks"] == {}
 
 
 def test_chunk_sizes_flag_becomes_a_list_of_ints_for_the_matrix(monkeypatch, tmp_path):

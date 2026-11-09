@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional
 
 from polyglotimportcsv import benchmark_data
+from polyglotimportcsv.auto_size import AutoChunk, auto_chunk_mb
 from polyglotimportcsv.import_plan import DEFAULT_BATCH_LINES, MAX_BATCH_LINES, MIN_BATCH_LINES
 from polyglotimportcsv.metrics import MetricsCollector
 from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, MAX_CHUNK_MB, MIN_CHUNK_MB
@@ -89,7 +90,7 @@ def run_matrix(
     sizes: Iterable[int],
     modes: Iterable[str],
     repetitions: int,
-    chunk_sizes: Iterable[int] = (DEFAULT_CHUNK_MB,),
+    chunk_sizes: Optional[Iterable[int]] = (DEFAULT_CHUNK_MB,),
     batch_sizes: Iterable[int] = (DEFAULT_BATCH_LINES,),
     dbms_config_path: "Optional[str | Path]",
     config_dir: "str | Path",
@@ -103,6 +104,8 @@ def run_matrix(
     on_run: Optional[Callable[[List[Dict[str, object]]], None]] = None,
     trace_memory: bool = True,
     completed: Optional[List[Dict[str, object]]] = None,
+    auto_chunks: Optional[Dict[str, Dict[str, object]]] = None,
+    auto_chunk: Callable[..., AutoChunk] = auto_chunk_mb,
 ) -> List[Dict[str, object]]:
     """Run repetitions x sizes x modes x chunk sizes x batch sizes, cleaning before each import.
 
@@ -113,7 +116,16 @@ def run_matrix(
     ``free_memory_mb``, the free physical memory read just before its cleanup, so a
     campaign can show that its runs started under comparable conditions.
 
-    One repetition is a full sweep of the (size, mode, chunk size) matrix,
+    ``chunk_sizes=None`` is the automatic block: before the first import, every
+    (size, mode) cell missing from ``auto_chunks`` (keyed ``"<size>/<mode>"``) is
+    resolved once by ``auto_chunk``, the rule the CLI uses, with one reading of the
+    free memory shared by all cells, and recorded into ``auto_chunks`` in place as
+    ``{"chunk_mb", "reason", "free_memory_mb"}``. Resolving per run instead would let
+    the free memory move the block between repetitions, and between the timing and
+    the memory campaign. Cells already in ``auto_chunks`` (a resumed matrix) keep
+    their saved block.
+
+    One repetition is a full sweep of the (size, mode, chunk size, batch size) matrix,
     not a burst of back-to-back runs of the same cell: warm-up then affects every
     cell's first pass equally instead of concentrating on whichever cell happens to
     run first. Returns labeled runs.
@@ -144,8 +156,8 @@ def run_matrix(
             f"unknown mode(s): {', '.join(unknown)}. Valid: {', '.join(_MODE_CONFIG)}"
         )
     requested = list(only) if only else None
-    chunk_sizes = list(chunk_sizes)
-    out_of_range = [c for c in chunk_sizes if not MIN_CHUNK_MB <= c <= MAX_CHUNK_MB]
+    chunk_sizes = None if chunk_sizes is None else list(chunk_sizes)
+    out_of_range = [c for c in chunk_sizes or () if not MIN_CHUNK_MB <= c <= MAX_CHUNK_MB]
     if out_of_range:
         raise ValueError(
             f"chunk size(s) out of range: {', '.join(map(str, out_of_range))}. "
@@ -178,6 +190,24 @@ def run_matrix(
                 "selected": requested or [b for b in _ALL_DBMS if b in merged],
             })
 
+    if chunk_sizes is None:
+        auto_chunks = auto_chunks if auto_chunks is not None else {}
+        missing = [c for c in cells if f"{c['size']}/{c['mode']}" not in auto_chunks]
+        free_mb = available_mb() if missing else None
+        for cell in missing:
+            choice = auto_chunk(
+                cell["merged"], cell["config_path"].parent, cell["selected"],
+                cell["overrides"], free_mb,
+            )
+            auto_chunks[f"{cell['size']}/{cell['mode']}"] = {
+                "chunk_mb": choice.mb, "reason": choice.reason, "free_memory_mb": free_mb,
+            }
+        for cell in cells:
+            cell["chunk_sizes"] = [auto_chunks[f"{cell['size']}/{cell['mode']}"]["chunk_mb"]]
+    else:
+        for cell in cells:
+            cell["chunk_sizes"] = chunk_sizes
+
     labeled: List[Dict[str, object]] = list(completed or [])
     already_measured = {_run_key(run) for run in labeled}
 
@@ -191,7 +221,7 @@ def run_matrix(
         for cell in cells:
             merged = cell["merged"]
             selected = cell["selected"]
-            for chunk_mb, batch in [(c, b) for c in chunk_sizes for b in batch_sizes]:
+            for chunk_mb, batch in [(c, b) for c in cell["chunk_sizes"] for b in batch_sizes]:
                 key = (cell["size"], cell["mode"], chunk_mb, batch, rep)
                 if key in already_measured:
                     continue

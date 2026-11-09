@@ -235,3 +235,18 @@ def test_resume_refuses_a_checkpoint_from_before_the_batch_axis(tmp_path):
     path.write_text(json.dumps({"metadata": meta, "runs": []}), encoding="utf-8")
     with pytest.raises(ValueError, match="batch_sizes"):
         rb.resume_runs(path, dict(meta, batch_sizes=[2048]))
+
+
+def test_resume_restores_the_auto_chunks(tmp_path):
+    saved_auto = {"131072/multi": {"chunk_mb": 95, "reason": "auto: x", "free_memory_mb": 890.0}}
+    meta = {"seed": 42, "sizes": [131072], "modes": ["multi"], "trace_memory": False,
+            "chunk_sizes": "auto", "batch_sizes": [2048], "repetitions": 3}
+    path = tmp_path / "benchmark_checkpoint.json"
+    path.write_text(json.dumps({
+        "metadata": dict(meta, auto_chunks=saved_auto), "complete": False,
+        "runs": [_labeled(131072, "multi", 95, 0)],
+    }), encoding="utf-8")
+    requested = dict(meta, auto_chunks={})
+    runs = rb.resume_runs(path, requested)
+    assert len(runs) == 1
+    assert requested["auto_chunks"] == saved_auto

@@ -372,3 +372,80 @@ def test_ensure_dataset_regenerates_when_the_seed_changes_the_split(tmp_path):
     brun._ensure_dataset(tmp_path, 1000, 7, "multi", _recording_generate(calls))
 
     assert calls == [(tmp_path / "1000", 1000, 7, "multi")]
+
+
+def _auto_matrix(tmp_path, monkeypatch, *, free, auto_chunks, auto_chunk):
+    memory_reads, imports = [], []
+    monkeypatch.setattr(brun, "available_mb", lambda: memory_reads.append(1) or free)
+
+    def fake_importer(config_path, *, dbms_config_path, collector, show_data,
+                      only, source_overrides, chunk_size_mb, batch_size):
+        imports.append(chunk_size_mb)
+        collector.record("postgres", "products", "write", rows=10, seconds=0.1)
+        return []
+
+    labeled = brun.run_matrix(
+        sizes=[1000, 2000], modes=["multi"], repetitions=2, chunk_sizes=None,
+        dbms_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+        seed=1, only=["postgres"], cleaners={},
+        importer=fake_importer, load_cfg=lambda c, s: {"postgres": {}},
+        generate=lambda out_dir, rows, seed, mode: None,
+        auto_chunks=auto_chunks, auto_chunk=auto_chunk,
+    )
+    return labeled, memory_reads, imports
+
+
+def test_auto_mode_resolves_each_cell_once_with_one_memory_reading(tmp_path, monkeypatch):
+    from polyglotimportcsv.auto_size import AutoChunk
+
+    calls = []
+
+    def auto_chunk(config, base_dir, dbms_names, overrides, free_mb):
+        size = 1000 if "1000" in str(next(iter(overrides.values()))) else 2000
+        calls.append((size, free_mb))
+        return AutoChunk(40 if size == 1000 else 70, f"auto: test {size}")
+
+    auto_chunks = {}
+    labeled, memory_reads, imports = _auto_matrix(
+        tmp_path, monkeypatch, free=890.0, auto_chunks=auto_chunks, auto_chunk=auto_chunk
+    )
+    assert len(labeled) == 4
+    assert len(memory_reads) == len(labeled) + 1  # one per run, plus one for the rule
+    assert sorted(calls) == [(1000, 890.0), (2000, 890.0)]
+    assert {(r["size"], r["chunk_mb"]) for r in labeled} == {(1000, 40), (2000, 70)}
+    assert sorted(imports) == [40, 40, 70, 70]
+    assert auto_chunks == {
+        "1000/multi": {"chunk_mb": 40, "reason": "auto: test 1000", "free_memory_mb": 890.0},
+        "2000/multi": {"chunk_mb": 70, "reason": "auto: test 2000", "free_memory_mb": 890.0},
+    }
+
+
+def test_auto_mode_reuses_saved_chunks(tmp_path, monkeypatch):
+    def auto_chunk(*args):
+        raise AssertionError("a saved cell was resolved again")
+
+    saved = {
+        "1000/multi": {"chunk_mb": 40, "reason": "auto: saved", "free_memory_mb": 700.0},
+        "2000/multi": {"chunk_mb": 70, "reason": "auto: saved", "free_memory_mb": 700.0},
+    }
+    labeled, memory_reads, imports = _auto_matrix(
+        tmp_path, monkeypatch, free=2000.0, auto_chunks=saved, auto_chunk=auto_chunk
+    )
+    assert len(memory_reads) == len(labeled)  # no extra reading for the rule
+    assert sorted(imports) == [40, 40, 70, 70]
+
+
+def test_auto_mode_with_unreadable_memory(tmp_path, monkeypatch):
+    from polyglotimportcsv.auto_size import AutoChunk
+
+    seen = []
+
+    def auto_chunk(config, base_dir, dbms_names, overrides, free_mb):
+        seen.append(free_mb)
+        return AutoChunk(16, "auto: test; free memory unknown")
+
+    labeled, _, _ = _auto_matrix(
+        tmp_path, monkeypatch, free=None, auto_chunks={}, auto_chunk=auto_chunk
+    )
+    assert seen == [None, None]
+    assert {r["chunk_mb"] for r in labeled} == {16}
