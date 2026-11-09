@@ -155,7 +155,10 @@ def run_matrix(
         raise ValueError(
             f"unknown mode(s): {', '.join(unknown)}. Valid: {', '.join(_MODE_CONFIG)}"
         )
-    requested = list(only) if only else None
+    # Normalized like the CLI's --only: a name the config does not spell that way
+    # would skip its cleaner and break the automatic rule.
+    requested = [str(x).strip().lower() for x in only if str(x).strip()] if only else None
+    requested = requested or None
     chunk_sizes = None if chunk_sizes is None else list(chunk_sizes)
     out_of_range = [c for c in chunk_sizes or () if not MIN_CHUNK_MB <= c <= MAX_CHUNK_MB]
     if out_of_range:

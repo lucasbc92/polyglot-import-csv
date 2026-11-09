@@ -45,7 +45,8 @@ def resume_runs(path: Path, meta: Dict[str, Any]) -> List[Dict[str, Any]]:
     Returns an empty list when there is no checkpoint — asking to resume a matrix
     that never ran just starts it. The automatic blocks the checkpoint saved
     (``auto_chunks``) are copied into ``meta["auto_chunks"]`` so the resumed matrix
-    keeps them.
+    keeps them. When the checkpoint was written at another commit, the commit the
+    matrix started on is kept as ``meta["git_commit_started"]``.
     """
     if not Path(path).is_file():
         return []
@@ -61,6 +62,14 @@ def resume_runs(path: Path, meta: Dict[str, Any]) -> List[Dict[str, Any]]:
             f"{path} was written by a different matrix and cannot be resumed "
             f"({details}). Re-run with matching flags, or delete the checkpoint "
             "to start over."
+        )
+    started = saved.get("git_commit_started", saved.get("git_commit"))
+    if started is not None and started != meta.get("git_commit"):
+        # The runs of the checkpoint were measured on another commit: keep the one the
+        # matrix started on, next to the commit that finishes it.
+        meta["git_commit_started"] = started
+        logging.getLogger(__name__).warning(
+            "resuming a matrix started on commit %s at commit %s", started, meta.get("git_commit")
         )
     if "auto_chunks" in saved and "auto_chunks" in meta:
         # The automatic block was resolved when the matrix started; re-resolving it

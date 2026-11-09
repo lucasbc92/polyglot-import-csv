@@ -449,3 +449,27 @@ def test_auto_mode_with_unreadable_memory(tmp_path, monkeypatch):
     )
     assert seen == [None, None]
     assert {r["chunk_mb"] for r in labeled} == {16}
+
+
+def test_only_is_normalized_like_the_cli(tmp_path, monkeypatch):
+    """``--only Postgres`` names the same DBMS as the CLI's ``--only postgres``: its
+    cleaner runs, and the automatic rule gets the configured name."""
+    from polyglotimportcsv.auto_size import AutoChunk
+
+    cleaned, ruled = [], []
+    monkeypatch.setattr(brun, "available_mb", lambda: 890.0)
+
+    def auto_chunk(config, base_dir, dbms_names, overrides, free_mb):
+        ruled.append(list(dbms_names))
+        return AutoChunk(16, "auto: test")
+
+    brun.run_matrix(
+        sizes=[1000], modes=["multi"], repetitions=1, chunk_sizes=None,
+        dbms_config_path=None, config_dir="data/ecommerce", data_dir=tmp_path,
+        seed=1, only=[" Postgres "], cleaners={"postgres": lambda block: cleaned.append(1)},
+        importer=lambda *a, **k: [], load_cfg=lambda c, s: {"postgres": {"schema": "x"}},
+        generate=lambda out_dir, rows, seed, mode: None,
+        auto_chunks={}, auto_chunk=auto_chunk,
+    )
+    assert ruled == [["postgres"]]
+    assert cleaned == [1]
