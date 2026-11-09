@@ -104,18 +104,18 @@ conexão dos SGBDs --- bem como a instrução principal de importação que os u
 As etapas seguintes trataram da implementação da solução proposta, ``Polyglot Import
 CSV'', e dos testes da mesma com diferentes volumes de dados CSV e importações simples e
 complexas para diferentes modelos de dados destino. A última etapa consistiu na avaliação
-de desempenho da ferramenta, cujos resultados --- \textit{throughput} por SGBD, custo da
-validação prévia dos dados, efeito do tamanho do bloco de leitura e, como linha de base,
-o ganho da escrita em lote e a economia de memória da leitura em blocos ---
-são apresentados no Capítulo~\ref{cap:avaliacao}.
+de desempenho da ferramenta, cujos resultados --- o custo de cada fase e de cada SGBD, a
+comparação entre os dois modos de importação, a escalabilidade com o volume de dados, o
+custo da validação prévia dos dados e o efeito dos tamanhos do bloco de leitura e do lote
+de gravação --- são apresentados no Capítulo~\ref{cap:avaliacao}.
 
 \section{Estrutura do Trabalho}
 
-Este trabalho está estruturado em sete capítulos principais. O primeiro aborda os
+Este trabalho está estruturado em seis capítulos principais. O primeiro aborda os
 objetivos, a metodologia e o contexto que levaram à elaboração deste trabalho. O capítulo 2
 revisa os fundamentos teóricos e o capítulo 3 apresenta os trabalhos relacionados. O
 capítulo 4 descreve a ferramenta \textit{Polyglot Import CSV} --- o formato de
 configuração, as etapas de validação, o fluxo de execução da importação, a observabilidade
 e o modelo de execução. O capítulo 5 apresenta a avaliação de desempenho da ferramenta,
 com resultados medidos. O
-capítulo 6 discute as atividades futuras e o capítulo 7 traz as considerações finais.
+capítulo 6 traz a conclusão do trabalho e as atividades futuras.
