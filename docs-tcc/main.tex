@@ -419,9 +419,10 @@
   qualquer problema que essas etapas encontrem. O desempenho apoia-se na escrita em lote,
   com conversão vetorizada de tipos, e na leitura dos arquivos em blocos, projetada para que
   o consumo de memória acompanhe o tamanho do bloco e o número de chaves distintas, e não o
-  tamanho do arquivo. Uma avaliação empírica com dados sintéticos, de \num{1024} a \num{262144} linhas,
+  tamanho do arquivo; o tamanho do bloco é escolhido pela própria ferramenta, a partir da
+  maior fonte e da memória livre do computador. Uma avaliação empírica com dados sintéticos, de \num{1024} a \num{262144} linhas,
   mostrou que o tempo de importação cresce linearmente com o volume de dados e que a
-  validação prévia ocupa entre 15\% e 20\% do tempo de uma importação, dominada pela escrita
+  validação prévia ocupa cerca de um quinto do tempo de uma importação, dominada pela escrita
   nos bancos; medições feitas com uma versão anterior da ferramenta mostraram que a escrita
   em lote acelera a importação em cerca de nove vezes em relação à gravação linha a linha e
   que a leitura em blocos reduz o pico de memória em mais de doze vezes em cem mil linhas,
@@ -461,10 +462,11 @@
   and stops the import, writing nothing, at any problem these stages find. Performance rests
   on batch writing, with vectorized type casting, and on reading the files in chunks,
   designed so that memory use follows the chunk size and the number of distinct keys, not
-  the file size. An
+  the file size; the tool chooses the chunk size itself, from the largest source and the
+  free memory of the computer. An
   empirical evaluation with synthetic
   data, from 1,024 to 262,144 rows, showed that the import time grows linearly with the data
-  volume and that the prior validation takes between 15\% and 20\% of the time of an import, which
+  volume and that the prior validation takes about one fifth of the time of an import, which
   is dominated by database writes; measurements made with an earlier version of the tool
   showed that batch writing speeds up the import by roughly nine times over row-by-row
   writing and that chunked reading reduces peak memory by more than twelve times at 100,000

@@ -15,21 +15,25 @@ eles e os próprios dados, com o mesmo código da gravação, antes de qualquer 
 mapeamento declarativo de colunas com conversão nativa aos tipos de cada SGBD; (iv) uma camada
 de observabilidade e um subsistema de métricas que instrumentam cada fase da importação; (v)
 dois recursos de desempenho --- a estratégia de escrita em lote, com conversão vetorizada e
-gravação em lotes, e a leitura dos arquivos em blocos, de memória limitada, com tamanhos de
-bloco e de lote configuráveis; e (vi) uma avaliação empírica com dados sintéticos, gerados de
+gravação em lotes, e a leitura dos arquivos em blocos, de memória limitada, com o tamanho do
+bloco escolhido automaticamente e ajustável pela linha de comando; e (vi) uma avaliação empírica com dados sintéticos, gerados de
 forma determinística, que quantifica o custo de importar para os cinco paradigmas, a
 escalabilidade da ferramenta com o volume de dados e o custo da validação prévia.
 
-A avaliação (Capítulo~\ref{cap:avaliacao}), ainda preliminar, confirma os objetivos
-traçados. Em \num{262144} linhas, a escrita nos bancos responde por cerca de $82\%$ do tempo
-de uma importação, e a validação prévia dos dados, por cerca de $18\%$; em troca, nenhum
+A avaliação (Capítulo~\ref{cap:avaliacao}) confirma os objetivos
+traçados. Em \num{262144} linhas, a escrita nos bancos responde por cerca de $80\%$ do tempo
+de uma importação, e a validação prévia dos dados, por cerca de $20\%$; em troca, nenhum
 problema que ela detecta chega a uma gravação parcial. A ferramenta \textbf{mostrou-se
 escalável} nos volumes analisados: de \num{16384} a \num{262144} linhas, o tempo cresce
-linearmente com o volume --- o tempo por linha fica estável, entre $2{,}1$ e $2{,}8$~ms, e o
-expoente do crescimento é $0{,}92$ no modo multifonte e $0{,}97$ no combinado, próximo de 1.
-O pico de memória, por sua vez, cresce menos que o volume: de \num{1024} para \num{262144}
-linhas (256 vezes mais dados), ele passa de $11{,}2$ para $300{,}0$~MB no modo multifonte,
-cerca de 27 vezes. As medições feitas com uma versão anterior da ferramenta
+linearmente com o volume --- o tempo por linha fica estável, entre $1{,}8$ e $2{,}5$~ms, e o
+expoente do crescimento é $0{,}90$ no modo multifonte e $0{,}95$ no combinado, próximo de 1.
+O pico de memória, por sua vez, acompanha o bloco de leitura, que a ferramenta escolhe
+sozinha: de \num{1024} para \num{262144} linhas (256 vezes mais dados), ele passa de
+$10{,}5$ para $253{,}8$~MB no modo multifonte, cerca de 24 vezes, e, quando a memória livre
+limita o bloco, deixa de acompanhar o volume. A regra de escolha do bloco saiu de uma
+campanha exploratória, que mostrou que ler a maior fonte de uma só vez torna a importação
+mais rápida e que o tamanho do lote de gravação não tem efeito mensurável; no modo
+combinado, porém, o modelo que prevê o pico mostrou-se conservador demais. As medições feitas com uma versão anterior da ferramenta
 (Seção~\ref{sec:estrategias-escrita}) mostram que a estratégia em lote acelera a importação
 em cerca de nove vezes sobre a gravação linha a linha e que a leitura em blocos reduz o pico
 de memória em mais de doze vezes em cem mil linhas, em relação à carga do arquivo inteiro na
@@ -70,8 +74,11 @@ uso, o aprofundamento da avaliação e a extensão das funcionalidades de import
 
   \item \textbf{Aprofundamento da avaliação de desempenho.} A avaliação do
         Capítulo~\ref{cap:avaliacao} cobriu volumes de até \num{262144} linhas em uma única
-        máquina, com os cinco SGBDs em contêineres partilhando os mesmos recursos. Três
+        máquina, com os cinco SGBDs em contêineres partilhando os mesmos recursos. Quatro
         extensões se destacam: medir volumes maiores, na ordem de milhões de linhas;
+        ajustar ao modo combinado o modelo que prevê o pico de memória na escolha
+        automática do bloco, hoje ajustado apenas no modo multifonte
+        (Seção~\ref{sec:res-bloco});
         aprofundar o caminho de escrita do Cassandra --- a fase dominante do custo --- para
         além da concorrência já empregada pela estratégia em lote
         (Seção~\ref{sec:estrategias-escrita}); e repetir os experimentos em um ambiente com

@@ -285,7 +285,7 @@ passed the checks (one timestamp, no duplicate keys, all 12 cells, `infer`/`vali
 rows equal to the size), and their row counts are identical in every cell. The
 timing campaign was interrupted twice, by an out-of-memory error in pandas and by
 an unresponsive Docker engine, and was resumed with `--resume` without losing
-measured runs. The final campaign of 3.2.0 will replace these numbers.
+measured runs. The final campaign (`v4/`) replaces these numbers.
 
 | Rows | multi time (s) | ms/row | multi peak (MB) | combined time (s) | ms/row | combined peak (MB) |
 |---:|---:|---:|---:|---:|---:|---:|
@@ -326,6 +326,47 @@ other: compare only within a campaign. Blocks that read the largest source whole
 (about 95.5 MB here) are the fastest; peak ≈ 87.0 + 1.078 × effective block (MB) at this volume; the base grows with the data (about 22.2 + 2.31 × MiB of sources on disk, fitted on `v4-preview/`).
 The batch barely moves time or peak. The resulting rule is in
 `docs/superpowers/specs/2026-11-08-revisao-ronaldo-v23-design.md`.
+
+### Final campaign (`v4/`)
+
+Measured on 2026-11-09/10 for the report, with the automatic block
+(`--chunk-sizes auto`) and 2048-row batches. Volumes 1 024, 16 384, 32 768, 65 536,
+131 072 and 262 144 rows, multi and combined. `timings/` has 3 repetitions without
+tracemalloc; `memory/` has 3 repetitions with it and reuses the blocks of `timings/`
+(`--auto-chunks-from`). The blocks were chosen once per cell, with 922 MB free. Both
+folders passed the checks (one timestamp, no duplicate keys, all 12 cells,
+`infer`/`validate` rows equal to the size, `chunk_mb` equal to `auto_chunks`), and
+their row counts and blocks are identical in every cell.
+
+The timing campaign did not run in one go: the author paused it after 11 of the 36
+runs (commit `0ccd444`, recorded as `git_commit_started`) and it was resumed with
+`--resume` about seven hours later, after a Docker restart, on commit `96a87c7`
+(only the report changed between the two; `src/` is the same). No run failed.
+
+| Rows | multi block (MB) | time (s) | ms/row | peak (MB) | combined block (MB) | time (s) | ms/row | peak (MB) |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 024 | 16 | 11.55 | 11.28 | 10.5 | 16 | 8.94 | 8.73 | 10.8 |
+| 16 384 | 16 | 40.63 | 2.48 | 58.4 | 35 | 38.33 | 2.34 | 72.9 |
+| 32 768 | 24 | 65.84 | 2.01 | 74.8 | 71 | 69.86 | 2.13 | 99.2 |
+| 65 536 | 48 | 124.58 | 1.90 | 98.5 | 141 | 127.16 | 1.94 | 144.9 |
+| 131 072 | 97 | 229.95 | 1.75 | 195.4 | 116* | 270.93 | 2.07 | 209.3 |
+| 262 144 | 63* | 493.15 | 1.88 | 253.8 | 38* | 526.17 | 2.01 | 141.9 |
+
+\* Limited by the free memory; the other blocks read the largest source whole (16 MB
+is the minimum).
+
+Exponent `b` of `log t = a + b log N`, fitted from 16 384 rows on: 0.90 (multi) and
+0.95 (combined), which is linear growth. No exponent is fitted to the peaks, because
+the block changes from cell to cell: the peak follows the block, and it falls from
+131 072 to 262 144 rows in combined because the block shrinks from 116 to 38 MB. At
+262 144 multi, the write takes 79.8% of the time, Cassandra alone 54.9%, and `infer`
+plus `validate` take 20.2%.
+
+The peak model behind the automatic block was fitted in multi only. With a budget of
+230.5 MB (25% of 922 MB), the measured peak was 253.8 MB at 262 144 multi (10% over)
+and 141.9 MB at 262 144 combined (38% under): in combined the model overestimates
+the peak and the block comes out smaller than it had to be. The files keep only the
+median of each cell, so the spread between repetitions cannot be reported.
 
 ## Português (BR)
 
@@ -631,7 +672,7 @@ células, linhas de `infer`/`validate` iguais ao volume), e as contagens de linh
 idênticas entre elas em todas as células. A campanha de tempo foi interrompida duas
 vezes, por falta de memória no pandas e por um motor do Docker que parou de
 responder, e foi retomada com `--resume` sem perder execuções já medidas. A campanha
-final da 3.2.0 substituirá estes números.
+final (`v4/`) substitui estes números.
 
 | Linhas | tempo multi (s) | ms/linha | pico multi (MB) | tempo combinado (s) | ms/linha | pico combinado (MB) |
 |---:|---:|---:|---:|---:|---:|---:|
@@ -672,3 +713,47 @@ compare só dentro de uma campanha. Os blocos que leem a maior fonte inteira (ce
 95,5 MB aqui) são os mais rápidos; pico ≈ 87,0 + 1,078 × bloco efetivo (MB) nesse volume; a base cresce com os dados (cerca de 22,2 + 2,31 × MiB das fontes em disco, ajustada sobre `v4-preview/`). O lote
 quase não mexe no tempo nem no pico. A regra resultante está em
 `docs/superpowers/specs/2026-11-08-revisao-ronaldo-v23-design.md`.
+
+### Campanha final (`v4/`)
+
+Medida em 2026-11-09/10 para o relatório, com o bloco automático
+(`--chunk-sizes auto`) e lotes de 2048 linhas. Volumes de 1 024, 16 384, 32 768,
+65 536, 131 072 e 262 144 linhas, multifonte e combinado. `timings/` tem 3 repetições
+sem tracemalloc; `memory/` tem 3 repetições com ele e reaproveita os blocos de
+`timings/` (`--auto-chunks-from`). Os blocos foram escolhidos uma vez por célula, com
+922 MB livres. As duas pastas passaram na conferência (um só *timestamp*, nenhuma
+chave repetida, as 12 células, linhas de `infer`/`validate` iguais ao volume,
+`chunk_mb` igual a `auto_chunks`), e as contagens de linhas e os blocos são idênticos
+entre elas em todas as células.
+
+A campanha de tempo não correu de uma só vez: o autor a pausou depois de 11 das 36
+execuções (*commit* `0ccd444`, registrado como `git_commit_started`), e ela foi
+retomada com `--resume` cerca de sete horas depois, com o Docker reiniciado, no
+*commit* `96a87c7` (entre os dois só mudou o relatório; `src/` é o mesmo). Nenhuma
+execução falhou.
+
+| Linhas | bloco multi (MB) | tempo (s) | ms/linha | pico (MB) | bloco combinado (MB) | tempo (s) | ms/linha | pico (MB) |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 024 | 16 | 11,55 | 11,28 | 10,5 | 16 | 8,94 | 8,73 | 10,8 |
+| 16 384 | 16 | 40,63 | 2,48 | 58,4 | 35 | 38,33 | 2,34 | 72,9 |
+| 32 768 | 24 | 65,84 | 2,01 | 74,8 | 71 | 69,86 | 2,13 | 99,2 |
+| 65 536 | 48 | 124,58 | 1,90 | 98,5 | 141 | 127,16 | 1,94 | 144,9 |
+| 131 072 | 97 | 229,95 | 1,75 | 195,4 | 116* | 270,93 | 2,07 | 209,3 |
+| 262 144 | 63* | 493,15 | 1,88 | 253,8 | 38* | 526,17 | 2,01 | 141,9 |
+
+\* Limitado pela memória livre; os demais blocos leem a maior fonte inteira (16 MB é
+o mínimo).
+
+Expoente `b` de `log t = a + b log N`, ajustado a partir de 16 384 linhas: 0,90
+(multifonte) e 0,95 (combinado), ou seja, crescimento linear. Não se ajusta expoente
+aos picos, porque o bloco muda de uma célula para outra: o pico acompanha o bloco, e
+cai de 131 072 para 262 144 linhas no combinado porque o bloco encolhe de 116 para
+38 MB. Em 262 144 multifonte, a escrita leva 79,8% do tempo, o Cassandra sozinho
+54,9%, e `infer` mais `validate`, 20,2%.
+
+O modelo de pico por trás do bloco automático foi ajustado só no multifonte. Com um
+orçamento de 230,5 MB (25% de 922 MB), o pico medido foi de 253,8 MB em 262 144
+multifonte (10% acima) e de 141,9 MB em 262 144 combinado (38% abaixo): no combinado
+o modelo superestima o pico, e o bloco sai menor do que precisava. Os arquivos
+guardam só a mediana de cada célula, então a variação entre repetições não pode ser
+reportada.
