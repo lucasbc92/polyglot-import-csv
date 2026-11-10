@@ -1,3 +1,3 @@
 """Polyglot Import CSV — importação de CSV para múltiplos SGBDs."""
 
-__version__ = "3.0.0"
+__version__ = "3.2.0"
