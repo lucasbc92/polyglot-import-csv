@@ -10,9 +10,7 @@ os cinco atendem a modelos de dados distintos ---, mas caracterizar o custo de i
 mesmo conjunto de dados para cinco paradigmas e verificar como esse custo cresce com o
 volume de dados. As alternativas abandonadas durante o projeto --- a escrita linha a linha e
 a carga do arquivo inteiro na memória --- não são medidas aqui; os números que justificaram
-abandoná-las estão na seção~\ref{sec:estrategias-escrita}. \textbf{Os números deste capítulo
-são preliminares}: a escolha automática dos tamanhos do bloco e do lote está em
-desenvolvimento, e as medições serão repetidas sobre a versão que a incluir.
+abandoná-las estão na seção~\ref{sec:estrategias-escrita}.
 
 A prática de comparar sistemas de dados sob uma carga sintética controlada e reproduzível
 segue a tradição consolidada por \citeonline{cooper2010benchmarking} com o \textit{Yahoo!
@@ -83,21 +81,25 @@ Tempo e memória são medidos em execuções separadas, por um motivo prático. 
 pico de memória, o Python precisa registrar cada alocação de memória feita pelo programa
 (com o módulo \texttt{tracemalloc}), e esse registro deixa a importação mais lenta --- e de
 forma desigual entre as fases. Na importação multifonte de \num{262144} linhas desta
-avaliação, o registro deixou a importação inteira $2{,}35$ vezes mais lenta, mas a fase de
-inferência, que aloca muita memória, ficou $6{,}0$ vezes mais lenta, e a escrita no
-Cassandra, que passa a maior parte do tempo esperando o SGBD, apenas $1{,}5$ vez. Os tempos de uma
+avaliação, o registro deixou a importação inteira $2{,}5$ vezes mais lenta, mas a fase de
+inferência, que aloca muita memória, ficou $5{,}4$ vezes mais lenta, e a escrita no
+Cassandra, que passa a maior parte do tempo esperando o SGBD, apenas $1{,}6$ vez. Os tempos de uma
 execução que mede memória estariam, portanto, inflados e distorcidos entre as fases. Por
 isso, cada célula é executada em duas \textbf{campanhas} idênticas em carga e configuração:
 uma \textbf{sem} o registro de memória, de onde vêm todos os tempos, e outra \textbf{com}
 ele, de onde vêm todos os picos de memória. As duas campanhas processaram exatamente as
 mesmas contagens de linhas em todas as células, o que confirma que executam a mesma carga.
-Nesta medição preliminar, a campanha de memória fez uma só execução por célula. O pico de
-memória tende a ser bem mais estável que o tempo: em uma medição anterior, a mesma célula,
-medida em duas campanhas diferentes, teve picos que diferiram menos de $0{,}2\%$ --- uma
-indicação, colhida em uma só célula, e não uma garantia.
+As duas campanhas fazem três execuções por célula; o pico reportado é a mediana dos três
+picos.
+
+Os tamanhos do bloco de leitura e do lote de gravação são os que a ferramenta escolhe
+sozinha (seção~\ref{sec:modelos-execucao}). Como a escolha do bloco depende da memória livre
+no momento, ela foi feita \textbf{uma vez por célula}, no início da campanha de tempo, e
+registrada nos metadados; todas as repetições da célula, nas duas campanhas, usaram o mesmo
+bloco. Os blocos escolhidos estão na Tabela~\ref{tab:qp5-auto}.
 
 Os resultados brutos de cada campanha (um arquivo CSV e um JSON com os metadados) estão no
-repositório do projeto\footnote{\url{https://github.com/lucasbc92/polyglot-import-csv/tree/b09ae38/benchmarks/v4-preview}:
+repositório do projeto\footnote{\url{https://github.com/lucasbc92/polyglot-import-csv/tree/50aee35/benchmarks/v4}:
 pasta \texttt{timings} (tempos) e pasta \texttt{memory} (picos de memória).}, e a ``Fonte'' de
 cada tabela indica de qual das duas pastas vêm os seus números. Quando uma tabela mostra
 tempo e pico de memória lado a lado, cada valor vem da sua campanha, como indica a legenda;
@@ -113,7 +115,8 @@ versões indicadas na Tabela~\ref{tab:ambiente-sgbds}, dentro de uma máquina vi
 $3{,}88$~GiB e 8 processadores, que partilha a memória do computador com a ferramenta. O
 Cassandra opera em um único nó, com fator de replicação 1 e \textit{heap} de 1~GB --- uma
 restrição de ambiente que se mostra relevante na fase de escrita. Com os contêineres no ar,
-restavam cerca de 800~MB de memória livre no computador no início das campanhas.
+restavam 922~MB de memória livre no computador quando os blocos foram escolhidos; no início
+de cada célula da campanha de tempo, a memória livre ficou entre 594 e 905~MB.
 
 \begin{table}[H]
   \caption{Imagens Docker dos SGBDs utilizadas na avaliação.}
@@ -162,9 +165,9 @@ fontes, enquanto o Redis, por exemplo, grava apenas as seleções e os carrinhos
   {\footnotesize Fonte: Elaborado pelo autor (2026), a partir de \texttt{data/ecommerce/import\_config.json}.}
 \end{table}
 
-Os números deste capítulo são preliminares: a ferramenta foi medida com os seus valores
-padrão provisórios de bloco de leitura (128~MB) e de lote de
-gravação (\num{2048} linhas), descritos na seção~\ref{sec:modelos-execucao}.
+A ferramenta foi medida sem as opções \texttt{-{}-chunk-size} e \texttt{-{}-batch-size}:
+o bloco de leitura é o da escolha automática, que varia com o volume e o modo
+(Tabela~\ref{tab:qp5-auto}), e o lote de gravação é o padrão de \num{2048} linhas.
 
 \section{Resultados}
 \label{sec:resultados}
@@ -177,8 +180,8 @@ apresentam os resultados do maior volume, $N = \num{262144}$ linhas.
 
 A Tabela~\ref{tab:fases} divide o tempo de uma importação de \num{262144} linhas entre as
 suas fases, nos dois modos. A escrita nos bancos domina o custo: no modo multifonte, ela
-responde por $82{,}4\%$ do tempo total, e as leituras de inferência e de validação, juntas,
-pelos $17{,}6\%$ restantes.
+responde por $79{,}8\%$ do tempo total, e as leituras de inferência e de validação, juntas,
+pelos $20{,}2\%$ restantes.
 
 \begin{table}[H]
   \caption{Tempo por fase de uma importação ($N = \num{262144}$), em segundos. Campanha de tempo.}
@@ -188,15 +191,15 @@ pelos $17{,}6\%$ restantes.
     \toprule
     \textbf{Fase} & \textbf{Multifonte} & \textbf{Participação} & \textbf{Combinado} \\
     \midrule
-    Inferência             &  27{,}80 &  5{,}0\% &  36{,}73 \\
-    Validação              &  69{,}62 & 12{,}5\% &  71{,}16 \\
-    Escrita no PostgreSQL  &  32{,}25 &  5{,}8\% &  36{,}28 \\
-    Escrita no MongoDB     &  22{,}03 &  4{,}0\% &  23{,}34 \\
-    Escrita no Cassandra   & 321{,}69 & 58{,}0\% & 319{,}87 \\
-    Escrita no Redis       &  14{,}88 &  2{,}7\% &  33{,}87 \\
-    Escrita no Neo4j       &  66{,}82 & 12{,}0\% &  72{,}65 \\
+    Inferência             &  31{,}27 &  6{,}3\% &  35{,}52 \\
+    Validação              &  68{,}18 & 13{,}8\% &  72{,}08 \\
+    Escrita no PostgreSQL  &  32{,}57 &  6{,}6\% &  30{,}44 \\
+    Escrita no MongoDB     &  21{,}42 &  4{,}3\% &  22{,}98 \\
+    Escrita no Cassandra   & 270{,}51 & 54{,}9\% & 269{,}79 \\
+    Escrita no Redis       &  13{,}95 &  2{,}8\% &  30{,}39 \\
+    Escrita no Neo4j       &  55{,}25 & 11{,}2\% &  64{,}97 \\
     \midrule
-    \textbf{Total}         & 555{,}10 & 100\%    & 593{,}92 \\
+    \textbf{Total}         & 493{,}15 & 100\%    & 526{,}17 \\
     \bottomrule
   \end{tabular}
   \par\vspace{4pt}
@@ -207,7 +210,7 @@ Como a escrita concentra o custo, convém abri-la por SGBD. A Tabela~\ref{tab:es
 apresenta, para a importação multifonte, o número de linhas que a escrita processa em cada
 SGBD, o tempo de escrita e a vazão (\textit{throughput}) resultante, em linhas processadas
 por segundo. Os valores variam por uma ordem de grandeza: o Redis processa cerca de
-\num{8728} linhas por segundo, enquanto o Cassandra fica em $815$.
+\num{9310} linhas por segundo, enquanto o Cassandra fica em $969$.
 
 \begin{table}[H]
   \caption{Escrita por SGBD em uma importação multifonte ($N = \num{262144}$): linhas processadas, antes da eliminação de duplicatas. Campanha de tempo.}
@@ -217,18 +220,18 @@ por segundo. Os valores variam por uma ordem de grandeza: o Redis processa cerca
     \toprule
     \textbf{SGBD} & \textbf{Linhas processadas} & \textbf{Tempo (s)} & \textbf{Linhas/s} \\
     \midrule
-    Cassandra  & \num{262144} & 321{,}69 &   $815$ \\
-    Neo4j      & \num{234027} &  66{,}82 & \num{3502} \\
-    PostgreSQL & \num{193096} &  32{,}25 & \num{5987} \\
-    MongoDB    & \num{132230} &  22{,}03 & \num{6002} \\
-    Redis      & \num{129914} &  14{,}88 & \num{8728} \\
+    Cassandra  & \num{262144} & 270{,}51 &   $969$ \\
+    Neo4j      & \num{234027} &  55{,}25 & \num{4236} \\
+    PostgreSQL & \num{193096} &  32{,}57 & \num{5928} \\
+    MongoDB    & \num{132230} &  21{,}42 & \num{6173} \\
+    Redis      & \num{129914} &  13{,}95 & \num{9310} \\
     \bottomrule
   \end{tabular}
   \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026), a partir da pasta \texttt{timings}.}
 \end{table}
 
-O Cassandra sozinho responde por $70{,}3\%$ da fase de escrita e por $58{,}0\%$ da
+O Cassandra sozinho responde por $68{,}7\%$ da fase de escrita e por $54{,}9\%$ da
 importação inteira. Parte dessa diferença vem da carga: como mostra a
 Tabela~\ref{tab:carga-sgbd}, o Cassandra grava os eventos das quatro fontes --- todas as
 \num{262144} linhas ---, enquanto o Redis grava apenas as seleções e os carrinhos. A outra
@@ -250,7 +253,8 @@ distintos, que viram \num{3043} nós \texttt{User}.
 
 Os dois modos de importação --- um CSV por tipo de evento ou um único CSV combinado ---
 gravam os mesmos dados. A Tabela~\ref{tab:multi-combined} compara-os quanto ao tamanho dos
-arquivos, às leituras de inferência e de validação, ao tempo total e ao pico de memória.
+arquivos, ao bloco de leitura escolhido, às leituras de inferência e de validação, ao tempo
+total e ao pico de memória.
 
 \begin{table}[H]
   \caption{Multifonte \textit{versus} combinado ($N = \num{262144}$). Tempos da campanha de tempo; picos da campanha de memória.}
@@ -263,10 +267,11 @@ arquivos, às leituras de inferência e de validação, ao tempo total e ao pico
     Tamanho dos arquivos (MB)  & 63{,}26 (4 arquivos) & 75{,}92 \\
     Colunas por arquivo        & 20, 33, 6 e 7$^{*}$ & 39 \\
     Células vazias             & 0\%      & 44\% \\
-    Inferência (s)             & 27{,}80  & 36{,}73 \\
-    Validação (s)              & 69{,}62  & 71{,}16 \\
-    Tempo total (s)            & 555{,}10 & 593{,}92 \\
-    Pico de memória (MB)       & 300{,}0   & 370{,}7 \\
+    Bloco de leitura (MB)      & 63       & 38 \\
+    Inferência (s)             & 31{,}27  & 35{,}52 \\
+    Validação (s)              & 68{,}18  & 72{,}08 \\
+    Tempo total (s)            & 493{,}15 & 526{,}17 \\
+    Pico de memória (MB)       & 253{,}8   & 141{,}9 \\
     \bottomrule
   \end{tabular}
   \par\vspace{4pt}
@@ -277,14 +282,20 @@ arquivos, às leituras de inferência e de validação, ao tempo total e ao pico
 O arquivo combinado é $20\%$ \textbf{maior}, porque todos os tipos de evento partilham um
 único cabeçalho de 39 colunas e cada linha preenche apenas as do seu tipo: $44\%$ das
 células do arquivo ficam vazias, contra nenhuma nos arquivos do modo multifonte. A leitura
-de inferência, que percorre o arquivo inteiro, leva $32\%$ mais tempo no combinado; a de
-validação, praticamente o mesmo. A escrita também fica mais lenta onde o SGBD lê pouco do
+de inferência, que percorre o arquivo inteiro, leva $14\%$ mais tempo no combinado, e a de
+validação, $6\%$ mais. A escrita também fica mais lenta onde o SGBD lê pouco do
 arquivo: na gravação, cada SGBD relê as fontes de que precisa (seção~\ref{sec:algoritmo}).
 No modo multifonte, o Redis relê apenas os arquivos de seleções e de carrinhos ($15{,}30$~MB),
 enquanto no combinado relê o arquivo inteiro ($75{,}92$~MB) --- e a sua escrita passa de
-$14{,}88$ para $33{,}87$~s. No total, a importação combinada leva $7\%$ mais tempo.
-O pico de memória do combinado também é maior ($370{,}7$ contra $300{,}0$~MB); a causa
-dessa diferença não foi investigada neste trabalho.
+$13{,}95$ para $30{,}39$~s. No total, a importação combinada leva $7\%$ mais tempo.
+
+O pico de memória, ao contrário, é \textbf{menor} no combinado ($141{,}9$ contra
+$253{,}8$~MB), e a causa é o bloco, não o modo. Nesse volume, a memória livre limitou o
+bloco nos dois modos, e mais no combinado: como a base do pico previsto cresce com o tamanho
+dos arquivos, e o arquivo combinado é maior, sobrou menos para o bloco (38 contra 63~MB). A
+comparação de tempo entre os modos inclui, portanto, o efeito de blocos diferentes: no
+multifonte, só a maior fonte, \texttt{purchase}, foi lida em mais de um bloco (quatro),
+enquanto o arquivo combinado foi lido em cerca de quinze.
 
 Além do desempenho, o modo multifonte tem vantagens de \textbf{organização}. Cada arquivo
 traz apenas as colunas do seu tipo de evento, o que o torna mais fácil de ler, de validar e
@@ -299,7 +310,8 @@ de eventos.
 \label{sec:res-escala}
 
 A Tabela~\ref{tab:escala} mostra o tempo total, o tempo por linha e o pico de memória nos
-seis volumes, nos dois modos.
+seis volumes, nos dois modos. O bloco de leitura de cada célula é o da
+Tabela~\ref{tab:qp5-auto}.
 
 \begin{table}[H]
   \caption{Tempo total, tempo por linha e pico de memória por volume. Tempos da campanha de tempo; picos da campanha de memória.}
@@ -311,12 +323,12 @@ seis volumes, nos dois modos.
     \cmidrule(lr){2-4} \cmidrule(lr){5-7}
     \textbf{Linhas} & \textbf{Tempo (s)} & \textbf{ms/linha} & \textbf{Pico (MB)} & \textbf{Tempo (s)} & \textbf{ms/linha} & \textbf{Pico (MB)} \\
     \midrule
-    \num{1024}   &   9{,}35 & 9{,}13 & 11{,}2 &   8{,}87 & 8{,}66 & 10{,}7 \\
-    \num{16384}  &  45{,}36 & 2{,}77 & 55{,}2 &  43{,}08 & 2{,}63 & 74{,}3 \\
-    \num{32768}  &  75{,}17 & 2{,}29 & 72{,}4 &  80{,}53 & 2{,}46 & 99{,}0 \\
-    \num{65536}  & 135{,}34 & 2{,}07 & 97{,}8 & 162{,}20 & 2{,}47 & 143{,}8 \\
-    \num{131072} & 294{,}19 & 2{,}24 & 195{,}5 & 353{,}14 & 2{,}69 & 225{,}1 \\
-    \num{262144} & 555{,}10 & 2{,}12 & 300{,}0 & 593{,}92 & 2{,}27 & 370{,}7 \\
+    \num{1024}   &  11{,}55 & 11{,}28 & 10{,}5 &   8{,}94 & 8{,}73 & 10{,}8 \\
+    \num{16384}  &  40{,}63 & 2{,}48 & 58{,}4 &  38{,}33 & 2{,}34 & 72{,}9 \\
+    \num{32768}  &  65{,}84 & 2{,}01 & 74{,}8 &  69{,}86 & 2{,}13 & 99{,}2 \\
+    \num{65536}  & 124{,}58 & 1{,}90 & 98{,}5 & 127{,}16 & 1{,}94 & 144{,}9 \\
+    \num{131072} & 229{,}95 & 1{,}75 & 195{,}4 & 270{,}93 & 2{,}07 & 209{,}3 \\
+    \num{262144} & 493{,}15 & 1{,}88 & 253{,}8 & 526{,}17 & 2{,}01 & 141{,}9 \\
     \bottomrule
   \end{tabular}
   \par\vspace{4pt}
@@ -324,18 +336,18 @@ seis volumes, nos dois modos.
 \end{table}
 
 O \textbf{tempo cresce linearmente com o volume}. A partir de \num{16384} linhas, cada
-linha custa entre $2{,}1$ e $2{,}8$~ms, sem tendência de alta: o tempo por linha de
+linha custa entre $1{,}8$ e $2{,}5$~ms, sem tendência de alta: o tempo por linha de
 \num{262144} linhas é até menor que o de \num{16384}. Em \num{1024} linhas, o tempo por
-linha é bem maior ($9{,}1$~ms) porque os custos fixos de cada execução --- conexão aos cinco
+linha é bem maior (de $8{,}7$ a $11{,}3$~ms) porque os custos fixos de cada execução --- conexão aos cinco
 SGBDs, preparo das estruturas de destino e leitura dos cabeçalhos --- pesam mais que os
 dados. Para medir o crescimento sem esse efeito, ajustou-se uma reta aos pontos de
 \num{16384} linhas em diante, em escala logarítmica ($\log t = a + b \log N$): o expoente
 $b$ indica como o tempo cresce --- $b = 1$ significa crescimento proporcional ao volume,
-$b = 2$, quadrático. O expoente obtido é $b = 0{,}92$ no modo multifonte e $b = 0{,}97$ no
+$b = 2$, quadrático. O expoente obtido é $b = 0{,}90$ no modo multifonte e $b = 0{,}95$ no
 combinado, ambos próximos de 1. Ficar um pouco abaixo de 1 é efeito dos custos fixos, que
 ainda pesam em \num{16384} linhas: descontando de cada volume o tempo total da importação
-de \num{1024} linhas, que é quase só custo fixo, o expoente passa a $0{,}996$ no multifonte e
-$1{,}046$ no combinado --- o crescimento proporcional ao volume que se espera de uma
+de \num{1024} linhas, que é quase só custo fixo, o expoente passa a $1{,}01$ no multifonte e
+$1{,}04$ no combinado --- o crescimento proporcional ao volume que se espera de uma
 importação que percorre os dados um número fixo de vezes. A Figura~\ref{fig:escala} mostra o mesmo resultado: em
 escala logarítmica nos dois eixos, os pontos dos dois modos acompanham a reta de
 crescimento linear.
@@ -356,9 +368,9 @@ crescimento linear.
       legend cell align=left,
       grid=major,
     ]
-      \addplot+[mark=*] coordinates {(1024,9.35) (16384,45.36) (32768,75.17) (65536,135.34) (131072,294.19) (262144,555.10)};
-      \addplot+[mark=square*] coordinates {(1024,8.87) (16384,43.08) (32768,80.53) (65536,162.20) (131072,353.14) (262144,593.92)};
-      \addplot[dashed, black, domain=16384:262144, samples=2] {45.36*x/16384};
+      \addplot+[mark=*] coordinates {(1024,11.55) (16384,40.63) (32768,65.84) (65536,124.58) (131072,229.95) (262144,493.15)};
+      \addplot+[mark=square*] coordinates {(1024,8.94) (16384,38.33) (32768,69.86) (65536,127.16) (131072,270.93) (262144,526.17)};
+      \addplot[dashed, black, domain=16384:262144, samples=2] {40.63*x/16384};
       \legend{multifonte, combinado, crescimento linear}
     \end{loglogaxis}
   \end{tikzpicture}
@@ -368,21 +380,22 @@ crescimento linear.
   {\footnotesize Fonte: Elaborado pelo autor (2026), a partir da pasta \texttt{timings}.}
 \end{figure}
 
-O \textbf{pico de memória cresce menos que o volume}. De \num{1024} para \num{262144}
-linhas ($256$ vezes mais dados), ele cresce $26{,}8$ vezes no modo multifonte (de
-$11{,}2$ para $300{,}0$~MB) e $34{,}7$ vezes no combinado (de $10{,}7$ para $370{,}7$~MB). O
-expoente ajustado da mesma forma, de \num{16384} linhas em diante, é $0{,}63$ no multifonte
-e $0{,}58$ no combinado: cada vez que o volume dobra, o pico cresce, em média, cerca de
-$50\%$. Duas causas, ambas previstas no projeto (seção~\ref{sec:modelos-execucao}),
-contribuem para que o pico ainda cresça nesses volumes. A primeira é o bloco: com o bloco de
-128~MB, no modo multifonte, cada fonte é lida em um único bloco até \num{131072} linhas, e
-em \num{262144} linhas só a maior, \texttt{purchase}, ocupa dois; o bloco, portanto, ainda
-acompanha o tamanho dos arquivos. A segunda são os conjuntos de chaves distintas que a
-validação e a escrita no Neo4j guardam, que crescem com os dados. A primeira causa não
-explica tudo: no modo combinado, o arquivo já ocupa vários blocos a partir de \num{65536}
-linhas (cinco em \num{262144}), e o pico continua crescendo. A contribuição de cada causa
-não foi separada nesta medição preliminar; o efeito do tamanho do bloco sobre o pico é o
-objeto da QP5.
+O \textbf{pico de memória acompanha o bloco de leitura, e não o volume}. Enquanto o bloco
+lê a maior fonte inteira, o pico cresce com os dados, mas menos que eles: no modo
+multifonte, de \num{16384} para \num{131072} linhas (8 vezes mais dados), o pico passa de
+$58{,}4$ para $195{,}4$~MB ($3{,}3$ vezes). Quando a memória livre passa a limitar o bloco, o
+pico deixa de acompanhar o volume. No multifonte, de \num{131072} para \num{262144} linhas,
+o bloco cai de 97 para 63~MB e o pico cresce apenas $30\%$, para $253{,}8$~MB. No combinado,
+o bloco cai de 116 para 38~MB e o pico \textbf{diminui}, de $209{,}3$ para $141{,}9$~MB,
+embora o volume dobre. De \num{1024} para \num{262144} linhas ($256$ vezes mais dados), o
+pico cresce $24$ vezes no multifonte e $13$ vezes no combinado.
+
+Como o bloco muda de uma célula para outra, esses picos não medem o crescimento da memória
+com o volume sob um bloco fixo, e por isso não se ajustou um expoente a eles. Mesmo com o
+bloco limitado, o pico não fica constante: a base cresce com os dados, por causa dos
+conjuntos de chaves distintas que a validação e a escrita no Neo4j guardam
+(seção~\ref{sec:modelos-execucao}). O efeito do tamanho do bloco sobre o pico, isolado em um
+volume fixo, é o objeto da QP5.
 
 \subsection{Custo da Validação Prévia (QP4)}
 \label{sec:res-validacao}
@@ -399,19 +412,19 @@ volume e modo.
     \toprule
     \textbf{Linhas} & \textbf{Multifonte} & \textbf{Combinado} \\
     \midrule
-    \num{1024}   & 31{,}2\% & 35{,}5\% \\
-    \num{16384}  & 19{,}9\% & 20{,}1\% \\
-    \num{32768}  & 18{,}4\% & 17{,}7\% \\
-    \num{65536}  & 17{,}2\% & 18{,}1\% \\
-    \num{131072} & 15{,}5\% & 16{,}8\% \\
-    \num{262144} & 17{,}6\% & 18{,}2\% \\
+    \num{1024}   & 28{,}9\% & 29{,}3\% \\
+    \num{16384}  & 19{,}3\% & 22{,}9\% \\
+    \num{32768}  & 19{,}1\% & 23{,}0\% \\
+    \num{65536}  & 17{,}9\% & 19{,}3\% \\
+    \num{131072} & 17{,}9\% & 18{,}2\% \\
+    \num{262144} & 20{,}2\% & 20{,}4\% \\
     \bottomrule
   \end{tabular}
   \par\vspace{4pt}
   {\footnotesize Fonte: Elaborado pelo autor (2026), a partir da pasta \texttt{timings}.}
 \end{table}
 
-A partir de \num{16384} linhas, a validação prévia custa entre $15\%$ e $20\%$ do tempo
+A partir de \num{16384} linhas, a validação prévia custa entre $18\%$ e $23\%$ do tempo
 total; em \num{1024} linhas, a fração é maior porque a escrita, que
 domina nos volumes maiores, ainda é pequena. Em troca desse custo, nenhum problema nos
 dados chega a uma gravação parcial: a importação termina antes de gravar qualquer dado
@@ -499,7 +512,7 @@ com o tamanho dos arquivos em disco. O pico previsto deve caber em $25\%$ da mem
 lida no início da execução.
 
 A Tabela~\ref{tab:qp5-auto} mostra o bloco que a regra escolheu para cada volume na campanha
-deste capítulo, com cerca de 920~MB livres no início. Até \num{131072} linhas no modo
+deste capítulo, com 922~MB livres no início. Até \num{131072} linhas no modo
 multifonte, o bloco lê a maior fonte inteira; nos volumes maiores, sobretudo no modo
 combinado, cujo único arquivo contém todas as linhas, a memória livre passa a limitar o bloco.
 
@@ -523,11 +536,21 @@ combinado, cujo único arquivo contém todas as linhas, a memória livre passa a
   {\footnotesize $^{*}$ Limitado pela memória livre; nos demais, o bloco lê a maior fonte inteira (16~MB é o mínimo). Fonte: Elaborado pelo autor (2026), a partir dos metadados de \texttt{benchmarks/v4/timings/}.}
 \end{table}
 
+Os picos medidos nessa campanha (Tabela~\ref{tab:escala}) permitem conferir o modelo nas
+três células em que a memória limitou o bloco. O orçamento era de $230{,}5$~MB ($25\%$ de
+922~MB). No multifonte de \num{262144} linhas, o pico medido foi de $253{,}8$~MB: $10\%$
+acima do orçamento. No combinado, o modelo errou para o outro lado: os picos medidos foram
+de $209{,}3$~MB em \num{131072} linhas e de $141{,}9$~MB em \num{262144}, este $38\%$
+abaixo do orçamento. O modelo foi ajustado apenas no modo multifonte; no combinado, ele
+superestima o pico, e a regra escolhe um bloco menor que o necessário, o que custa tempo sem
+necessidade. A margem de $25\%$ absorveu o erro no multifonte, mas a regra pede um ajuste
+próprio para o modo combinado.
+
 \section{Análise e Discussão}
 \label{sec:discussao-avaliacao}
 
 Os resultados respondem às questões de pesquisa. A escrita nos bancos é a fase dominante de
-uma importação (QP1): $82\%$ do tempo em \num{262144} linhas no modo multifonte, com vazão
+uma importação (QP1): $80\%$ do tempo em \num{262144} linhas no modo multifonte, com vazão
 que varia por uma ordem de grandeza entre SGBDs. Essa dispersão reflete a quantidade de dados
 que cada SGBD recebe e a forma de gravação do seu modelo de dados: o Redis, orientado a
 inserções simples de pares chave-valor, lidera; o Neo4j, que grava nós e arestas com
@@ -543,11 +566,12 @@ com $44\%$ de células vazias, e, na gravação, cada SGBD relê o arquivo intei
 tem ainda vantagens de organização (QP2). A ferramenta \textbf{escala linearmente} com o
 volume de dados nos volumes medidos (QP3): a partir de \num{16384} linhas, o tempo por linha
 fica estável, e o expoente do crescimento é próximo de 1 nos dois modos.
-O pico de memória cresce menos que o volume, com expoente de $0{,}63$ e $0{,}58$, e chega a
-$300{,}0$~MB no multifonte em \num{262144} linhas. A validação prévia dos dados custa entre $15\%$ e $20\%$ do tempo da
-importação (QP4). Ler a maior fonte de uma só vez é o que torna a importação mais rápida, e
+O pico de memória acompanha o bloco de leitura: cresce menos que o volume enquanto o bloco
+lê a maior fonte inteira e é contido quando a memória livre limita o bloco, chegando a
+$253{,}8$~MB no multifonte em \num{262144} linhas. A validação prévia dos dados custa entre
+$18\%$ e $23\%$ do tempo da importação (QP4). Ler a maior fonte de uma só vez é o que torna a importação mais rápida, e
 o tamanho do lote não tem efeito mensurável; daí sai a escolha automática dos dois tamanhos
-(QP5).
+(QP5), cujo modelo de pico se mostrou conservador demais no modo combinado.
 
 \subsection{Ameaças à Validade}
 \label{sec:ameacas-validade}
@@ -557,14 +581,18 @@ construção}, tempo e memória vêm de campanhas separadas, pelo motivo explica
 seção~\ref{sec:protocolo-medicao}: o registro de alocações, necessário para medir a memória,
 deixa a importação mais lenta e distorce as fases umas em relação às outras, de modo que os
 tempos só são confiáveis em execuções sem ele. A contrapartida é que tempo e pico de uma
-mesma célula vêm de execuções diferentes, embora de carga idêntica. Nesta medição
-preliminar, a campanha de memória fez uma só execução por célula. Além disso, o computador
-trabalhou com pouca memória livre (cerca de 800~MB com os contêineres no ar): a campanha
-de tempo foi interrompida duas vezes --- por falta de memória e por uma parada do Docker,
-reiniciado em seguida --- e retomada sem repetir as execuções já medidas. As interrupções
-ocorreram durante as repetições de \num{131072} linhas, em que a escrita no Cassandra variou
-bastante entre execuções (de 165 a 229~s), o que provavelmente explica por que esse é o
-único volume em que o tempo por linha sobe nos dois modos (Tabela~\ref{tab:escala}).
+mesma célula vêm de execuções diferentes, embora de carga idêntica e com o mesmo bloco. Os
+arquivos de resultado guardam apenas a mediana de cada célula, de modo que a variação entre
+as três repetições não pode ser reportada; na campanha exploratória, a mesma célula variou
+de $3{,}5\%$ a $24\%$ entre passadas (seção~\ref{sec:res-bloco}), e diferenças dessa ordem
+entre células não devem ser lidas como efeito. Além disso, o computador trabalhou com pouca
+memória livre (922~MB com os contêineres no ar), e a campanha de tempo não correu de uma só
+vez: foi pausada pelo autor depois de 11 das 36 execuções, quase toda a primeira passada, e
+retomada cerca de sete horas depois, com o Docker reiniciado, sem repetir as execuções já
+medidas. As medianas de tempo misturam, portanto, execuções de antes e de depois da
+reinicialização. Os blocos não mudaram: foram escolhidos uma vez, antes da pausa. Por
+depender da memória livre no momento, a escolha do bloco, e com ela o tempo e o pico dos
+volumes maiores, seria outra em um computador com mais memória livre.
 
 Quanto à \textbf{validade externa}, todos os experimentos correram em um único computador,
 sob Windows, com os cinco SGBDs em contêineres partilhando 8~GB de memória física. Esse

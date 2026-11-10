@@ -90,7 +90,10 @@ def test_environment_metadata_records_the_git_commit():
     import re
     commit = metrics.environment_metadata(Path("cfg.json"), {})["git_commit"]
     assert commit is None or re.fullmatch(r"[0-9a-f]{40}(-dirty)?", commit)
-    assert commit is not None  # the test suite runs inside the repository
+    # An editable install measures the checkout; a plain `pip install .` (the
+    # release pipeline) puts the package outside any repository, where it is None.
+    in_checkout = any((p / ".git").exists() for p in Path(metrics.__file__).resolve().parents)
+    assert (commit is not None) == in_checkout
 
 
 def test_environment_metadata_without_git(monkeypatch):

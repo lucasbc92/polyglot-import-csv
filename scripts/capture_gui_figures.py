@@ -13,12 +13,13 @@ never runs at all, because the pre-run validation blocks it.
 Figure 16 is a real ``--check-dbms`` run from the "Check DBMSs" button,
 with the example stack up except MongoDB and Neo4j
 (``docker compose stop mongodb neo4j``); the script refuses to run otherwise.
+The button is outlined in red, as the advisor asked, so the reader finds it.
 
 Usage, from the repository root::
 
     .venv/Scripts/python.exe scripts/capture_gui_figures.py
 
-Run it with the project's own interpreter: the "Executando:" line in figures 13
+Run it with the project's own interpreter: the "Running:" line in figures 13
 and 14 shows whichever Python spawned the importer, and the report's figures
 show the project venv.
 """
@@ -30,7 +31,8 @@ import tempfile
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QPoint, QRect, QSettings, Qt
+from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QApplication
 
 from polyglotimportcsv.config_parser import load_dbms_config
@@ -99,6 +101,9 @@ def new_window(app: QApplication, settings_path: Path, config: Path, dbms: Path 
     window.config_panel.set_paths(config, dbms)
     window._on_config_changed()
     window.options_panel.dry_run_box.setChecked(True)
+    # Laid out and painted but never mapped, so a screen shorter than SIZE does
+    # not clamp the window (and with it the console) to its own height.
+    window.setAttribute(Qt.WA_DontShowOnScreen, True)
     window.resize(*SIZE)
     window.splitter.setSizes(SPLIT)
     window.show()
@@ -112,8 +117,17 @@ def new_window(app: QApplication, settings_path: Path, config: Path, dbms: Path 
     return window
 
 
-def grab(window: MainWindow, name: str) -> None:
-    window.grab().save(str(IMAGES / name))
+def grab(window: MainWindow, name: str, outline=None) -> None:
+    """Save the window as ``name``; ``outline`` is a widget to box in red."""
+    pixmap = window.grab()
+    if outline is not None:
+        ratio = pixmap.devicePixelRatio()
+        box = QRect(outline.mapTo(window, QPoint(0, 0)), outline.size()).adjusted(-5, -5, 5, 5)
+        painter = QPainter(pixmap)
+        painter.setPen(QPen(QColor("#d00000"), 3))
+        painter.drawRect(box)
+        painter.end()
+    pixmap.save(str(IMAGES / name))
     print("  {0} — {1}".format(name, window.status_label.text()))
 
 
@@ -184,8 +198,8 @@ def main() -> int:
         assert checking.console_panel.check_button.isEnabled(), "the check must be offered"
         checking.on_check()
         pump_until_idle(app, checking)
-        assert "Verificação não passou" in checking.status_label.text()
-        grab(checking, "figure16-gui-verificacao.png")
+        assert "Check failed" in checking.status_label.text()
+        grab(checking, "figure16-gui-verificacao.png", outline=checking.console_panel.check_button)
         checking.hide()
     return 0
 
