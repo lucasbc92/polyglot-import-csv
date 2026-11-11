@@ -417,16 +417,14 @@
   configurações e os dados em três etapas de validação, inclusive uma leitura completa dos
   dados pelo mesmo código da gravação, e interrompe a importação, sem gravar nada, diante de
   qualquer problema que essas etapas encontrem. O desempenho apoia-se na escrita em lote,
-  com conversão vetorizada de tipos, e na leitura dos arquivos em blocos, projetada para que
-  o consumo de memória acompanhe o tamanho do bloco e o número de chaves distintas, e não o
-  tamanho do arquivo; o tamanho do bloco é escolhido pela própria ferramenta, a partir da
-  maior fonte e da memória livre do computador. Uma avaliação empírica com dados sintéticos, de \num{1024} a \num{262144} linhas,
-  mostrou que o tempo de importação cresce linearmente com o volume de dados e que a
-  validação prévia ocupa cerca de um quinto do tempo de uma importação, dominada pela escrita
-  nos bancos; medições feitas com uma versão anterior da ferramenta mostraram que a escrita
-  em lote acelera a importação em cerca de nove vezes em relação à gravação linha a linha e
-  que a leitura em blocos reduz o pico de memória em mais de doze vezes em cem mil linhas,
-  em relação à carga do arquivo inteiro na memória. Não foram identificadas ferramentas
+  com conversão vetorizada de tipos, e na leitura dos arquivos em blocos, cujo consumo de
+  memória acompanha o tamanho do bloco e o número de chaves distintas, e não o tamanho do
+  arquivo. Uma avaliação empírica com dados sintéticos
+  mostrou que a validação prévia ocupa cerca de um quinto do tempo de uma importação de cem
+  mil linhas, dominada pela escrita nos bancos; medições históricas mostraram que a escrita
+  em lote acelerou a importação em cerca de nove vezes em relação à gravação linha a linha e
+  que a leitura em blocos reduziu o pico de memória em mais de doze vezes no maior volume
+  medido, em relação à carga do arquivo inteiro na memória. Não foram identificadas ferramentas
   equivalentes que realizem, a partir de arquivos CSV e de regras declarativas, a importação
   simultânea para múltiplos paradigmas de dados, o que evidencia a originalidade da proposta.
   A publicação do código aberto da ferramenta impulsiona avanços colaborativos na dinâmica
@@ -460,17 +458,14 @@
   metrics. Before writing any data, the tool checks the configuration and the data in three
   validation stages, including a full read of the data through the same code as the write,
   and stops the import, writing nothing, at any problem these stages find. Performance rests
-  on batch writing, with vectorized type casting, and on reading the files in chunks,
-  designed so that memory use follows the chunk size and the number of distinct keys, not
-  the file size; the tool chooses the chunk size itself, from the largest source and the
-  free memory of the computer. An
+  on batch writing, with vectorized type casting, and on reading the files in chunks, whose
+  memory use follows the chunk size and the number of distinct keys, not the file size. An
   empirical evaluation with synthetic
-  data, from 1,024 to 262,144 rows, showed that the import time grows linearly with the data
-  volume and that the prior validation takes about one fifth of the time of an import, which
-  is dominated by database writes; measurements made with an earlier version of the tool
-  showed that batch writing speeds up the import by roughly nine times over row-by-row
-  writing and that chunked reading reduces peak memory by more than twelve times at 100,000
-  rows, compared with loading the whole file in memory. No equivalent tools were identified that perform, from CSV files and declarative
+  data showed that the prior validation takes about one fifth of the time of a
+  100,000-row import, which is dominated by database writes; historical measurements showed
+  that batch writing sped up the import by roughly nine times over row-by-row writing and
+  that chunked reading reduced peak memory by more than twelve times at the largest
+  measured volume, compared with loading the whole file in memory. No equivalent tools were identified that perform, from CSV files and declarative
   rules, the simultaneous import to multiple data paradigms, which highlights the
   originality of the proposal. The open-source publication of the tool drives collaborative
   advances in the dynamic modern database architecture.
@@ -540,6 +535,7 @@
 \include{chapters/ch3relacionados}
 \include{chapters/ch4proposta}
 \include{chapters/ch6avaliacao}
+\include{chapters/ch5futuros}
 \include{chapters/consideracoes}
 
 % ----------------------------------------------------------
