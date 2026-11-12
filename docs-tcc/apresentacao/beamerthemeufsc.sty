@@ -101,8 +101,8 @@
    \begin{frame}[plain]\typeout{FECHAMENTO-NUMERO=\the\c@framenumber}\end{frame}}}
 
 % ---------------------------------------------------------------- roteiro
-% \roteiro{0}: frame numerado com os cinco blocos iguais.
-% \roteiro{n}, n = 1..5: frame [noframenumbering] com o bloco n em destaque.
+% \roteiro{0}: frame numerado com os quatro blocos iguais.
+% \roteiro{n}, n = 1..4: frame [noframenumbering] com o bloco n em destaque.
 \newcommand{\ufsc@bloco}[2]{%
   \ifnum\ufsc@atual=0\relax
     {\color{ufscazul}\bfseries\makebox[1.6em][l]{#1}}#2%
@@ -113,11 +113,10 @@
   \fi\fi\par}
 \newcommand{\ufsc@roteiro}{%
   \large
-  \ufsc@bloco{1}{Introdução}\medskip
-  \ufsc@bloco{2}{Fundamentação e trabalhos relacionados}\medskip
-  \ufsc@bloco{3}{Proposta}\medskip
-  \ufsc@bloco{4}{Avaliação}\medskip
-  \ufsc@bloco{5}{Conclusão}}
+  \ufsc@bloco{1}{Contexto e trabalhos relacionados}\medskip
+  \ufsc@bloco{2}{A ferramenta Polyglot Import CSV}\medskip
+  \ufsc@bloco{3}{Avaliação de desempenho}\medskip
+  \ufsc@bloco{4}{Conclusão}}
 \newcommand{\roteiro}[1]{%
   \def\ufsc@atual{#1}%
   \ifnum#1=0\relax
