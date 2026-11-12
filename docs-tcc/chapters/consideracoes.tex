@@ -13,12 +13,10 @@ e conexão, com dois modos de entrada --- um arquivo por entidade (multifonte) e
 combinado; (ii) três etapas de validação, que conferem os dois arquivos, a consistência entre
 eles e os próprios dados, com o mesmo código da gravação, antes de qualquer escrita; (iii) o
 mapeamento declarativo de colunas com conversão nativa aos tipos de cada SGBD; (iv) uma camada
-de observabilidade e um subsistema de métricas que instrumentam cada fase da importação; (v)
+de observabilidade e um subsistema de métricas que instrumentam cada fase da importação; e (v)
 dois recursos de desempenho --- a estratégia de escrita em lote, com conversão vetorizada e
 gravação em lotes, e a leitura dos arquivos em blocos, de memória limitada, com o tamanho do
-bloco escolhido automaticamente e ajustável pela linha de comando; e (vi) uma avaliação empírica com dados sintéticos, gerados de
-forma determinística, que quantifica o custo de importar para os cinco paradigmas, a
-escalabilidade da ferramenta com o volume de dados e o custo da validação prévia.
+bloco escolhido automaticamente e ajustável pela linha de comando.
 
 A avaliação (Capítulo~\ref{cap:avaliacao}) confirma os objetivos
 traçados. Em \num{262144} linhas, a escrita nos bancos responde por cerca de $80\%$ do tempo
