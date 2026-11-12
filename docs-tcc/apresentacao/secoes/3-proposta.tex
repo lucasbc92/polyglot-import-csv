@@ -1,4 +1,4 @@
-\roteiro{3}
+\roteiro{2}
 
 % Revelação em TikZ sem deslocar nada: o elemento existe em todas as páginas do frame,
 % transparente fora do intervalo <...> (estilo usual do beamer com TikZ).
@@ -7,7 +7,7 @@
   visivel em/.style={alt={#1{}{invisivel}}},
   alt/.code args={<#1>#2#3}{\alt<#1>{\pgfkeysalso{#2}}{\pgfkeysalso{#3}}}}
 
-% Slide 8: visão geral (relatório §4.1, Fig. 7)
+% Slide 6: visão geral (relatório §4.1, Fig. 7)
 % A Fig. 7 (images/figure7-overview.png, 1376 x 1380 px) rende texto de ~3,6 pt na altura
 % útil do slide; o desenho abaixo repete as suas caixas e setas em TikZ, com texto legível.
 \begin{frame}{Visão geral}
@@ -28,7 +28,8 @@
       {\textbf{arquivo de conexão}\\[-1pt]{\scriptsize\texttt{dbms\_config.json}}\\[-1pt]
        {\scriptsize SGBDs e como alcançá-los}};
     \node[caixa, fill=ufscfundo, text width=40mm] (csv) at (20, -14)
-      {\textbf{arquivos de dados}\\[-1pt]{\scriptsize um ou mais CSV}};
+      {\textbf{arquivos de dados}\\[-1pt]{\scriptsize multifonte: um CSV por evento}\\[-1pt]
+       {\scriptsize combinado: um só CSV}};
     % processamento
     \begin{scope}[visivel em=<2->]
       \node[caixa, fill=ufscazul, draw=ufscazul, text=white, text width=38mm,
@@ -54,13 +55,18 @@
    destino.\par}
 \end{frame}
 
-% Slide 9: arquivo de importação (relatório §4.2.1; trecho de data/ecommerce/import_config.json)
+% Slide 7: os dois arquivos de configuração (relatório §4.2.1, §4.2.3; trecho de
+% data/ecommerce/import_config.json). Os dois modos de entrada (§4.2.1.1) estão na caixa
+% "arquivos de dados" do slide 6.
 % O trecho mantém as chaves e o aninhamento do arquivo real; "..." marca o que foi omitido
 % (entidades categories e products antes de inventory, relationships, os outros SGBDs).
-\begin{frame}[fragile]{Arquivo de importação}
-  \destaque{Arquivo de importação}: JSON com as fontes (CSVs) e o que gravar em cada SGBD.\par
+\begin{frame}[fragile]{Configuração em dois arquivos JSON}
+  % \begingroup, e não um grupo {...} logo após o título: o Beamer leria o grupo como
+  % subtítulo do frame.
+  \begingroup\small\destaque{Importação}: as fontes (CSVs) e o que gravar em cada SGBD.
+  \destaque{Conexão}: onde alcançá-los.\par\endgroup
   \smallskip
-  \begingroup\footnotesize Trecho de \texttt{import\_config.json}: a fonte \texttt{stock}
+  \begingroup\footnotesize Trecho do arquivo de importação: a fonte \texttt{stock}
   alimenta a tabela \texttt{inventory}.\par\endgroup
   \smallskip
   \begin{minipage}[t]{0.66\textwidth}
@@ -88,22 +94,19 @@
       \item \texttt{postgres}: um bloco por SGBD destino.
       \item \texttt{entities}: tabelas, coleções, nós\ldots
       \item \texttt{columns}: colunas, com chave (\texttt{is\_key}) e tipo
-            (\texttt{db\_type}).
-    \end{itemize}
+            (\texttt{db\_type}).    \end{itemize}
   \end{minipage}
 \end{frame}
 
-% Slide 10: conexão e validação prévia (relatório v2.4 §4.2.3, §4.2.4, Figura 10)
+% Slide 8: validação prévia (relatório §4.2.4, Figura 10)
 % A Figura 10 (images/figure10-config-pipeline.png) é um retrato alto; o desenho foi refeito
 % na horizontal, com as três etapas de validação reveladas uma a uma.
 % Fiel ao código da 3.0.0: as etapas 1 e 2 rodam em runner.py (load_config) antes de abrir
 % qualquer CSV; a etapa 3 confere primeiro os cabeçalhos (validation.validate_headers) e depois
 % os dados, na leitura de validação (stream_runner: a mesma passagem da gravação, com sinks que
 % só conferem). Qualquer falha termina com código 1 antes da primeira gravação. A leitura de
-% inferência e a verificação dos SGBDs ficam entre as duas partes da etapa 3 (slide 13).
-\begin{frame}{Conexão e validação prévia}
-  \destaque{Arquivo de conexão}: JSON que diz onde alcançar cada SGBD.\par
-  \smallskip
+% inferência e a verificação dos SGBDs ficam entre as duas partes da etapa 3 (slide 10).
+\begin{frame}{Validação prévia em três etapas}
   A validação prévia tem \destaque{três etapas}, todas antes de gravar:\par
   \medskip
   \centering
@@ -161,58 +164,7 @@
    (Figura~10 do relatório).\par}
 \end{frame}
 
-% Slide 11: cenário exemplo (relatório §4.2, tab:eventos-ecommerce; §4.2.1, modos;
-% §4.3.2, o exemplo usa o modo multifonte). Os blocos sources vêm de import_config.json e
-% import_config_combined.json (iguais a lst:sources-multi e lst:sources-combined).
-\begin{frame}[fragile]{Cenário exemplo}
-  \begingroup\footnotesize\bfseries\color{ufscazul} Tipos de evento do cenário exemplo
-  (e-commerce)\hfill\scriptsize\mdseries\color{black!60} todo evento registra o instante e o
-  usuário envolvido\par\endgroup
-  \smallskip
-  \footnotesize
-  \setlength{\tabcolsep}{4pt}
-  \setlength{\aboverulesep}{0.15ex}\setlength{\belowrulesep}{0.3ex}
-  \begin{tabular}{@{}>{\ttfamily}l l E{0.55\textwidth}@{}}
-    \toprule
-    \normalfont\bfseries Tipo & \bfseries Evento & \bfseries Demais dados registrados \\
-    \midrule
-    stock           & reposição de estoque & produto, categoria, quantidade disponível e preço \\
-    purchase        & compra               & pedido, produto, contraparte da venda, pagamento e avaliação \\
-    select\_product & seleção de produto   & produto selecionado \\
-    add\_to\_cart   & adição ao carrinho   & carrinho, produto e quantidade \\
-    \bottomrule
-  \end{tabular}\par
-  {\scriptsize\color{black!60}Fonte: Tabela 1 do relatório.\par}
-  \smallskip
-  \onslide<2->
-  \begingroup\tcbset{equal height group=modos}
-  \begin{minipage}[t]{0.49\textwidth}
-    \begin{painel}{Multifonte\enspace{\mdseries\color{black!60}um CSV por tipo de evento}}{}
-\begin{lstlisting}[style=jsonslide, aboveskip=0pt, belowskip=0pt]
-"sources": {
-  "stock": "ecommerce_stock.csv",
-  "purchase": "ecommerce_purchase.csv", ...
-}
-\end{lstlisting}
-    \end{painel}
-  \end{minipage}\hfill
-  \begin{minipage}[t]{0.49\textwidth}
-    \begin{painel}{Combinado\enspace{\mdseries\color{black!60}um CSV com coluna de
-      origem}}{}
-\begin{lstlisting}[style=jsonslide, aboveskip=0pt, belowskip=0pt]
-"sources": {
-  "ecommerce": {
-    "file": "ecommerce_join.csv",
-    "origin_column": true } }
-\end{lstlisting}
-    \end{painel}
-  \end{minipage}\par
-  \endgroup
-  \smallskip
-  Nos dois modos, o resto do arquivo de importação é igual. O exemplo usa o multifonte.\par
-\end{frame}
-
-% Slide 12: o mesmo cenário em cinco modelos de dados (relatório v2.4 §4.3.3)
+% Slide 9: o mesmo cenário em cinco modelos de dados (relatório §4.3.3)
 % Valores e nomes de campo copiados de tab:pg-inventory, lst:mongo-doc,
 % tab:cassandra-particao, lst:redis-pares e lst:neo4j-grafo, que a v2.4 leu de uma
 % importação real: números gravados como números (tipos da leitura de inferência) e o preço
@@ -309,7 +261,7 @@
   \endgroup
 \end{frame}
 
-% Slide 13: fluxo de execução (relatório v2.4 §4.3, Figura 11; fonte do desenho:
+% Slide 10: fluxo de execução (relatório §4.3, Figura 11; fonte do desenho:
 % images/figure11-import-algorithm.mmd). A Figura 11 é um retrato alto; o fluxo foi
 % redesenhado na horizontal. A faixa de cima reúne os passos 1 a 3, que não leem as linhas
 % de dados; as três caixas de baixo são as três leituras: inferência (passo 4), validação
@@ -344,8 +296,7 @@
     \begin{scope}[visivel em=<2->]
       \node[leitura] (l1) at (22, -2)
         {\footnotesize\textbf{4. Leitura de inferência}\\[2pt]
-         percorre cada CSV inteiro, em blocos de \texttt{-{}-chunk-size}, e fixa o tipo de
-         cada coluna};
+         percorre cada CSV inteiro, em blocos, e fixa o tipo de cada coluna};
       \draw[seta] (p3.south) |- ++(0,-1.5) -| (l1.north);
     \end{scope}
     % passo 5: leitura de validação
@@ -366,8 +317,8 @@
     \begin{scope}[visivel em=<4->]
       \node[leitura, fill=ufscazul, draw=ufscazul, text=white] (l3) at (120, -2)
         {\footnotesize\textbf{6--9. Leitura de gravação}\\[2pt]
-         um SGBD destino por vez: prepara, relê as fontes dele em blocos e grava em lotes
-         de \texttt{-{}-batch-size}};
+         um SGBD destino por vez: prepara, relê as fontes dele em blocos e grava em
+         lotes};
       \draw[seta] (l2.east) -- (l3.west);
       \node[caixa, fill=ufscfundo, text width=40mm, minimum height=8mm] (saida)
         at (120, -22)
@@ -380,114 +331,51 @@
    cada SGBD destino.\par}
 \end{frame}
 
-% Slide 14: exemplo de execução (relatório v2.4 §4.3.4, Tabela 12)
-% O comando é o lstlisting de ch4proposta.tex (§4.3.4): mesmas opções, mesma ordem, quebras
-% de linha só entre opções. A explicação de --dry-run segue o parágrafo logo abaixo do
-% comando ("executa os passos 1, 2, 4 e 5 ... mas não abre conexão com nenhum SGBD"). As
-% contagens são as de tab:dryrun (linhas a gravar, após os filtros e a divisão por each,
-% antes da eliminação de duplicatas), em duas metades lado a lado.
-\lstdefinestyle{bashgrande}{style=bashslide, basicstyle=\ttfamily\footnotesize}
-\begin{frame}[fragile]{Exemplo de execução}
-  \begin{tcolorbox}[colback=ufscfundo, colframe=ufscborda, boxrule=0.5pt, arc=0.6mm,
-      boxsep=0pt, left=2mm, right=2mm, top=0.6mm, bottom=0.6mm]
-    \footnotesize
-    \begin{tabular}{@{}l@{\hspace{6mm}}l@{}}
-      \lstinline[style=bashgrande]|python -m polyglotimportcsv \|
-        & {\color{black!60}$\leftarrow$}\enspace executa a ferramenta \\
-      \lstinline[style=bashgrande]|  --config data/ecommerce/import_config.json \|
-        & {\color{black!60}$\leftarrow$}\enspace arquivo de importação \\
-      \lstinline[style=bashgrande]|  --dbms-config data/ecommerce/dbms_config.json \|
-        & {\color{black!60}$\leftarrow$}\enspace arquivo de conexão \\
-      \lstinline[style=bashgrande]|  --dry-run|
-        & {\color{black!60}$\leftarrow$}\enspace valida e conta, sem gravar \\
-    \end{tabular}
-  \end{tcolorbox}
-  \onslide<2->
-  \par\smallskip
-  \par\vspace{-2mm}\begingroup\footnotesize\bfseries\color{ufscazul} Linhas a gravar, segundo o
-  \texttt{-{}-dry-run}\hfill\scriptsize\mdseries\color{black!60}
-  após os filtros, antes de eliminar duplicatas\par\endgroup
-  \scriptsize
-  \setlength{\tabcolsep}{3pt}
-  \setlength{\aboverulesep}{0.15ex}\setlength{\belowrulesep}{0.3ex}
-  \begin{minipage}[t]{0.49\textwidth}
-    \begin{tabular}[t]{@{}l E{37mm} E{13mm}@{}}
-      \toprule
-      \bfseries SGBD & \bfseries Destino & \bfseries Linhas \\
-      \midrule
-      PostgreSQL & \texttt{categories}         & 8 \\
-      PostgreSQL & \texttt{products}           & 8 \\
-      PostgreSQL & \texttt{inventory}          & 8 \\
-      PostgreSQL & \texttt{orders}             & 8 \\
-      MongoDB    & \texttt{product\_catalog}   & 8 \\
-      MongoDB    & \texttt{orders\_state\_SP}  & 2 \\
-      MongoDB    & \texttt{orders\_state\_}CA, RJ, RS, SC, SE e TO & 1 cada \\
-      \bottomrule
-    \end{tabular}
+% Slide 11: estratégia de escrita, modelo de execução e escolha automática (relatório §4.5.1
+% e §4.5.2). Os números das duas decisões são os do §4.5.1, medidos com uma versão anterior
+% da ferramenta (sem a coleção orders do MongoDB): servem só de justificativa, e o Cap. 5
+% mede apenas a versão final. Escolha automática: §4.5.2 (lote de 2.048 linhas; bloco que lê
+% a maior fonte inteira, com o pico previsto limitado a 25% da memória livre; de 16 a
+% 256 MB; --chunk-size e --batch-size fixam os dois à mão, o que o slide não diz).
+\newcommand{\decisao}[4]{% #1 antes, #2 depois, #3 subtítulo do depois, #4 ganho medido
+  \begin{painel}{#2}{#3}
+    {\color{black!60}Antes: #1}\par\smallskip
+    #4
+  \end{painel}}
+\begin{frame}{Escrita em lote e leitura em blocos}
+  \begingroup\footnotesize\tcbset{equal height group=decisoes, halign=flush left}
+  \begin{minipage}[t]{0.485\textwidth}\vspace{0pt}
+    \decisao{linha a linha: cada célula convertida e cada linha gravada por um comando
+      próprio.}{Escrita em lote}{como os valores são convertidos e gravados}
+      {Converte uma coluna inteira de uma vez e grava muitos registros por comando.\par
+       \smallskip
+       \destaque{$9{,}3\times$ mais rápida} (14,54 contra 135,74~s, em dez mil linhas).}
   \end{minipage}\hfill
-  \begin{minipage}[t]{0.49\textwidth}
-    \begin{tabular}[t]{@{}l l E{27mm}@{}}
-      \toprule
-      \bfseries SGBD & \bfseries Destino & \bfseries Linhas \\
-      \midrule
-      Cassandra & \texttt{user\_activity\_log} & 32 (união das 4 fontes) \\
-      Redis & \texttt{shopping\_cart}     & 8 \\
-      Redis & \texttt{user\_session}      & 8 \\
-      Neo4j & nó \texttt{User}            & 8 \\
-      Neo4j & nó \texttt{Product}         & 8 \\
-      Neo4j & aresta \texttt{PURCHASED}   & 8 (uma por linha da fonte \texttt{purchase}) \\
-      \bottomrule
-    \end{tabular}
+  \begin{minipage}[t]{0.485\textwidth}\vspace{0pt}
+    \decisao{cada fonte inteira na memória: o pico crescia com o tamanho do
+      arquivo.}{Leitura em blocos}{como os arquivos ocupam a memória}
+      {Lê cada arquivo em blocos e grava em lotes: o pico acompanha o bloco.\par
+       \smallskip
+       \destaque{Pico $12{,}5\times$ menor} (75,9 contra 950,7~MB, em cem mil linhas), com
+       10\% a mais de tempo.}
   \end{minipage}\par
-  {\scriptsize\color{black!60}Fonte: Tabela 12 do relatório.\par}
-\end{frame}
-
-% Slide 15: estratégia de escrita e modelo de execução (relatório v2.4 §4.5, §4.5.1, §4.5.2)
-% Só conceitos: os números ficam para a avaliação. Vocabulário do relatório: ingênua
-% (naive) x em lote (batch); materialização x leitura em blocos (streaming). A ingênua e a
-% materialização não existem na 3.0.0: são as linhas de base históricas de QP4 a QP6.
-% Padrões e faixas de cli.py: --chunk-size 8 MB (8 a 256), --batch-size 1024 (1024 a 8192).
-\newcommand{\fator}[3]{% #1 grupo de altura, #2 painel da esquerda, #3 painel da direita
-  \tcbset{equal height group=#1}%
-  \begin{minipage}[c]{0.455\textwidth}\footnotesize #2\end{minipage}\hfill
-  \begin{minipage}[c]{0.07\textwidth}\centering\Large\color{ufscazul}$\times$%
-  \end{minipage}\hfill
-  \begin{minipage}[c]{0.455\textwidth}\footnotesize #3\end{minipage}\par}
-\begin{frame}{Escrita e leitura em blocos}
-  \begingroup
-  \footnotesize\destaque{Estratégia de escrita}\enspace
-  {\scriptsize\color{black!60} como os valores viram tipos nativos e são gravados}\par
-  \smallskip
-  \fator{escrita}{%
-    \begin{painel}{ingênua (\textit{naive})}{TCC1, linha de base histórica}
-      Convertia cada célula e gravava cada linha com um comando próprio.
-    \end{painel}}{%
-    \begin{painel}{em lote (\textit{batch})}{a única da versão final}
-      Converte uma coluna inteira de uma vez e grava muitos registros por comando.
-    \end{painel}}
-  \onslide<2->{%
-  \medskip
-  \footnotesize\destaque{Modelo de execução}\enspace
-  {\scriptsize\color{black!60} como os arquivos ocupam a memória}\par
-  \smallskip
-  \fator{execucao}{%
-    \begin{painel}{materialização}{linha de base histórica}
-      Carregava cada fonte inteira na memória: um arquivo maior que ela não chegaria a
-      ser carregado.
-    \end{painel}}{%
-    \begin{painel}{leitura em blocos (\textit{streaming})}{o único da versão final}
-      Lê em blocos de \texttt{-{}-chunk-size} (8~MB) e grava em lotes de
-      \texttt{-{}-batch-size} (1024 linhas). O pico acompanha o bloco.
-    \end{painel}}}
-  \onslide<3->{%
-  \medskip
-  \footnotesize As linhas de base históricas são as que a avaliação compara
-  (QP4 a QP6).\par}
   \endgroup
+  \onslide<2->{%
+  \smallskip
+  \begin{tcolorbox}[colback=ufscfundo, colframe=ufscazul, sharp corners, boxrule=0pt,
+      leftrule=1mm, left=2mm, right=2mm, top=1mm, bottom=1mm, boxsep=0pt]
+    \footnotesize
+    \destaque{Bloco escolhido a cada execução:} o que lê a maior fonte inteira, entre 16 e
+    256~MB, desde que o pico previsto caiba em 25\% da memória livre; senão, o maior que
+    cabe.\enspace \destaque{Lote:} \num{2048} linhas.
+  \end{tcolorbox}}
+  \vfill
+  {\scriptsize\color{black!60}Fonte: §4.5 do relatório; ganhos medidos com uma versão
+   anterior da ferramenta.\par}
 \end{frame}
 
-% Slide 16: interface gráfica (relatório v2.4 §4.6; figure12-gui-ocioso a figure16-gui-verificacao,
-% capturas da 3.0.0, com "Bloco em MB" e "Lote"; faixas medidas com pymupdf)
+% Slide 12: interface gráfica (relatório §4.6; figure12-gui-ocioso, figure14-gui-sucesso e
+% figure16-gui-verificacao, capturas da 3.2.0, em inglês e sem os controles de bloco e lote)
 % As capturas têm 1240 x 1020 px. Inteiras, o texto delas sairia com ~2 pt no slide; por
 % isso cada passo mostra recortes (coordenadas em px da captura original), ampliados até o
 % texto ficar legível. Legendas: as do relatório, encurtadas.
@@ -558,35 +446,22 @@
   {\footnotesize #2\par}}
 \begin{frame}{Interface gráfica}
   \destaque{O comando exibido é o comando executado.}\hfill
-  {\scriptsize\color{black!60} recortes das capturas de tela}\par
+  {\scriptsize\color{black!60} recortes das Figuras 13, 15 e 17 do relatório}\par
   \smallskip
   \only<1>{\passogui{%
-    \recorte{figure12-gui-ocioso}{22}{208}{860}{376}{147}\vspace{1.5mm}
-    \comandogui{figure12-gui-ocioso}{676}{30}{155}{282}{785}{0.222}}{%
-    \textbf{Ocioso:} um controle para cada opção de uso cotidiano, com ícone de ajuda,
-    inclusive o bloco e o lote, e o comando montado, colorido e somente leitura.}}
+    \recorte{figure12-gui-ocioso}{22}{208}{860}{322}{147}\vspace{1.5mm}
+    \comandogui{figure12-gui-ocioso}{645}{30}{218}{282}{556}{0.222}\vspace{1.5mm}
+    \faixa{figure12-gui-ocioso}{735}{768}{16}{100}{775}{1225}{0.2}{guiconsole}}{%
+    \textbf{Ocioso:} um controle para cada opção de uso cotidiano da CLI, com ícone de
+    ajuda, e o comando montado, colorido e somente leitura.}}
   \only<2>{\passogui{%
-    \recorte{figure13-gui-executando}{22}{264}{600}{313}{116}\vspace{1.5mm}
-    \faixa{figure13-gui-executando}{763}{798}{16}{130}{700}{1230}{0.2}{guiconsole}\vspace{1.5mm}
-    \recorte{figure13-gui-executando}{22}{872}{700}{945}{136}}{%
-    \textbf{Executando:} formulário bloqueado, botão de interrupção e saída colorida da CLI
-    chegando ao console em tempo real.}}
-  \only<3>{\passogui{%
-    \faixa{figure14-gui-sucesso}{763}{798}{16}{130}{700}{1230}{0.2}{guiconsole}\vspace{1.5mm}
-    \recorte{figure14-gui-sucesso}{22}{832}{700}{945}{128}\vspace{1.5mm}
+    \recorte{figure14-gui-sucesso}{22}{778}{700}{945}{128}\vspace{1.5mm}
     \faixa{figure14-gui-sucesso}{997}{1020}{0}{125}{780}{1240}{0.22}{guistatus}}{%
-    \textbf{Concluído:} métricas por fase, desfecho e arquivo de log da sessão na barra de
-    estado.}}
-  \only<4>{\passogui{%
-    \recorte{figure15-gui-erro}{22}{42}{760}{114}{147}\vspace{1.5mm}
-    \recorte{figure15-gui-erro}{22}{140}{760}{158}{147}\vspace{1.5mm}
-    \faixa{figure15-gui-erro}{763}{798}{16}{130}{700}{1230}{0.2}{guiconsole}}{%
-    \textbf{Erro antes de executar:} o arquivo de importação viola o \textit{JSON
-    Schema}; a mensagem da CLI cita o campo recusado, e o botão Executar fica
-    desabilitado.}}
-  \only<5>{\passogui{%
-    \faixa{figure16-gui-verificacao}{763}{798}{16}{130}{700}{1230}{0.2}{guiconsole}\vspace{1.5mm}
-    \recorte{figure16-gui-verificacao}{22}{817}{770}{945}{130}}{%
-    \textbf{Verificação dos SGBDs:} Neo4j e MongoDB fora do ar e, abaixo da tabela de
-    estados, os comandos que os iniciam.}}
+    \textbf{Simulação concluída} (\texttt{-{}-dry-run}): contagens, métricas por fase,
+    desfecho e arquivo de log da sessão na barra de estado.}}
+  \only<3>{\passogui{%
+    \faixa{figure16-gui-verificacao}{735}{768}{16}{100}{775}{1225}{0.2}{guiconsole}\vspace{1.5mm}
+    \recorte{figure16-gui-verificacao}{22}{778}{790}{945}{130}}{%
+    \textbf{Verificação dos SGBDs} (botão \textit{Check DBMSs}): MongoDB e Neo4j fora do
+    ar e, abaixo da tabela de estados, os comandos que os iniciam.}}
 \end{frame}

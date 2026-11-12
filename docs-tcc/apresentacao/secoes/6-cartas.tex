@@ -1,4 +1,4 @@
-% Cartas na manga (B1-B7): slides de apoio para perguntas previsíveis da banca.
+% Cartas na manga (B1-B10): slides de apoio para perguntas previsíveis da banca.
 % O rodapé mostra B1, B2, ... (\cartasnamanga = \appendix, com appendixnumberbeamer).
 % Sem sobreposições: cada carta aparece inteira quando chamada.
 
@@ -14,7 +14,68 @@
 % Linha de fonte ou observação ao pé da carta.
 \newcommand{\bknota}[1]{{\scriptsize\raggedright\color{black!60}#1\par}}
 
-% B1: falha no meio da importação. Conferido no código da 3.0.0: runner.py (etapas 1 e 2,
+% B1: exemplo de execução (relatório §4.3.4, Tabela 12)
+% O comando é o lstlisting de ch4proposta.tex (§4.3.4): mesmas opções, mesma ordem, quebras
+% de linha só entre opções. A explicação de --dry-run segue o parágrafo logo abaixo do
+% comando ("executa os passos 1, 2, 4 e 5 ... mas não abre conexão com nenhum SGBD"). As
+% contagens são as de tab:dryrun (linhas a gravar, após os filtros e a divisão por each,
+% antes da eliminação de duplicatas), em duas metades lado a lado.
+\lstdefinestyle{bashgrande}{style=bashslide, basicstyle=\ttfamily\footnotesize}
+\begin{frame}[fragile]{Exemplo de execução}
+  \begin{tcolorbox}[colback=ufscfundo, colframe=ufscborda, boxrule=0.5pt, arc=0.6mm,
+      boxsep=0pt, left=2mm, right=2mm, top=0.6mm, bottom=0.6mm]
+    \footnotesize
+    \begin{tabular}{@{}l@{\hspace{6mm}}l@{}}
+      \lstinline[style=bashgrande]|python -m polyglotimportcsv \|
+        & {\color{black!60}$\leftarrow$}\enspace executa a ferramenta \\
+      \lstinline[style=bashgrande]|  --config data/ecommerce/import_config.json \|
+        & {\color{black!60}$\leftarrow$}\enspace arquivo de importação \\
+      \lstinline[style=bashgrande]|  --dbms-config data/ecommerce/dbms_config.json \|
+        & {\color{black!60}$\leftarrow$}\enspace arquivo de conexão \\
+      \lstinline[style=bashgrande]|  --dry-run|
+        & {\color{black!60}$\leftarrow$}\enspace valida e conta, sem gravar \\
+    \end{tabular}
+  \end{tcolorbox}
+  \par\smallskip
+  \par\vspace{-2mm}\begingroup\footnotesize\bfseries\color{ufscazul} Linhas a gravar, segundo o
+  \texttt{-{}-dry-run}\hfill\scriptsize\mdseries\color{black!60}
+  após os filtros, antes de eliminar duplicatas\par\endgroup
+  \scriptsize
+  \setlength{\tabcolsep}{3pt}
+  \setlength{\aboverulesep}{0.15ex}\setlength{\belowrulesep}{0.3ex}
+  \begin{minipage}[t]{0.49\textwidth}
+    \begin{tabular}[t]{@{}l E{37mm} E{13mm}@{}}
+      \toprule
+      \bfseries SGBD & \bfseries Destino & \bfseries Linhas \\
+      \midrule
+      PostgreSQL & \texttt{categories}         & 8 \\
+      PostgreSQL & \texttt{products}           & 8 \\
+      PostgreSQL & \texttt{inventory}          & 8 \\
+      PostgreSQL & \texttt{orders}             & 8 \\
+      MongoDB    & \texttt{product\_catalog}   & 8 \\
+      MongoDB    & \texttt{orders\_state\_SP}  & 2 \\
+      MongoDB    & \texttt{orders\_state\_}CA, RJ, RS, SC, SE e TO & 1 cada \\
+      \bottomrule
+    \end{tabular}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.49\textwidth}
+    \begin{tabular}[t]{@{}l l E{27mm}@{}}
+      \toprule
+      \bfseries SGBD & \bfseries Destino & \bfseries Linhas \\
+      \midrule
+      Cassandra & \texttt{user\_activity\_log} & 32 (união das 4 fontes) \\
+      Redis & \texttt{shopping\_cart}     & 8 \\
+      Redis & \texttt{user\_session}      & 8 \\
+      Neo4j & nó \texttt{User}            & 8 \\
+      Neo4j & nó \texttt{Product}         & 8 \\
+      Neo4j & aresta \texttt{PURCHASED}   & 8 (uma por linha da fonte \texttt{purchase}) \\
+      \bottomrule
+    \end{tabular}
+  \end{minipage}\par
+  {\scriptsize\color{black!60}Fonte: Tabela 12 do relatório.\par}
+\end{frame}
+
+% B2: falha no meio da importação. Conferido no código da 3.0.0: runner.py (etapas 1 e 2,
 % cabeçalhos e _require_dbms antes de ler as linhas de dados); stream_runner.py (leituras de
 % inferência e de validação antes da primeira gravação; depois, um SGBD por vez, na ordem de
 % validation.DBMS_NAMES, sem desfazer; uma falha na gravação termina com código 1 e a mensagem
@@ -28,7 +89,7 @@
     \item \destaque{Antes de gravar}, as três etapas de validação conferem configuração e
           dados, e todos os SGBDs destino precisam responder. Qualquer falha: nada é gravado.
     \item \destaque{Um SGBD por vez}, em lotes: PostgreSQL, MongoDB, Cassandra, Redis, Neo4j.
-    \item \destaque{Sem atomicidade entre SGBDs} (em aberto, slide 23): não há transação
+    \item \destaque{Sem atomicidade entre SGBDs} (em aberto, carta B3): não há transação
           comum nem desfazer (\textit{rollback}).
     \item \destaque{Falha durante a gravação}, como a queda de um SGBD: os anteriores ficam
           gravados, o atual fica parcial, os seguintes ficam vazios; a saída lista os já
@@ -39,7 +100,42 @@
   \end{itemize}
 \end{frame}
 
-% B2: coerção de tipos. Conferido no código da 3.0.0: csv_reader (tudo lido como texto; a
+% B3: resolve x em aberto (Araujo, Silva e Mello, ERBD 2025, §6 Conclusão, p. 9 do PDF):
+% "Gerar instruções adequadas a cada SGBD considerado, garantir atomicidade, ser capaz de
+% estimar o efeito das modificações antes que sejam executadas são exemplos de questões a
+% serem tratadas para realizar uma gestão eficiente da evolução de esquemas neste contexto."
+% O artigo trata de evolução de esquemas; o slide leva as três questões para a importação.
+\newcommand{\cmaberto}{{\color{red!55!black}\bfseries em aberto}}
+\begin{frame}{Resolve $\times$ em aberto}
+  O artigo trata de \destaque{evolução de esquemas}; este trabalho, de \destaque{importação}.\par
+  Três questões do artigo, levadas para a importação (ARAUJO; SILVA; MELLO, 2025):\par
+  \medskip
+  \footnotesize
+  \setlength{\tabcolsep}{3pt}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabular}{@{}E{0.28\textwidth}E{0.53\textwidth}E{0.13\textwidth}@{}}
+    \toprule
+    \bfseries Questão do artigo & \bfseries Na importação, com a Polyglot Import CSV
+      & \bfseries Situação \\
+    \midrule
+    \textit{Gerar instruções adequadas a cada SGBD}
+      & Um só arquivo de importação gera a escrita de cada SGBD: SQL, CQL (Cassandra),
+        Cypher (Neo4j), comandos do Redis e documentos do MongoDB.
+      & \destaque{resolve} \\
+    \textit{Estimar o efeito das modificações antes que sejam executadas}
+      & Validação prévia e \texttt{-{}-dry-run}: contagens por SGBD e por entidade, sem
+        gravar.
+      & \destaque{resolve} \\
+    \textit{Garantir atomicidade} (tudo ou nada)
+      & A validação prévia barra os erros de configuração e de dados, mas a gravação vai de
+        um SGBD por vez, sem transação comum: uma falha durante ela, como a queda de um
+        SGBD, deixa uma carga parcial.
+      & \cmaberto \\
+    \bottomrule
+  \end{tabular}
+\end{frame}
+
+% B4: coerção de tipos. Conferido no código da 3.0.0: csv_reader (tudo lido como texto; a
 % leitura de inferência agrega cada coluna sobre o arquivo inteiro, em blocos; ordem:
 % booleano, número, data e hora acima de 85% dos não vazios, texto; vazia sem valor; um
 % valor só de dígitos nunca conta como data, para que uma coluna de IDs não vire data);
@@ -78,7 +174,7 @@
   \bknota{Política de coerção configurável: trabalho futuro (Cap.~6 do relatório).}
 \end{frame}
 
-% B3: por que configurar à mão? (relatório §1.1: mapeamento declarativo em JSON, que permite
+% B5: por que configurar à mão? (relatório §1.1: mapeamento declarativo em JSON, que permite
 % a validação prévia; §2.1: a escolha do SGBD depende de como se quer manipular os dados;
 % §4.2: mapeamento automático, tipos inferidos; §3.3: carga inicial e reprodutível).
 % O uso de LLM não existe na ferramenta: o slide o trata como caminho possível, fora do
@@ -109,7 +205,7 @@
   trabalho.\par
 \end{frame}
 
-% B4: importadores nativos (relatório §3.1, com a documentação oficial de cada SGBD).
+% B6: importadores nativos (relatório §3.1, com a documentação oficial de cada SGBD).
 % Comparação só qualitativa: o Cap. 5 não mede o desempenho desses importadores.
 \begin{frame}{Importadores nativos: o que cada um exige}
   \footnotesize
@@ -142,11 +238,11 @@
     relatório.}
 \end{frame}
 
-% B5: Cassandra e o ambiente (relatório v2.4 §5.2; tab:escrita-sgbd = Tabela 16,
-% N = 100 000, multifonte, bloco de 8 MB, campanha sem instrumentação de memória; linhas
-% processadas pela escrita, antes da eliminação de duplicatas; §5.3.1: 110,96 s dos
-% 164,84 s da escrita, cerca de 67%; §5.4.1: restrição de ambiente; Cap. 6: SGBDs dedicados
-% e o caminho de escrita do Cassandra além da concorrência atual).
+% B7: Cassandra e o ambiente (relatório §5.2; tab:escrita-sgbd = Tabela 16, N = 262.144,
+% multifonte, campanha de tempo; linhas processadas pela escrita, antes da eliminação de
+% duplicatas; §5.3.1: 270,51 s dos 393,70 s da escrita, 68,7%; §5.4.1: restrição de
+% ambiente; §6.1: SGBDs dedicados e o caminho de escrita do Cassandra além da concorrência
+% atual).
 \begin{frame}{Cassandra e o ambiente}
   \begin{minipage}[t]{0.5\textwidth}
     \vspace{0pt}
@@ -160,30 +256,30 @@
       \toprule
       \bfseries SGBD & \bfseries Linhas & \bfseries Tempo (s) & \bfseries Linhas/s \\
       \midrule
-      \destaque{Cassandra} & \destaque{\num{100000}} & \destaque{110{,}96}
-        & \destaque{901} \\
-      Neo4j      &  \num{89275} &  27{,}10 & \num{3294} \\
-      PostgreSQL &  \num{73660} &  12{,}72 & \num{5793} \\
-      MongoDB    &  \num{50442} &   8{,}63 & \num{5845} \\
-      Redis      &  \num{49558} &   5{,}44 & \num{9118} \\
+      \destaque{Cassandra} & \destaque{\num{262144}} & \destaque{270{,}51}
+        & \destaque{969} \\
+      Neo4j      & \num{234027} &  55{,}25 & \num{4236} \\
+      PostgreSQL & \num{193096} &  32{,}57 & \num{5928} \\
+      MongoDB    & \num{132230} &  21{,}42 & \num{6173} \\
+      Redis      & \num{129914} &  13{,}95 & \num{9310} \\
       \bottomrule
     \end{tabular}\par
     \medskip
     \raggedright
-    O Cassandra processa mais linhas e mais devagar: \destaque{110,96~s dos 164,84~s} da
-    escrita, cerca de 67\%.\par
+    O Cassandra processa mais linhas e mais devagar: \destaque{270,51~s dos 393,70~s} da
+    escrita, 68,7\%.\par
     \medskip
-    \bknota{Fonte: Tabela 16 do relatório; $N = \num{100000}$, multifonte, bloco de 8~MB;
-      sem instrumentação de memória.}
+    \bknota{Fonte: Tabela 16 do relatório; $N = \num{262144}$, multifonte; campanha de
+      tempo.}
   \end{minipage}\hfill
   \begin{minipage}[t]{0.46\textwidth}
     \vspace{0pt}\footnotesize\tcbset{halign=flush left, before skip=0pt, after skip=1.5mm}
     \begin{painel}{Ambiente (§5.2)}{}
-      Uma máquina, 8~GB de memória, os cinco SGBDs em contêineres Docker. Cassandra: um
+      Um computador, 8~GB de memória, os cinco SGBDs em contêineres Docker. Cassandra: um
       nó, \textit{heap} de 1~GB numa máquina virtual Docker de 3,88~GiB.
     \end{painel}
     \begin{painel}{Leitura do relatório (§5.4.1)}{}
-      As 901~linhas/s refletem o \textit{heap} pequeno: restrição do ambiente, não do SGBD.
+      As 969~linhas/s refletem o \textit{heap} pequeno: restrição do ambiente, não do SGBD.
     \end{painel}
     \begin{painel}{Escala: trabalho futuro}{}
       SGBDs dedicados e ajustados; escrita do Cassandra além da concorrência atual.
@@ -191,25 +287,68 @@
   \end{minipage}
 \end{frame}
 
-% B6: ameaças à validade (relatório v2.4 §5.4.1, sec:ameacas-validade; dados sintéticos:
-% §5.1.1; precisão: §5.1.2).
+% B8: a escolha automática do bloco (relatório §4.5.2 e §5.3.5; tab:qp5-auto = Tabela 22;
+% conferência do modelo de pico no último parágrafo do §5.3.5).
+\begin{frame}{A escolha automática do bloco}
+  \begin{minipage}[t]{0.42\textwidth}
+    \vspace{0pt}
+    {\footnotesize\raggedright\bfseries\color{ufscazul}Bloco escolhido na campanha final,
+     em MB\par}
+    \smallskip
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \renewcommand{\arraystretch}{1.1}
+    \begin{tabular}{@{}r r r@{}}
+      \toprule
+      \bfseries Linhas & \bfseries Multifonte & \bfseries Combinado \\
+      \midrule
+      \num{1024}   & 16 & 16 \\
+      \num{16384}  & 16 & 35 \\
+      \num{32768}  & 24 & 71 \\
+      \num{65536}  & 48 & 141 \\
+      \num{131072} & 97 & 116$^{*}$ \\
+      \num{262144} & 63$^{*}$ & 38$^{*}$ \\
+      \bottomrule
+    \end{tabular}\par
+    \smallskip
+    \bknota{$^{*}$ Limitado pela memória livre; nos demais, o bloco lê a maior fonte
+      inteira (16~MB é o mínimo).}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.54\textwidth}
+    \vspace{0pt}\footnotesize\tcbset{halign=flush left, before skip=0pt, after skip=1.5mm}
+    \begin{painel}{A regra}{}
+      Bloco que lê a maior fonte inteira, entre 16 e 256~MB. Pico previsto: uma base que
+      cresce com os arquivos, mais cerca de 1,08~MB por MB de bloco; deve caber em 25\% da
+      memória livre.
+    \end{painel}
+    \begin{painel}{O modelo conferido}{orçamento: 230,5~MB (25\% de 922~MB livres)}
+      \destaque{Multifonte}, \num{262144} linhas: pico de 253,8~MB, 10\% acima.\par
+      \destaque{Combinado}: 209,3~MB em \num{131072} linhas e 141,9~MB em \num{262144},
+      este 38\% abaixo: o modelo superestima o pico.
+    \end{painel}
+  \end{minipage}\par
+  \vfill
+  \bknota{Fonte: §4.5.2, §5.3.5 e Tabela 22 do relatório.}
+\end{frame}
+
+% B9: ameaças à validade (relatório §5.4.1, sec:ameacas-validade; dados sintéticos: §5.1.1).
 \begin{frame}{Ameaças à validade}
-  \begingroup\footnotesize\tcbset{equal height group=b6, halign=flush left}%
+  \begingroup\footnotesize\tcbset{equal height group=b9, halign=flush left}%
   \begin{minipage}[t]{0.32\textwidth}\vspace{0pt}
     \begin{painel}{De construção}{mede o que se quer?}
       \begin{bklista}
-        \item Tempo: 2,7\% entre campanhas, numa só célula (históricas: cerca de 20\%).
-        \item Memória estável: menos de 0,2\%.
-        \item Tempo e memória de campanhas separadas; cargas diferentes nas históricas.
+        \item Tempo e memória de campanhas separadas, com a mesma carga.
+        \item Só a mediana é guardada; na campanha exploratória, a mesma célula variou de
+              3,5\% a 24\%.
+        \item Campanha de tempo pausada e retomada com o Docker reiniciado.
       \end{bklista}
     \end{painel}
   \end{minipage}\hfill
   \begin{minipage}[t]{0.32\textwidth}\vspace{0pt}
     \begin{painel}{Interna}{o efeito vem do fator?}
       \begin{bklista}
-        \item Gerador determinístico e SGBDs limpos antes de cada repetição.
-        \item Volume moderado: até \num{100000} linhas; o bloco de 256~MB já lê cada fonte
-              inteira.
+        \item Gerador determinístico e SGBDs limpos antes de cada execução.
+        \item Volume moderado: até \num{262144} linhas.
         \item Sem caches quentes nem execuções concorrentes.
       \end{bklista}
     \end{painel}
@@ -217,9 +356,10 @@
   \begin{minipage}[t]{0.32\textwidth}\vspace{0pt}
     \begin{painel}{Externa}{vale fora deste ambiente?}
       \begin{bklista}
-        \item Uma máquina, Windows, cinco SGBDs em contêineres com 8~GB: não é produção.
+        \item Um computador, cinco SGBDs em contêineres com 8~GB: não é produção.
         \item Cassandra limitado pelo \textit{heap} de 1~GB.
-        \item Dados sintéticos de um só domínio, o e-commerce (§5.1.1).
+        \item O bloco depende da memória livre do computador.
+        \item Dados sintéticos de um só domínio (§5.1.1).
       \end{bklista}
     \end{painel}
   \end{minipage}\par
@@ -228,7 +368,7 @@
   \bknota{Fonte: §5.4.1 do relatório.}
 \end{frame}
 
-% B7: referências, em ABNT (formato autor-data do relatório), só das obras citadas nos
+% B10: referências, em ABNT (formato autor-data do relatório), só das obras citadas nos
 % slides: slide 7 (PEREIRA; GUERRA; ROSA, 2025; SACHDEVA; VASAVA, 2024) e slide 23
 % (ARAUJO; SILVA; MELLO, 2025). Dados de docs-tcc/references.bib (pereira2025transparent,
 % sachdeva2024plugging) e, para Araujo et al., do spec (ERBD 2025,
