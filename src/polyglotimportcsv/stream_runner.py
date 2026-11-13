@@ -18,6 +18,7 @@ rows. Both are the sink's responsibility, applied inside ``write_batch``.
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field, replace
 from functools import partial
@@ -27,12 +28,15 @@ import pandas as pd
 
 from polyglotimportcsv.business_exception import BusinessException, ImportExecutionError
 from polyglotimportcsv.casting import cast_frame
-from polyglotimportcsv.dbms_sink import DbmsSink, SinkFactory
+from polyglotimportcsv.dbms_sink import DbmsSink, RowInspector, SinkFactory
 from polyglotimportcsv.filter_engine import apply_filters, expand_each
 from polyglotimportcsv.import_plan import ImportPlan, dbms_sources, declared_sources
 from polyglotimportcsv.metrics import MetricsCollector
 from polyglotimportcsv.stream_binding import EntityBinding, entity_source_names
 from polyglotimportcsv.stream_source import iter_entity_chunks
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -145,14 +149,9 @@ class DbmsStream:
     relationships (``feed_relationships`` for every chunk of
     ``relationship_sources()``). ``written`` and ``entity_rows`` count as it goes.
 
-    Three optional sink hooks, looked up like ``write_relationships``, see the rows
-    before they are written: ``inspect_rows(source, partition, binding, raw, cast)``
-    once per (chunk, entity, partition);
-    ``inspect_unpartitioned_rows(source, binding, raw, cast)`` once per (chunk, entity)
-    whose ``each`` split dropped rows (an empty ``each`` value names no partition); and
-    ``inspect_relationship_rows(source, rname, rspec, from_binding, to_binding, cast)``
-    before each ``write_relationships``. Their frames are indexed by the position
-    of each data row in its file.
+    ``inspector``, when given, sees the rows before they are written
+    (``dbms_sink.RowInspector``). A sink writes relationships when it has a
+    ``write_relationships(rname, rspec, from_binding, to_binding, batch)`` method.
 
     The plan's config must have passed ``validation.validate_headers``: the engine
     does not check again, for instance, that a relationship names declared entities.
@@ -164,6 +163,7 @@ class DbmsStream:
         plan: ImportPlan,
         sink: DbmsSink,
         on_batch: Optional[Callable[[str, str, pd.DataFrame], None]] = None,
+        inspector: Optional[RowInspector] = None,
     ) -> None:
         self.dbms = dbms
         self.plan = plan
@@ -172,9 +172,7 @@ class DbmsStream:
         self._bindings = plan.bindings[dbms]
         self._batch = {ename: plan.entity_batch(dbms, ename) for ename in self._entities}
         self._notify = partial(on_batch, dbms) if on_batch is not None else None
-        self._inspect_rows = getattr(sink, "inspect_rows", None)
-        self._inspect_unpartitioned = getattr(sink, "inspect_unpartitioned_rows", None)
-        self._inspect_rels = getattr(sink, "inspect_relationship_rows", None)
+        self._inspector = inspector
         self.written: Dict[str, int] = {}
         self.entity_rows: Dict[str, int] = {ename: 0 for ename in self._entities}
         self._buffers: Dict[str, List[pd.DataFrame]] = {}
@@ -196,17 +194,19 @@ class DbmsStream:
             binding = self._bindings[ename]
             raw, casted, filters = _process_chunk(chunk, ecfg, binding, source)
             parts = expand_each(casted, filters, ename)
-            if self._inspect_unpartitioned is not None:
+            if self._inspector is not None:
                 dropped = _dropped_by_split(casted, parts)
                 if len(dropped):
-                    self._inspect_unpartitioned(
+                    self._inspector.inspect_unpartitioned_rows(
                         source, binding, raw.loc[dropped], casted.loc[dropped]
                     )
             for partition_name, part_df in parts:
                 self.entity_rows[ename] += len(part_df)
-                if self._inspect_rows is not None:
+                if self._inspector is not None:
                     part_raw = raw.loc[part_df.index]
-                    self._inspect_rows(source, partition_name, binding, part_raw, part_df)
+                    self._inspector.inspect_rows(
+                        source, partition_name, binding, part_raw, part_df
+                    )
                 self._buffers.setdefault(partition_name, []).append(part_df)
                 self._partition_binding[partition_name] = binding
                 _flush_ready(
@@ -216,13 +216,25 @@ class DbmsStream:
                 )
 
     def finish_nodes(self) -> None:
-        """Write what is left in the partition buffers."""
+        """Write what is left in the partition buffers, then create the partition of
+        every entity a relationship links that got no row.
+
+        Any other entity without rows gets no partition. A linked one needs it: the
+        foreign key PostgreSQL adds at ``close()`` names both tables. (A relationship
+        never links an entity split by an ``each`` filter.)
+        """
         for partition_name in list(self._buffers.keys()):
             _flush_remainder(
                 partition_name, self._buffers, self._partition_binding,
                 self._seen_partitions, self.written, self.sink,
                 notify=self._notify,
             )
+        relationships = (self.plan.config[self.dbms].get("relationships") or {}).values()
+        linked = {rspec.get(end) for rspec in relationships for end in ("from", "to")}
+        for ename, binding in self._bindings.items():
+            if ename in linked and ename not in self._seen_partitions:
+                self.sink.ensure_partition(ename, binding)
+                self._seen_partitions.add(ename)
 
     def relationship_sources(self) -> Dict[str, Any]:
         """The declared sources the relationship pass reads; ``{}`` when the sink writes
@@ -258,8 +270,10 @@ class DbmsStream:
             _, casted, _ = _process_chunk(chunk, ecfg, from_binding, source)
             for rname, rspec in rlist:
                 to_binding = self._bindings[rspec["to"]]
-                if self._inspect_rels is not None:
-                    self._inspect_rels(source, rname, rspec, from_binding, to_binding, casted)
+                if self._inspector is not None:
+                    self._inspector.inspect_relationship_rows(
+                        source, rname, rspec, from_binding, to_binding, casted
+                    )
                 n = self._write_rels(rname, rspec, from_binding, to_binding, casted)
                 key = f":{rspec.get('type') or rname}"
                 self.written[key] = self.written.get(key, 0) + n
@@ -290,11 +304,21 @@ def _relationship_read_columns(streams: List[DbmsStream]) -> Dict[str, List[str]
     return {declared: sorted(cols) for declared, cols in merged.items() if cols}
 
 
+def _abort_quietly(sink: DbmsSink) -> None:
+    """``sink.abort()``; a failure of it is logged and dropped, so that it never hides
+    the error that made the load stop."""
+    try:
+        sink.abort()
+    except Exception:
+        logger.debug("abort of %s failed", type(sink).__name__, exc_info=True)
+
+
 def run_single_pass(
     plan: ImportPlan,
     sinks: Dict[str, DbmsSink],
     *,
     on_batch: Optional[Callable[[str, str, pd.DataFrame], None]] = None,
+    inspectors: Optional[Dict[str, RowInspector]] = None,
 ) -> StreamCounts:
     """Feed every DBMS of the plan from one read of the sources.
 
@@ -303,23 +327,35 @@ def run_single_pass(
     built from, feeds those; then every sink is closed. ``create_schema`` is not called. ``on_batch(dbms, partition, frame)`` is
     called after every node batch is written.
 
-    The plan's config must have passed ``validation.validate_headers``. Sinks are
-    closed only on success; on an exception the caller owns cleanup.
+    ``inspectors`` maps a DBMS to what sees its rows before they are written.
+
+    The plan's config must have passed ``validation.validate_headers``. The sinks are
+    closed on success; when anything raises, each one is aborted instead
+    (``DbmsSink.abort``) and the exception goes on.
     """
-    streams = [DbmsStream(dbms, plan, sinks[dbms], on_batch) for dbms in plan.dbms_names]
-    for source, chunk in _read(plan, plan.sources_cfg):
-        for stream in streams:
-            stream.feed(source, chunk)
-    for stream in streams:
-        stream.finish_nodes()
-    needed = {name for stream in streams for name in stream.relationship_sources()}
-    if needed:
-        rel_sources = {k: v for k, v in plan.sources_cfg.items() if k in needed}
-        for source, chunk in _read(plan, rel_sources, _relationship_read_columns(streams)):
+    inspectors = inspectors or {}
+    streams = [
+        DbmsStream(dbms, plan, sinks[dbms], on_batch, inspectors.get(dbms))
+        for dbms in plan.dbms_names
+    ]
+    try:
+        for source, chunk in _read(plan, plan.sources_cfg):
             for stream in streams:
-                stream.feed_relationships(source, chunk)
-    for stream in streams:
-        stream.sink.close()
+                stream.feed(source, chunk)
+        for stream in streams:
+            stream.finish_nodes()
+        needed = {name for stream in streams for name in stream.relationship_sources()}
+        if needed:
+            rel_sources = {k: v for k, v in plan.sources_cfg.items() if k in needed}
+            for source, chunk in _read(plan, rel_sources, _relationship_read_columns(streams)):
+                for stream in streams:
+                    stream.feed_relationships(source, chunk)
+        for stream in streams:
+            stream.sink.close()
+    except BaseException:
+        for stream in streams:
+            _abort_quietly(stream.sink)
+        raise
     return StreamCounts(
         written={s.dbms: s.written for s in streams},
         entity_rows={s.dbms: s.entity_rows for s in streams},
@@ -346,15 +382,19 @@ def run_stream_import(
     A failure of a DBMS that is not already a ``BusinessException`` (a driver error, say)
     becomes an ``ImportExecutionError`` naming that DBMS and those written before it.
 
-    The plan's config must have passed ``validation.validate_headers``. Sinks are
-    closed only on success; on an exception the caller owns cleanup.
+    The plan's config must have passed ``validation.validate_headers``. A sink is
+    closed when its DBMS is written, and aborted (``DbmsSink.abort``) when it fails.
     """
     counts = StreamCounts()
     for dbms in plan.dbms_names:
         start = time.perf_counter()
         try:
             sink = sink_factories[dbms](plan.config[dbms])
-            sink.create_schema()
+            try:
+                sink.create_schema()
+            except BaseException:
+                _abort_quietly(sink)
+                raise
             own = replace(
                 plan, dbms_names=[dbms], sources_cfg=dbms_sources(plan.config, [dbms])
             )

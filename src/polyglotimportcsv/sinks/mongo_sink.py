@@ -51,3 +51,6 @@ class MongoSink:
 
     def close(self) -> None:
         self._client.close()
+
+    def abort(self) -> None:
+        self._client.close()

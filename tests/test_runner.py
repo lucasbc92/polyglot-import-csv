@@ -96,6 +96,9 @@ class _FakeSink:
     def close(self):
         pass
 
+    def abort(self):
+        pass
+
 
 def _factories(written=None, built=None):
     """A fake sink factory per DBMS; ``built`` collects every DBMS a sink is built for."""

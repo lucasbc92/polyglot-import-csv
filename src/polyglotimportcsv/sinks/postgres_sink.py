@@ -99,3 +99,8 @@ class PostgresSink:
                     if sub:
                         self._cur.execute(sub + ";")
         self._cx.close()
+
+    def abort(self) -> None:
+        """Close the connection without adding the foreign keys: the tables they would
+        link are not all written."""
+        self._cx.close()

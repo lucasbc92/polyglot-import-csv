@@ -161,3 +161,6 @@ class Neo4jSink:
 
     def close(self) -> None:
         self._driver.close()
+
+    def abort(self) -> None:
+        self._driver.close()

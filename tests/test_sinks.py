@@ -227,6 +227,24 @@ def test_close_issues_fk_ddl_when_relationships_present_and_closes_connection():
     assert conn.closed is True
 
 
+def test_abort_closes_the_connection_without_adding_the_foreign_keys():
+    """A load that stopped half way has not written every table a foreign key links."""
+    relationships = {"product_category": _CONFIG["postgres"]["relationships"]["product_category"]}
+    conn = _FakeConn()
+    sink = PostgresSink(
+        {"schema": "public", "relationships": relationships},
+        connection_factory=lambda c: conn,
+    )
+    sample = _stock_sample()
+    sink.ensure_partition("products", _bind_sample("products", PRODUCTS_CFG, sample, "stock"))
+    conn.cur.executed.clear()
+
+    sink.abort()
+
+    assert conn.cur.executed == []
+    assert conn.closed is True
+
+
 def test_close_skips_fk_ddl_when_no_relationships_declared():
     conn = _FakeConn()
     sink = PostgresSink({"schema": "public"}, connection_factory=lambda c: conn)

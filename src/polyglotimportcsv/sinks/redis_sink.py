@@ -47,3 +47,6 @@ class RedisSink:
 
     def close(self) -> None:
         """No-op: no resource beyond the client connection is held open."""
+
+    def abort(self) -> None:
+        """No-op, like ``close()``."""

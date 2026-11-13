@@ -78,3 +78,6 @@ class CassandraSink:
 
     def close(self) -> None:
         self._cluster.shutdown()
+
+    def abort(self) -> None:
+        self._cluster.shutdown()

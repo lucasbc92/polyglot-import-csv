@@ -4,7 +4,8 @@ import pandas as pd
 import pytest
 
 from polyglotimportcsv import stream_runner as sr
-from polyglotimportcsv.business_exception import MappingError
+from polyglotimportcsv.business_exception import ImportExecutionError, MappingError
+from polyglotimportcsv.dbms_sink import RowInspector
 from polyglotimportcsv.import_plan import plan_import
 from polyglotimportcsv.metrics import MetricsCollector
 from polyglotimportcsv.sources import SOURCE_COLUMN
@@ -28,6 +29,7 @@ class _FakeSink:
         self.batches = {}  # partition -> [len(batch), ...] in flush order
         self.frames = {}   # partition -> [DataFrame, ...] as received
         self.closed = False
+        self.aborted = False
         self.calls = []          # ordered log of ("node", partition) / ("rel", rname)
         self.rel_rows = {}       # rname -> total rows received
         self.rel_frames = {}     # rname -> [DataFrame, ...] as received
@@ -52,6 +54,9 @@ class _FakeSink:
 
     def close(self):
         self.closed = True
+
+    def abort(self):
+        self.aborted = True
 
 
 def _build_config(tmp_path):
@@ -330,7 +335,7 @@ def test_inspect_rows_sees_file_row_positions(tmp_path):
                                rows_per_chunk={"s": 3})
     seen, parts = [], []
 
-    class Spy(_FakeSink):
+    class Spy(_FakeSink, RowInspector):
         def inspect_rows(self, source, partition, binding, raw, cast):
             assert list(raw.index) == list(cast.index)
             assert all(isinstance(v, str) for v in raw["n"])      # raw: not converted
@@ -338,7 +343,8 @@ def test_inspect_rows_sees_file_row_positions(tmp_path):
             seen.extend(cast.index)
             parts.extend([partition] * len(cast))
 
-    run = sr.run_single_pass(plan, {"postgres": Spy()})
+    spy = Spy()
+    run = sr.run_single_pass(plan, {"postgres": spy}, inspectors={"postgres": spy})
 
     assert seen == [2, 6]   # data rows 3 and 7 -> positions 2 and 6
     assert parts == ["s_north", "s_south"]
@@ -359,13 +365,14 @@ def test_rows_the_each_split_drops_go_to_inspect_unpartitioned_rows(tmp_path):
                                rows_per_chunk={"s": 3})
     seen = []
 
-    class Spy(_FakeSink):
+    class Spy(_FakeSink, RowInspector):
         def inspect_unpartitioned_rows(self, source, binding, raw, cast):
             assert binding is plan.bindings["postgres"]["split"]
             assert list(raw.index) == list(cast.index) and set(raw["region"]) == {""}
             seen.append((source, list(cast.index)))
 
-    run = sr.run_single_pass(plan, {"postgres": Spy()})
+    spy = Spy()
+    run = sr.run_single_pass(plan, {"postgres": spy}, inspectors={"postgres": spy})
 
     assert seen == [("s", [1]), ("s", [3, 5])]
     assert run.written["postgres"] == {"split_n": 2, "split_s": 1, "whole": 6}
@@ -379,12 +386,13 @@ def test_inspect_rows_sees_the_row_position_in_a_combined_file(tmp_path):
                                rows_per_chunk={"j": 4})
     seen = []
 
-    class Spy(_FakeSink):
+    class Spy(_FakeSink, RowInspector):
         def inspect_rows(self, source, partition, binding, raw, cast):
             assert source == "b"
             seen.extend(cast.index)
 
-    sr.run_single_pass(plan, {"postgres": Spy()})
+    spy = Spy()
+    sr.run_single_pass(plan, {"postgres": spy}, inspectors={"postgres": spy})
 
     assert seen == [0, 3, 6, 9]
 
@@ -392,7 +400,7 @@ def test_inspect_rows_sees_the_row_position_in_a_combined_file(tmp_path):
 def test_inspect_relationship_rows_runs_before_each_relationship_write(tmp_path):
     seen = []
 
-    class Spy(_FakeSink):
+    class Spy(_FakeSink, RowInspector):
         def inspect_relationship_rows(self, source, rname, rspec, from_binding, to_binding, cast):
             assert source == "people" and rspec["type"] == "LIKES"
             assert from_binding.source_name == "people" and to_binding.source_name == "things"
@@ -401,7 +409,7 @@ def test_inspect_relationship_rows_runs_before_each_relationship_write(tmp_path)
 
     spy = Spy()
     sr.run_single_pass(plan_import(_likes_config(tmp_path), tmp_path, dbms_names=["neo4j"]),
-                       {"neo4j": spy})
+                       {"neo4j": spy}, inspectors={"neo4j": spy})
 
     assert [c for c in spy.calls if c[0] != "node"] == [("inspect", "LIKES"), ("rel", "LIKES")]
     assert seen == [3]
@@ -528,12 +536,13 @@ def test_inspect_rows_sees_file_row_positions_of_a_union_across_chunks(tmp_path)
                                rows_per_chunk={"a": 3, "b": 2})
     seen = []
 
-    class Spy(_FakeSink):
+    class Spy(_FakeSink, RowInspector):
         def inspect_rows(self, source, partition, binding, raw, cast):
             assert list(raw.index) == list(cast.index)
             seen.extend((source, i, raw.loc[i, "n"]) for i in cast.index)
 
-    sr.run_single_pass(plan, {"postgres": Spy()})
+    spy = Spy()
+    sr.run_single_pass(plan, {"postgres": spy}, inspectors={"postgres": spy})
 
     assert seen == [("a", 1, "a1"), ("a", 3, "a3"), ("a", 5, "a5")] + [
         ("b", i, f"b{i}") for i in range(5)]
@@ -555,3 +564,69 @@ def test_the_relationship_pass_reads_only_the_from_source_and_the_columns_of_an_
         ("things.csv", None),
         ("people.csv", ["person_id", "thing_id", "weight"]),
     ]
+
+
+def test_a_sink_that_fails_is_aborted_not_closed(tmp_path):
+    """close() finishes the load (PostgreSQL adds its foreign keys there); a load that
+    stopped half way must only release what it holds."""
+    class Failing(_FakeSink):
+        def write_batch(self, partition_name, binding, batch):
+            raise RuntimeError("the DBMS went away")
+
+    fake = Failing()
+    plan = plan_import(_build_config(tmp_path), tmp_path, dbms_names=["postgres"])
+    with pytest.raises(ImportExecutionError, match="went away"):
+        sr.run_stream_import(plan, sink_factories={"postgres": lambda cfg: fake})
+    assert fake.aborted and not fake.closed
+
+
+def test_a_sink_whose_schema_setup_fails_is_aborted(tmp_path):
+    class NoSchema(_FakeSink):
+        def create_schema(self):
+            raise RuntimeError("no permission")
+
+    fake = NoSchema()
+    plan = plan_import(_build_config(tmp_path), tmp_path, dbms_names=["postgres"])
+    with pytest.raises(ImportExecutionError, match="no permission"):
+        sr.run_stream_import(plan, sink_factories={"postgres": lambda cfg: fake})
+    assert fake.aborted and not fake.closed
+
+
+def test_a_failing_abort_does_not_hide_the_error_of_the_write(tmp_path):
+    class Failing(_FakeSink):
+        def write_batch(self, partition_name, binding, batch):
+            raise RuntimeError("the DBMS went away")
+
+        def abort(self):
+            raise OSError("connection already gone")
+
+    plan = plan_import(_build_config(tmp_path), tmp_path, dbms_names=["postgres"])
+    with pytest.raises(ImportExecutionError, match="went away"):
+        sr.run_stream_import(plan, sink_factories={"postgres": lambda cfg: Failing()})
+
+
+def test_a_linked_entity_without_rows_still_gets_its_partition(tmp_path):
+    """The foreign key added at close() names both tables, so both must exist."""
+    _write_csv(tmp_path / "s.csv", ["id", "parent", "keep"], [(i, 0, "no") for i in range(5)])
+    none = [{"column": "keep", "operator": "==", "value": "yes"}]
+    cfg = {"sources": {"s": "s.csv"}, "postgres": {
+        "entities": {
+            "parent": {"source": "s", "columns": {"id": {"is_key": True}}},
+            "child": {"source": "s", "filters": none,
+                      "columns": {"id": {"is_key": True}, "parent": {}}},
+            "alone": {"source": "s", "filters": none},
+        },
+        "relationships": {"of": {"from": "child", "to": "parent", "foreign_key": "parent",
+                                 "references_key": "id"}},
+    }}
+
+    class NodesOnly(_FakeSink):
+        write_relationships = None
+
+    fake = NodesOnly()
+    counts = sr.run_stream_import(
+        plan_import(cfg, tmp_path, dbms_names=["postgres"]),
+        sink_factories={"postgres": lambda cfg: fake},
+    )
+    assert fake.ensure_calls == ["parent", "child"]  # not "alone": nothing links it
+    assert counts.written["postgres"] == {"parent": 5}

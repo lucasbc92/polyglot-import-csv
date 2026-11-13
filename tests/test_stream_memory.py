@@ -46,6 +46,9 @@ class _NullSink:
     def close(self) -> None:
         pass
 
+    def abort(self) -> None:
+        pass
+
 
 def _write_wide_csv(path: Path, n_rows: int) -> None:
     rows = [(i, f"name{i}", f"note-{i}-{'x' * 20}") for i in range(n_rows)]

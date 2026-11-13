@@ -32,6 +32,9 @@ class _NullSink:
     def close(self):
         pass
 
+    def abort(self):
+        pass
+
 
 def test_stream_takes_the_first_data_row_as_the_header(tmp_path):
     _write(tmp_path)

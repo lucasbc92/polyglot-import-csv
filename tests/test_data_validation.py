@@ -537,6 +537,9 @@ class _RecordingSink:
     def close(self):
         pass
 
+    def abort(self):
+        pass
+
 
 class _NeoDriver:
     """Just enough of a neo4j driver for the real ``Neo4jSink`` to run."""

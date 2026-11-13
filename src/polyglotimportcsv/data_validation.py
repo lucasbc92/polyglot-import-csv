@@ -31,7 +31,7 @@ from polyglotimportcsv.db_type_checks import (
     postgres_stored_value,
     postgres_value_problem,
 )
-from polyglotimportcsv.dbms_sink import DbmsSink
+from polyglotimportcsv.dbms_sink import RowInspector
 from polyglotimportcsv.entity_utils import (
     is_empty_reference,
     iter_leaf_columns,
@@ -319,8 +319,9 @@ def _stored_references(values: pd.Series, pg_type: str) -> Iterator[Tuple[Any, A
             yield idx, postgres_stored_value(pg_type, value)
 
 
-class CheckingSink:
-    """A ``DbmsSink`` that connects to nothing: it checks the rows its DBMS would get.
+class CheckingSink(RowInspector):
+    """A ``DbmsSink`` that connects to nothing and the ``RowInspector`` of its DBMS: it
+    checks the rows its DBMS would get.
 
     Rows arrive through ``inspect_rows`` and go to ``check_rows``; the rows an ``each``
     split puts in no partition arrive through ``inspect_unpartitioned_rows``. For
@@ -386,6 +387,9 @@ class CheckingSink:
         where = f"{self.dbms} · {self._entity_of[id(binding)]}"
         _check_convertible(self.report, where, self._file_label(source), binding.kinds,
                            raw, cast, _each_columns(binding))
+
+    def abort(self) -> None:
+        """Nothing to release."""
 
     def close(self) -> None:
         for rname, rspec in self._fk_rels.items():
@@ -496,11 +500,11 @@ def validate_data(
     and the row counts, the same the write produces. ``on_batch`` is passed through.
     """
     report = ValidationReport()
-    sinks: Dict[str, DbmsSink] = {
+    sinks: Dict[str, CheckingSink] = {
         dbms: (Neo4jCheckingSink if dbms == "neo4j" else CheckingSink)(dbms, plan, report)
         for dbms in plan.dbms_names
     }
-    counts = run_single_pass(plan, sinks, on_batch=on_batch)
+    counts = run_single_pass(plan, sinks, on_batch=on_batch, inspectors=sinks)
     return report, counts
 
 
