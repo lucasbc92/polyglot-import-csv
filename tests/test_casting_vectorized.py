@@ -172,3 +172,16 @@ def test_optimized_int64_fast_path_unaffected_by_empties_and_other_overflow():
     opt = cast_frame(df, _KINDS)
     expected = [100, 200, 300, 9223372036854775807, -9223372036854775808, None]
     assert list(opt["i_int64"]) == expected
+
+
+def test_the_cast_keeps_the_index_of_the_rows_it_was_given():
+    """A chunk is indexed by the position of its rows in the file, not from zero."""
+    df = pd.DataFrame(
+        {"d": ["2023-01-01", "", "2023-01-03"], "f": ["1.5", "x", ""], "b": ["true", "", "false"]},
+        index=[5, 6, 7],
+    )
+    out = cast_frame(df, {"d": "datetime", "f": "float", "b": "boolean"})
+    assert list(out.index) == [5, 6, 7]
+    assert [type(v).__name__ for v in out["d"]] == ["datetime", "NoneType", "datetime"]
+    assert list(out["f"]) == [1.5, "x", None]
+    assert list(out["b"]) == [True, None, False]

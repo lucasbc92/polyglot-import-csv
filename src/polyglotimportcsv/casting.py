@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Optional
 
+import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -82,6 +84,20 @@ def cast_value(val: Any, kind: str) -> Any:
     return val
 
 
+def parse_datetimes(series: pd.Series) -> pd.Series:
+    """The values of ``series`` as UTC instants; what does not parse is ``NaT``.
+
+    The one parse shared by the cast and the filters, so both read a value the same way.
+    ``format="mixed"`` is required: without it pandas infers ONE format from the first
+    element and coerces every value in another format to NaT. A column holding
+    "2023-11-02 03:30:00Z" and "2024-01-01T00:00:00Z" (space vs T) would lose the
+    second format entirely.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        return pd.to_datetime(series, errors="coerce", utc=True, format="mixed")
+
+
 def _cast_column_vectorized(series: pd.Series, kind: str) -> "tuple[pd.Series, int]":
     """Vectorized cast of one column to native values; return (result, fallbacks).
 
@@ -107,8 +123,9 @@ def _cast_column_vectorized(series: pd.Series, kind: str) -> "tuple[pd.Series, i
 
     if kind == "boolean":
         parsed = series.astype(str).str.strip().str.lower().eq("true")
-        out = parsed.astype(object).where(~empty, None)
-        return pd.Series(list(out), index=series.index, dtype=object), 0
+        result = parsed.astype(object)
+        result[empty] = None
+        return result, 0
 
     if kind == "integer":
         # Plain digits ("12", "-3") are the common case and take a vectorized regex
@@ -177,38 +194,39 @@ def _cast_column_vectorized(series: pd.Series, kind: str) -> "tuple[pd.Series, i
         s = series.where(~empty)
         num = pd.to_numeric(s, errors="coerce")
         text = s.astype(str).str.strip()
-        special = text.str.fullmatch(r"[+-]?(?:nan|inf|infinity)", case=False).fillna(False)
+        special = (
+            text.str.fullmatch(r"[+-]?(?:nan|inf|infinity)", case=False).fillna(False) & ~empty
+        )
         bad = num.isna() & ~empty & ~special
         fallbacks = int(bad.sum())
-        vals = [
-            None if e else (float(o) if sp else (o if b else float(v)))
-            for e, b, v, o, sp in zip(empty, bad, num, original, special)
-        ]
-        return pd.Series(vals, index=series.index, dtype=object), fallbacks
+        # Column-wise, with no Python loop over the rows: the parsed numbers, then the
+        # few cells that are something else written over them.
+        result = num.astype(object)
+        if fallbacks:
+            result[bad] = original[bad]
+        if special.any():
+            result[special] = pd.Series(
+                [float(o) for o in original[special]], index=original[special].index, dtype=object
+            )
+        result[empty] = None
+        return result, fallbacks
 
     if kind == "datetime":
-        import warnings
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", UserWarning)
-            # format="mixed" is REQUIRED for equivalence with the per-cell path.
-            # Without it pandas infers ONE format from the first element and
-            # coerces every value in another format to NaT: a column holding
-            # "2023-11-02 03:30:00Z" and "2024-01-01T00:00:00Z" (space vs T)
-            # loses the second format entirely, while per-cell to_datetime
-            # parses both. Verified against pandas in this environment.
-            ts = pd.to_datetime(series.where(~empty), errors="coerce",
-                                utc=True, format="mixed")
+        ts = parse_datetimes(series.where(~empty))
         bad = ts.isna() & ~empty
         fallbacks = int(bad.sum())
-        py = ts.dt.to_pydatetime()
         # Unlike integer/float, cast_value's datetime branch has no
         # try/except fallback: an unparseable value always becomes None,
         # never the original text (see cast_value above), and the value here
         # matches it. This path also detects the failure (ts.isna()) and
         # warns, which a per-cell identity check could not: a silently
         # NULLed timestamp is real data loss worth surfacing.
-        vals = [None if (e or b) else d for e, b, d in zip(empty, bad, py)]
-        return pd.Series(vals, index=series.index, dtype=object), fallbacks
+        # np.asarray: to_pydatetime gives an array or a Series with an index of its
+        # own, depending on the pandas version; only its values are wanted.
+        py = np.asarray(ts.dt.to_pydatetime(), dtype=object)
+        result = pd.Series(py, index=series.index, dtype=object)
+        result[ts.isna()] = None
+        return result, fallbacks
 
     return original, 0
 
