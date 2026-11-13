@@ -13,7 +13,6 @@ from psycopg2.extras import execute_values
 
 from polyglotimportcsv.entity_utils import (
     flat_leaf_columns,
-    is_empty_reference,
     target_field_name,
 )
 from polyglotimportcsv.importers.postgres_importer import _connect, build_insert_sql
@@ -70,7 +69,8 @@ class PostgresSink:
         for rspec in self.relationships.values():
             if rspec["from"] == partition_name:
                 fk = rspec["foreign_key"]
-                empty = mat[fk].map(is_empty_reference).astype(bool)
+                # Column-wise, the cells ``is_empty_reference`` calls empty.
+                empty = mat[fk].isna() | mat[fk].eq("")
                 mat[fk] = mat[fk].astype(object).where(~empty, None)
         cols = list(mat.columns)
         pks = [
@@ -79,7 +79,7 @@ class PostgresSink:
             if spec.get("is_key")
         ]
         stmt = build_insert_sql(self.schema, partition_name, cols, pks)
-        tuples = [tuple(row) for row in mat.itertuples(index=False, name=None)]
+        tuples = list(mat.itertuples(index=False, name=None))  # already plain tuples
         # Pass the Composed statement straight through: execute_values already
         # knows how to stringify a psycopg2.sql.Composable via `cur` itself
         # (it calls stmt.as_string(cur) internally), which keeps this call
@@ -94,10 +94,7 @@ class PostgresSink:
         if self.relationships and self._created:
             fk_stmts = build_postgres_foreign_keys(self.schema, self._created, self.relationships)
             for stmt in fk_stmts:
-                for sub in stmt.split(";"):
-                    sub = sub.strip()
-                    if sub:
-                        self._cur.execute(sub + ";")
+                self._cur.execute(stmt)
         self._cx.close()
 
     def abort(self) -> None:

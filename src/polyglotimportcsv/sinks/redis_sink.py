@@ -46,7 +46,8 @@ class RedisSink:
         return _write_batched(self._client, pairs, lambda n: None, batch=len(pairs))
 
     def close(self) -> None:
-        """No-op: no resource beyond the client connection is held open."""
+        """Close the client's connection pool."""
+        self._client.close()
 
     def abort(self) -> None:
-        """No-op, like ``close()``."""
+        self._client.close()

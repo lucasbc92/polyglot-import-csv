@@ -21,6 +21,7 @@ except Exception:  # pragma: no cover - driver/reactor may be unavailable
     execute_concurrent_with_args = None
 
 from polyglotimportcsv.business_exception import ImportExecutionError
+from polyglotimportcsv.casting import db_type_base, db_type_kind
 from polyglotimportcsv.entity_utils import (
     flat_leaf_columns,
     resolve_csv_column,
@@ -75,24 +76,30 @@ _KIND_TO_CQL_TYPE: Dict[str, str] = {
 
 
 def _cassandra_type_for(spec: Dict[str, Any], kind: str) -> str:
+    """The CQL type of a column: from its declared ``db_type`` when it has one, read
+    with the same vocabulary as the cast (``casting.db_type_kind``), so that
+    ``NUMERIC(14,2)``, ``DOUBLE PRECISION`` or ``DATE`` get the type their values
+    are cast to; from the inferred ``kind`` otherwise. A declared type the vocabulary
+    does not know is ``text``."""
     db_type = spec.get("db_type")
     if not db_type:
         return _KIND_TO_CQL_TYPE.get(kind, "text")
-    t = db_type.upper()
-    if t in ("TIMESTAMPTZ", "TIMESTAMP"):
-        return "timestamp"
-    if t in ("BIGINT", "INT", "INTEGER"):
-        return "bigint"
-    if t in ("DOUBLE", "FLOAT", "NUMERIC", "DECIMAL"):
-        return "double"
-    if t in ("BOOLEAN", "BOOL"):
+    if db_type_base(db_type) in ("BOOLEAN", "BOOL"):
         return "boolean"
-    return "text"
+    return _KIND_TO_CQL_TYPE.get(db_type_kind(db_type) or "string", "text")
+
+
+def _quoted(name: str) -> str:
+    """A CQL identifier, quoted so that its case is kept: an unquoted one is lowered."""
+    return '"' + name.replace('"', '""') + '"'
 
 
 def _primary_key_clause(part_db: List[str], clust_db: List[str]) -> str:
+    """The ``PRIMARY KEY`` clause, its columns quoted as in the column definitions."""
     if not part_db:
         raise ValueError("cassandra_partition must name at least one column")
+    part_db = [_quoted(c) for c in part_db]
+    clust_db = [_quoted(c) for c in clust_db]
     if len(part_db) == 1 and not clust_db:
         return f"PRIMARY KEY ({part_db[0]})"
     if len(part_db) == 1 and clust_db:
@@ -106,7 +113,7 @@ def _primary_key_clause(part_db: List[str], clust_db: List[str]) -> str:
 def _cassandra_keyspace_ddl(keyspace: str) -> str:
     """CREATE KEYSPACE DDL."""
     return (
-        f"CREATE KEYSPACE IF NOT EXISTS {keyspace} "
+        f"CREATE KEYSPACE IF NOT EXISTS {_quoted(keyspace)} "
         "WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};"
     )
 
@@ -154,7 +161,7 @@ def _cassandra_table_ddl(
     pk_clause: str,
 ) -> str:
     """CREATE TABLE DDL for one partition."""
-    col_defs = [f'"{pmap[src]}" {cql_by_src[src]}' for src in ordered_src]
+    col_defs = [f"{_quoted(pmap[src])} {cql_by_src[src]}" for src in ordered_src]
     return f'CREATE TABLE IF NOT EXISTS "{table}" (' + ", ".join(col_defs) + f", {pk_clause});"
 
 
@@ -192,17 +199,28 @@ def _default_cassandra_session(conn: Dict[str, Any]):
     return cluster, session
 
 
-def _row_values(row, ordered_src: List[str], cql_by_src: Dict[str, str]) -> List[Any]:
-    values = []
+def _batch_values(
+    batch: pd.DataFrame, ordered_src: List[str], cql_by_src: Dict[str, str]
+) -> List[List[Any]]:
+    """The INSERT parameters of every row of ``batch``, in ``ordered_src`` order.
+
+    Built column by column, not row by row: an empty cell is ``None``, a cell of a
+    ``text`` column its ``str``, any other cell its cast value. A column the batch
+    does not have is ``None`` in every row.
+    """
+    n = len(batch)
+    columns = []
     for src in ordered_src:
-        val = row.get(src)
-        if pd.isna(val):
-            values.append(None)
-        elif cql_by_src[src] == "text":
-            values.append(str(val))
+        if src not in batch.columns:
+            columns.append([None] * n)
+            continue
+        values = batch[src].to_numpy()
+        empty = pd.isna(values)
+        if cql_by_src[src] == "text":
+            columns.append([None if e else str(v) for v, e in zip(values, empty)])
         else:
-            values.append(val)
-    return values
+            columns.append([None if e else v for v, e in zip(values, empty)])
+    return [list(row) for row in zip(*columns)]
 
 
 def _write_batched(
@@ -235,14 +253,16 @@ def _write_batched(
             concurrency=concurrency, raise_on_first_error=False,
         )
         # A driver (or stub) that reports nothing is taken at its word: no failures.
-        failed = [p for p, outcome in zip(pending, outcomes or []) if not outcome[0]]
+        failures = [(p, outcome[1]) for p, outcome in zip(pending, outcomes or [])
+                    if not outcome[0]]
+        failed = [p for p, _ in failures]
         if not failed:
             break
         if attempt == retries:
+            row, error = failures[0]
             raise ImportExecutionError(
                 f"Cassandra write failed for {len(failed)} row(s) after "
-                f"{attempt + 1} attempt(s): {failed[0] if failed else ''} "
-                f"-> {outcomes[0][1] if outcomes else 'unknown error'}. "
+                f"{attempt + 1} attempt(s): {row} -> {error}. "
                 "Raise connection.request_timeout, or give the node more heap, "
                 "if this repeats under load."
             )

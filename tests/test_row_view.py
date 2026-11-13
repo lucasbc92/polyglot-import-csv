@@ -16,7 +16,7 @@ import pytest
 
 from polyglotimportcsv.casting import cast_frame
 from polyglotimportcsv.import_plan import plan_import
-from polyglotimportcsv.importers.cassandra_importer import _row_values
+from polyglotimportcsv.importers.cassandra_importer import _batch_values
 from polyglotimportcsv.importers.neo4j_importer import props_from_row
 from polyglotimportcsv.mapping_resolver import BoundEntity
 from polyglotimportcsv.row_shaping import mongo_document_from_row, redis_payload_from_row
@@ -74,6 +74,20 @@ def _bound(mode):
     return out
 
 
+def _row_values(row, ordered_src, cql_by_src):
+    """The parameters CassandraSink sent per row before they were built per column."""
+    values = []
+    for src in ordered_src:
+        val = row.get(src)
+        if pd.isna(val):
+            values.append(None)
+        elif cql_by_src[src] == "text":
+            values.append(str(val))
+        else:
+            values.append(val)
+    return values
+
+
 def _both_ways(df, fn):
     old = [fn(row) for _, row in df.iterrows()]
     new = [fn(row) for row in iter_rows(df)]
@@ -114,7 +128,8 @@ def test_cassandra_row_values_identical(mode):
         # Alternate text/non-text so both branches of _row_values are exercised.
         cql_by_src = {s: ("text" if i % 2 else "int")
                       for i, s in enumerate(ordered_src)}
-        old, new = _both_ways(be.df, lambda r: _row_values(r, ordered_src, cql_by_src))
+        old = [_row_values(row, ordered_src, cql_by_src) for _, row in be.df.iterrows()]
+        new = _batch_values(be.df, ordered_src, cql_by_src)
         assert old and _typed(old) == _typed(new)
 
 

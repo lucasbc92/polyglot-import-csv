@@ -27,6 +27,8 @@ def _concurrent_failing(fail_for, *, exc=None):
     def fake(session, prepared, params, concurrency=64, raise_on_first_error=True, **kw):
         params = list(params)
         seen.append(params)
+        if raise_on_first_error and any(p in fail_for for p in params):
+            raise exc or _Timeout("client request timeout")  # as the real driver does
         return [
             (False, exc or _Timeout("client request timeout"))
             if p in fail_for else (True, None)
@@ -136,3 +138,24 @@ def test_request_timeout_reads_the_connection_block():
 def test_request_timeout_rejects_a_nonsense_value():
     with pytest.raises(ImportExecutionError, match="request_timeout"):
         ci._request_timeout({"request_timeout": 0})
+
+
+
+def test_the_session_carries_the_configured_request_timeout(monkeypatch):
+    """Validated and then ignored, the setting would leave bulk writes on the driver's
+    10 s default."""
+    cluster_mod = pytest.importorskip("cassandra.cluster")
+
+    class _Session:
+        default_timeout = 10.0
+
+    class _Cluster:
+        def __init__(self, hosts, port, connect_timeout):
+            self.args = (hosts, port)
+
+        def connect(self):
+            return _Session()
+
+    monkeypatch.setattr(cluster_mod, "Cluster", _Cluster)
+    _, session = ci._default_cassandra_session({"hosts": ["h"], "request_timeout": 45})
+    assert session.default_timeout == 45.0

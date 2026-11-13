@@ -5,7 +5,7 @@ are written by a second pass driven by ``stream_runner`` calling ``write_relatio
 Relationships need every node set to exist before edge insertion, which requires
 two streaming passes over the entity/relationship sources.
 
-Shapes node properties with ``props_from_row`` and writes them with the batched
+Shapes node properties with ``_dedupe_props`` and writes them with the batched
 helper ``_merge_nodes_batched`` (UNWIND). Dedupe is tracked *across*
 ``write_batch`` calls (one seen-set per partition, kept for the sink's
 lifetime), so first-wins holds for the whole streaming pass rather than just
@@ -28,7 +28,6 @@ from polyglotimportcsv.importers.neo4j_importer import (
     _merge_rels_batched,
     _rel_rows_for_batch,
     _sanitize_label,
-    props_from_row,
 )
 from polyglotimportcsv.stream_binding import EntityBinding
 
@@ -116,7 +115,7 @@ class Neo4jSink:
     def write_batch(self, partition_name: str, binding: EntityBinding, batch: pd.DataFrame) -> int:
         key_name = _single_key(binding.cfg, partition_name)
         seen = self._seen.setdefault(partition_name, set())
-        props_list, skipped = _dedupe_props(batch, binding.cfg, key_name, props_from_row, seen=seen)
+        props_list, skipped = _dedupe_props(batch, binding.cfg, key_name, seen=seen)
         if skipped:
             logger.warning(
                 "[neo4j] %s: %d duplicate key value(s) skipped (first MERGE wins)",
@@ -154,9 +153,11 @@ class Neo4jSink:
         )
         if not rows:
             return 0
+        # One UNWIND for the whole batch, as for the nodes: the engine already cuts
+        # the edges in write batches.
         return _merge_rels_batched(
             self._session, from_label, cols.from_key, to_label, cols.to_key,
-            rel_type, cols.merge_keys, rows, advance=lambda n: None,
+            rel_type, cols.merge_keys, rows, advance=lambda n: None, batch=len(rows),
         )
 
     def close(self) -> None:

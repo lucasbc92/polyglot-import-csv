@@ -25,11 +25,11 @@ def default_sink_factories() -> Dict[str, SinkFactory]:
     the DBMS present in the config are ever constructed (``run_stream_import``
     calls a factory once per configured DBMS)."""
     return {
-        "postgres": lambda bcfg: PostgresSink(bcfg),
-        "redis": lambda bcfg: RedisSink(bcfg),
-        "mongodb": lambda bcfg: MongoSink(bcfg),
-        "cassandra": lambda bcfg: CassandraSink(bcfg),
-        "neo4j": lambda bcfg: Neo4jSink(bcfg),
+        "postgres": PostgresSink,
+        "redis": RedisSink,
+        "mongodb": MongoSink,
+        "cassandra": CassandraSink,
+        "neo4j": Neo4jSink,
     }
 
 

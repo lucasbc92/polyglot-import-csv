@@ -262,20 +262,28 @@ class DbmsStream:
         return wanted
 
     def feed_relationships(self, source: str, chunk: pd.DataFrame) -> None:
-        """Write the relationships driven by one chunk of their `from` entity's source."""
+        """Write the relationships driven by one chunk of their `from` entity's source,
+        in batches of the `from` entity's write batch."""
         for from_e, rlist in self._from_rels.items():
             ecfg = self._entities[from_e]
             if not _matches(from_e, ecfg, source):
                 continue
             from_binding = self._bindings[from_e]
             _, casted, _ = _process_chunk(chunk, ecfg, from_binding, source)
+            batch = self._batch[from_e]
             for rname, rspec in rlist:
                 to_binding = self._bindings[rspec["to"]]
                 if self._inspector is not None:
                     self._inspector.inspect_relationship_rows(
                         source, rname, rspec, from_binding, to_binding, casted
                     )
-                n = self._write_rels(rname, rspec, from_binding, to_binding, casted)
+                # In write batches, as the nodes are: a read block can hold far more
+                # rows than one write should send.
+                n = 0
+                for start in range(0, len(casted), batch):
+                    n += self._write_rels(
+                        rname, rspec, from_binding, to_binding, casted.iloc[start:start + batch]
+                    )
                 key = f":{rspec.get('type') or rname}"
                 self.written[key] = self.written.get(key, 0) + n
 

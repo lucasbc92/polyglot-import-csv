@@ -68,7 +68,8 @@ def build_postgres_foreign_keys(
     entities: Dict[str, Dict[str, Any]],
     relationships: Dict[str, Dict[str, Any]],
 ) -> List[str]:
-    """ALTER TABLE ... ADD CONSTRAINT for each relationship."""
+    """ALTER TABLE ... DROP and ADD CONSTRAINT for each relationship, one statement
+    per list item (an identifier may hold a ``;``, so a caller must not split them)."""
     stmts: List[str] = []
     for rname, rspec in (relationships or {}).items():
         from_t = rspec["from"]
@@ -78,8 +79,8 @@ def build_postgres_foreign_keys(
         con_name = f"{from_t}_{to_t}_{rname}_fk".replace("-", "_")
         fq_from = f'"{schema}"."{from_t}"'
         fq_to = f'"{schema}"."{to_t}"'
+        stmts.append(f'ALTER TABLE {fq_from} DROP CONSTRAINT IF EXISTS "{con_name}";')
         stmts.append(
-            f'ALTER TABLE {fq_from} DROP CONSTRAINT IF EXISTS "{con_name}";'
             f'ALTER TABLE {fq_from} ADD CONSTRAINT "{con_name}" '
             f'FOREIGN KEY ("{fk}") REFERENCES {fq_to} ("{refk}");'
         )

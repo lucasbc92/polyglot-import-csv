@@ -118,8 +118,20 @@ def test_ensure_partition_issues_create_table_ddl():
     sink.ensure_partition("inventory", binding)
 
     assert any("CREATE TABLE IF NOT EXISTS" in s for s in conn.cur.executed)
-    assert any('"inventory"' in s for s in conn.cur.executed)
+    (ddl,) = [s for s in conn.cur.executed if '"inventory"' in s]
+    # ON CONFLICT (the first-wins dedupe across batches) and the foreign keys added at
+    # close() both need the key the table is created with.
+    keys = [f'"{fk}"' for fk, spec in INVENTORY_CFG["columns"].items() if spec.get("is_key")]
+    assert keys and f"PRIMARY KEY ({', '.join(keys)})" in ddl
     assert sink._created["inventory"] is binding.cfg
+
+
+def test_the_connection_is_in_autocommit():
+    """The sink never commits: without autocommit close() would roll every row back,
+    and abort() would lose what a failed load had written."""
+    conn = _FakeConn()
+    PostgresSink({"schema": "public"}, connection_factory=lambda c: conn)
+    assert conn.autocommit is True
 
 
 def test_write_batch_inserts_deduped_rows_with_on_conflict():
@@ -416,6 +428,7 @@ class _FakeRedisClient:
         self.set_calls = 0
         self.pipeline_execs = 0
         self.sets = []
+        self.closed = False
 
     def ping(self):
         return True
@@ -425,6 +438,9 @@ class _FakeRedisClient:
 
     def pipeline(self, transaction=False):
         return _FakeRedisPipeline(self)
+
+    def close(self):
+        self.closed = True
 
 
 def _user_session_sample():
@@ -491,10 +507,27 @@ def test_redis_ping_failure_raises_import_execution_error():
         RedisSink({"connection": {}}, client_factory=lambda c: _BadRedisClient())
 
 
-def test_redis_close_is_a_noop():
+@pytest.mark.parametrize("finish", ["close", "abort"])
+def test_redis_close_and_abort_close_the_client(finish):
     client = _FakeRedisClient()
     sink = RedisSink({"connection": {}}, client_factory=lambda c: client)
-    sink.close()  # must not raise
+    getattr(sink, finish)()
+    assert client.closed is True
+
+
+def test_redis_write_batch_is_one_pipeline_however_large_the_batch():
+    """The importer's helper re-chunks at 1000 by default; a sink batch is one."""
+    client = _FakeRedisClient()
+    sink = RedisSink({"connection": {}}, client_factory=lambda c: client)
+    ids = [f"u{i}" for i in range(1500)]
+    batch = pd.DataFrame({
+        "user_id": ids, "user_name": ids, "user_email": ids, "timestamp": ids,
+        SOURCE_COLUMN: ["select_product"] * len(ids),
+    })
+    binding = _bind_sample("user_session", USER_SESSION_CFG, batch, "select_product")
+
+    assert sink.write_batch("user_session", binding, batch) == 1500
+    assert client.pipeline_execs == 1
 
 
 # ---------------------------------------------------------------------------
@@ -574,7 +607,7 @@ def test_cassandra_create_schema_issues_keyspace_ddl():
 
     sink.create_schema()
 
-    assert any("CREATE KEYSPACE IF NOT EXISTS ecom" in s for s in session.executes)
+    assert any('CREATE KEYSPACE IF NOT EXISTS "ecom"' in s for s in session.executes)
     assert session.keyspace == "ecom"
 
 
@@ -971,3 +1004,123 @@ def test_neo4j_write_relationships_skips_empty_text_endpoints():
     assert count == 1
     (payload,) = [p["batch"] for q, p in rec["tx_run"] if "UNWIND" in q and "MERGE (a)" in q]
     assert [(r["a_id"], r["b_id"]) for r in payload] == [("u1", "p1")]
+
+
+
+# ---------------------------------------------------------------------------
+# Review of the sinks: abort, factories, Cassandra columns and types, Neo4j edges
+# ---------------------------------------------------------------------------
+
+
+def _all_sinks():
+    """``(sink, released)`` of each sink built on its fake client: ``released()`` tells
+    whether the client was let go."""
+    conn = _FakeConn()
+    client = _FakeClient()
+    cluster, session = _FakeCassCluster(), _FakeCassSession()
+    redis = _FakeRedisClient()
+    driver = _FakeNeoDriver({"run": [], "tx_run": []})
+    return [
+        (PostgresSink({"schema": "public"}, connection_factory=lambda c: conn),
+         lambda: conn.closed),
+        (MongoSink({"connection": {"database": "shop"}}, client_factory=lambda c: client),
+         lambda: client.closed),
+        (CassandraSink({"connection": {"keyspace": "ecom"}},
+                       session_factory=lambda c: (cluster, session)),
+         lambda: cluster.shutdown_called),
+        (RedisSink({"connection": {}}, client_factory=lambda c: redis), lambda: redis.closed),
+        (Neo4jSink({"connection": {}}, driver_factory=lambda c: driver), lambda: driver.closed),
+    ]
+
+
+def test_every_sink_releases_its_client_when_aborted():
+    for sink, released in _all_sinks():
+        sink.abort()
+        assert released(), type(sink).__name__
+
+
+def test_the_default_factories_build_a_sink_for_every_dbms():
+    from polyglotimportcsv.sinks import default_sink_factories
+    from polyglotimportcsv.validation import DBMS_NAMES
+
+    factories = default_sink_factories()
+    assert set(factories) == set(DBMS_NAMES)
+    assert factories["postgres"] is PostgresSink and factories["neo4j"] is Neo4jSink
+
+
+def test_cassandra_resolves_a_csv_column_position_against_the_source_header(monkeypatch):
+    """Position 2 is the second column of the file, not of the entity's columns."""
+    import polyglotimportcsv.importers.cassandra_importer as ci
+
+    sent = []
+    monkeypatch.setattr(ci, "execute_concurrent_with_args",
+                        lambda s, p, params, **kw: sent.extend(params) or [])
+    session = _FakeCassSession()
+    sink = CassandraSink({"connection": {"keyspace": "ecom"}},
+                         session_factory=lambda c: (_FakeCassCluster(), session))
+    sample = pd.DataFrame({"id": ["k1", "k2"], "x": ["x1", "x2"], "real_name": ["a", "b"],
+                           SOURCE_COLUMN: ["s", "s"]})
+    cfg = {"source": "s", "cassandra_partition": ["id"],
+           "columns": {"name": {"csv_column": 2}, "id": {}}}
+    binding = _bind_sample("t", cfg, sample, "s")
+
+    sink.ensure_partition("t", binding)
+    sink.write_batch("t", binding, sample)
+
+    assert '"name" text' in session.executes[0]
+    assert sorted(sent) == [["k1", "x1"], ["k2", "x2"]]  # partition first, then name <- x
+
+
+@pytest.mark.parametrize("db_type, cql", [
+    ("NUMERIC(14,2)", "double"),
+    ("double precision", "double"),
+    ("SMALLINT", "bigint"),
+    ("DATE", "timestamp"),
+    ("TIMESTAMP WITH TIME ZONE", "timestamp"),
+    ("BOOLEAN", "boolean"),
+    ("VARCHAR(10)", "text"),
+    ("JSONB", "text"),
+])
+def test_cassandra_reads_a_declared_type_like_the_cast(db_type, cql):
+    """A column cast to a number must not be stored as text because its type has
+    parameters or a second word."""
+    from polyglotimportcsv.importers.cassandra_importer import _cassandra_type_for
+
+    assert _cassandra_type_for({"db_type": db_type}, "string") == cql
+
+
+def test_cassandra_quotes_the_key_columns_as_it_quotes_their_definitions():
+    """Unquoted, CQL lowers a name: a mixed-case key column would name no column."""
+    from polyglotimportcsv.importers.cassandra_importer import _primary_key_clause
+
+    assert _primary_key_clause(["UserId"], ["ts"]) == 'PRIMARY KEY ("UserId", "ts")'
+    assert _primary_key_clause(["a", "b"], []) == 'PRIMARY KEY (("a", "b"))'
+
+
+def test_cassandra_give_up_message_shows_the_error_of_a_failed_row(monkeypatch):
+    import polyglotimportcsv.importers.cassandra_importer as ci
+
+    monkeypatch.setattr(ci, "execute_concurrent_with_args", lambda s, p, params, **kw: [
+        (True, "a result") if row == ["ok"] else (False, ValueError("bad value"))
+        for row in params
+    ])
+    with pytest.raises(ImportExecutionError, match=r"\['bad'\] -> bad value"):
+        ci._write_batched(object(), object(), [["ok"], ["bad"]], lambda n: None,
+                          sleep=lambda s: None)
+
+
+def test_neo4j_writes_a_relationship_batch_as_one_unwind():
+    """The engine cuts the edges in write batches; the sink must not cut them again."""
+    rec = {"run": [], "tx_run": []}
+    sink = Neo4jSink({"connection": {}}, driver_factory=lambda c: _FakeNeoDriver(rec))
+    n = 1500
+    chunk = pd.DataFrame({
+        "user_id": [f"u{i}" for i in range(n)], "product_id": [f"p{i}" for i in range(n)],
+        "order_number": [f"o{i}" for i in range(n)], "quantity": ["1"] * n,
+        "price": ["10"] * n, "rating": ["5"] * n, SOURCE_COLUMN: ["purchase"] * n,
+    })
+    from_b = _bind_sample("User", NEO4J_USER_CFG, chunk, "purchase")
+    to_b = _bind_sample("Product", NEO4J_PRODUCT_CFG, chunk, "stock")
+
+    assert sink.write_relationships("PURCHASED", PURCHASED_RSPEC, from_b, to_b, chunk) == n
+    assert len([q for q, _ in rec["tx_run"] if "MERGE (a)" in q]) == 1

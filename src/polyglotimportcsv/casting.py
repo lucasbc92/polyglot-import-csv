@@ -56,11 +56,23 @@ def declared_kind(db_type: Optional[str], inferred: str) -> str:
     """
     if not db_type or inferred == "empty":
         return inferred
-    base = " ".join(str(db_type).upper().split()).partition("(")[0].strip()
-    kind = _DB_TYPE_KIND.get(base, inferred)
+    kind = db_type_kind(db_type) or inferred
     if kind == "float" and inferred == "integer":
         return inferred
     return kind
+
+
+def db_type_base(db_type: str) -> str:
+    """The base name of a declared type, upper case: ``"numeric (14, 2)"`` -> ``"NUMERIC"``."""
+    return " ".join(str(db_type).upper().split()).partition("(")[0].strip()
+
+
+def db_type_kind(db_type: Optional[str]) -> Optional[str]:
+    """The kind a declared ``db_type`` stands for (``"NUMERIC(14,2)"`` -> ``"float"``),
+    or ``None`` for no type, a boolean type, or one this table does not know."""
+    if not db_type:
+        return None
+    return _DB_TYPE_KIND.get(db_type_base(db_type))
 
 
 def is_boolean_series(non_empty: pd.Series) -> bool:

@@ -630,3 +630,24 @@ def test_a_linked_entity_without_rows_still_gets_its_partition(tmp_path):
     )
     assert fake.ensure_calls == ["parent", "child"]  # not "alone": nothing links it
     assert counts.written["postgres"] == {"parent": 5}
+
+
+
+def test_relationships_are_written_in_the_write_batch_of_their_from_entity(tmp_path):
+    """A read block can hold far more rows than one write should send."""
+    _write_csv(tmp_path / "people.csv", ["person_id", "thing_id", "weight"],
+               [(f"u{i}", f"t{i % 3}", i) for i in range(10)])
+    _write_csv(tmp_path / "things.csv", ["thing_id", "label"],
+               [(f"t{i}", f"L{i}") for i in range(3)])
+    config = _likes_config(tmp_path)  # rewrites the files: write them again
+    _write_csv(tmp_path / "people.csv", ["person_id", "thing_id", "weight"],
+               [(f"u{i}", f"t{i % 3}", i) for i in range(10)])
+    plan = dataclasses.replace(
+        plan_import(config, tmp_path, dbms_names=["neo4j"]), batch_size=4,
+    )
+    fake = _FakeSink()
+
+    counts = sr.run_stream_import(plan, sink_factories={"neo4j": lambda cfg: fake})
+
+    assert [len(f) for f in fake.rel_frames["LIKES"]] == [4, 4, 2]
+    assert counts.written["neo4j"][":LIKES"] == 10

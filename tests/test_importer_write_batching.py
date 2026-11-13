@@ -144,11 +144,9 @@ def test_neo4j_merge_nodes_batched_uses_unwind():
 
 
 def test_dedupe_props_is_first_wins_and_counts_the_skipped():
-    from polyglotimportcsv.importers.neo4j_importer import _dedupe_props, props_from_row
+    from polyglotimportcsv.importers.neo4j_importer import _dedupe_props
     df = pd.DataFrame({"user_id": ["u0", "u1", "u0", "u2", "u1"]})
-    props_list, skipped = _dedupe_props(
-        df, {"columns": {"user_id": {"is_key": True}}}, "user_id", props_from_row
-    )
+    props_list, skipped = _dedupe_props(df, {"columns": {"user_id": {"is_key": True}}}, "user_id")
     assert [p["user_id"] for p in props_list] == ["u0", "u1", "u2"]   # first-wins
     assert skipped == 2
 

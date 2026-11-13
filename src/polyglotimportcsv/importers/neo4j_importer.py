@@ -31,38 +31,52 @@ def _default_neo4j_driver(conn: Dict[str, Any]):
     return driver
 
 
+#: ``(property name, CSV column)`` of every leaf column of an entity, resolved once
+#: against the columns of a batch.
+_Plan = List[Tuple[str, str]]
+
+
+def _node_plan(ecfg: Dict[str, Any], csv_columns) -> _Plan:
+    return [
+        (target_field_name(field_key, spec), resolve_csv_column(field_key, spec, csv_columns))
+        for field_key, _, spec in flat_leaf_columns(ecfg)
+    ]
+
+
+def _props(row, plan: _Plan) -> Dict[str, Any]:
+    return {name: cell_scalar(row.get(src)) for name, src in plan}
+
+
 def props_from_row(row: pd.Series, ecfg: Dict[str, Any]) -> Dict[str, Any]:
     """Build one node's property dict from a CSV row (flat columns only)."""
-    csv_columns = row.index
-    out: Dict[str, Any] = {}
-    for field_key, _, spec in flat_leaf_columns(ecfg):
-        name = target_field_name(field_key, spec)
-        src = resolve_csv_column(field_key, spec, csv_columns)
-        out[name] = cell_scalar(row[src] if src in row.index else None)
-    return out
+    return _props(row, _node_plan(ecfg, row.index))
 
 
-def _dedupe_props(part_df, ecfg, key_name, props_from_row, seen: Optional[Set[Any]] = None):
+def _dedupe_props(part_df, ecfg, key_name, seen: Optional[Set[Any]] = None):
     """First-wins dedupe by key; returns (list-of-props, skipped_count).
 
-    ``seen`` defaults to a fresh set (one call = one dedupe scope). Pass a set
-    kept across calls (as ``Neo4jSink.write_batch`` does, keyed per partition)
-    to make first-wins hold across a whole streaming pass instead of just
-    within one batch.
+    The entity's columns are resolved once for the batch, and a row whose key was
+    already seen is skipped before its properties are built. ``seen`` defaults to a
+    fresh set (one call = one dedupe scope). Pass a set kept across calls (as
+    ``Neo4jSink.write_batch`` does, keyed per partition) to make first-wins hold
+    across a whole streaming pass instead of just within one batch.
     """
     if seen is None:
         seen = set()
+    plan = _node_plan(ecfg, part_df.columns)
+    key_src = dict(plan).get(key_name)
     out, skipped = [], 0
+    if key_src is None:
+        return out, skipped
     for row in iter_rows(part_df):
-        props = props_from_row(row, ecfg)
-        kid = props.get(key_name)
+        kid = cell_scalar(row.get(key_src))
         if kid is None:
             continue
         if kid in seen:
             skipped += 1
             continue
         seen.add(kid)
-        out.append(props)
+        out.append(_props(row, plan))
     return out, skipped
 
 
@@ -85,22 +99,23 @@ def _rel_rows_for_batch(dff, from_src, to_src, rel_cols, mk_names):
     """Shape rows for UNWIND batching: (a_id, b_id, rest_props, mk_params).
 
     A row with an empty endpoint (``is_empty_reference``) makes no edge and is left out.
+    The edge's columns are resolved once for the batch.
     """
+    columns = list(dff.columns)
+    merge = set(mk_names)
+    plan = [
+        (target_field_name(fk, spec), resolve_csv_column(fk, spec, columns))
+        for fk, spec in rel_cols.items()
+    ]
+    mk_plan = [(name, src) for name, src in plan if name in merge]
+    rest_plan = [(name, src) for name, src in plan if name not in merge]
     rows: List[Tuple[Any, Any, Dict[str, Any], Dict[str, Any]]] = []
     for row in iter_rows(dff):
-        a_id = cell_scalar(row[from_src] if from_src in row.index else None)
-        b_id = cell_scalar(row[to_src] if to_src in row.index else None)
+        a_id = cell_scalar(row.get(from_src))
+        b_id = cell_scalar(row.get(to_src))
         if is_empty_reference(a_id) or is_empty_reference(b_id):
             continue
-        rel_props: Dict[str, Any] = {}
-        csv_columns = row.index
-        for field_key, spec in rel_cols.items():
-            name = target_field_name(field_key, spec)
-            src = resolve_csv_column(field_key, spec, csv_columns)
-            rel_props[name] = cell_scalar(row[src] if src in row.index else None)
-        mk_params = {k: rel_props[k] for k in mk_names}
-        rest_props = {k: v for k, v in rel_props.items() if k not in mk_names}
-        rows.append((a_id, b_id, rest_props, mk_params))
+        rows.append((a_id, b_id, _props(row, rest_plan), _props(row, mk_plan)))
     return rows
 
 

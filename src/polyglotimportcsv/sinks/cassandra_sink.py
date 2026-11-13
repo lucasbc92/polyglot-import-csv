@@ -2,7 +2,7 @@
 
 Builds the column plan and DDL/CQL with ``_cassandra_column_plan``,
 ``_cassandra_table_ddl``, ``_cassandra_insert_cql`` and ``_cassandra_keyspace_ddl``,
-shapes rows with ``_row_values``, and writes them with ``_write_batched``
+shapes each batch with ``_batch_values``, and writes them with ``_write_batched``
 (``execute_concurrent_with_args``, concurrency 64).
 """
 
@@ -19,11 +19,10 @@ from polyglotimportcsv.importers.cassandra_importer import (
     _cassandra_keyspace_ddl,
     _cassandra_table_ddl,
     _default_cassandra_session,
-    _row_values,
+    _batch_values,
     _write_batched,
 )
 from polyglotimportcsv.stream_binding import EntityBinding
-from polyglotimportcsv.row_view import iter_rows
 
 
 class CassandraSink:
@@ -55,11 +54,10 @@ class CassandraSink:
         if partition_name in self._tables:
             return
         self._ensure_keyspace_set()
-        # No source-CSV header is available at bind time; declared columns
-        # (binding.cfg keys) stand in for it. This resolves correctly for the
-        # common case (no `csv_column` override), matching write_batch's
-        # column plan below since batches carry the same field-key columns.
-        csv_columns = list(binding.cfg.get("columns") or {})
+        # The binding's kinds name every column of its source, in header order: the
+        # columns the batches carry, so a `csv_column` (by name or by position)
+        # resolves to the column its rows hold.
+        csv_columns = list(binding.kinds)
         pmap, ordered_src, ordered_db, cql_by_src, pk_clause = _cassandra_column_plan(
             binding.cfg, binding.kinds, csv_columns
         )
@@ -71,7 +69,7 @@ class CassandraSink:
 
     def write_batch(self, partition_name: str, binding: EntityBinding, batch: pd.DataFrame) -> int:
         prepared, ordered_src, cql_by_src = self._tables[partition_name]
-        params_list = [_row_values(row, ordered_src, cql_by_src) for row in iter_rows(batch)]
+        params_list = _batch_values(batch, ordered_src, cql_by_src)
         if not params_list:
             return 0
         return _write_batched(self._session, prepared, params_list, lambda n: None, concurrency=64)
