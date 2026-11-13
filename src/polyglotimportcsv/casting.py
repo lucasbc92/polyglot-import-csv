@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import warnings
 from decimal import Decimal, InvalidOperation
-from typing import Any, Dict, Optional
+from typing import Any, Collection, Dict, Optional
 
 import numpy as np
 import pandas as pd
@@ -23,6 +23,44 @@ KIND_TO_DB_TYPE: Dict[str, str] = {
 }
 
 _BOOL_WORDS = {"true", "false"}
+
+#: Declared ``db_type`` (its base name, upper case) -> the kind its column is cast to.
+_DB_TYPE_KIND: Dict[str, str] = {
+    **dict.fromkeys(("TEXT", "VARCHAR", "CHARACTER VARYING", "CHAR", "CHARACTER"), "string"),
+    **dict.fromkeys(
+        ("SMALLINT", "INT2", "INTEGER", "INT", "INT4", "BIGINT", "INT8"), "integer"
+    ),
+    **dict.fromkeys(
+        ("NUMERIC", "DECIMAL", "REAL", "FLOAT4", "DOUBLE PRECISION", "DOUBLE", "FLOAT8", "FLOAT"),
+        "float",
+    ),
+    **dict.fromkeys(
+        ("TIMESTAMP", "TIMESTAMPTZ", "TIMESTAMP WITH TIME ZONE", "TIMESTAMP WITHOUT TIME ZONE",
+         "DATE"),
+        "datetime",
+    ),
+}
+
+
+def declared_kind(db_type: Optional[str], inferred: str) -> str:
+    """The kind a column is cast to: that of its declared ``db_type``, which wins over
+    the kind ``inferred`` from its values.
+
+    A column declared as text is never cast, so "00123" keeps its zeros; one declared
+    as a number or a timestamp is cast to it, and what does not convert is reported.
+    The inferred kind stands in four cases: no declared type, or one this table does
+    not know; a column without values (``empty``); an integer column declared with a
+    fractional type, since an integer is exact and fits there; and a boolean type,
+    because the DBMS takes more spellings ("yes", "1", "t") than the cast, which would
+    read each of them as false.
+    """
+    if not db_type or inferred == "empty":
+        return inferred
+    base = " ".join(str(db_type).upper().split()).partition("(")[0].strip()
+    kind = _DB_TYPE_KIND.get(base, inferred)
+    if kind == "float" and inferred == "integer":
+        return inferred
+    return kind
 
 
 def is_boolean_series(non_empty: pd.Series) -> bool:
@@ -232,22 +270,30 @@ def _cast_column_vectorized(series: pd.Series, kind: str) -> "tuple[pd.Series, i
 
 
 def cast_frame(
-    df: pd.DataFrame, kinds: Dict[str, str], source: Optional[str] = None
+    df: pd.DataFrame,
+    kinds: Dict[str, str],
+    source: Optional[str] = None,
+    columns: Optional[Collection[str]] = None,
 ) -> pd.DataFrame:
     """Return a copy with typed columns converted to native values.
 
     Casts per column with pandas; the values and element types equal those of
     ``cast_value`` applied cell by cell. Only integer/float/boolean/datetime
     columns are converted (empty cells become None); string columns keep raw
-    values.
+    values. With ``columns``, only those are converted and every other column keeps
+    its raw text: the cast is the largest cost of a row, and an entity that maps 3 of
+    39 columns should pay for 3.
 
     A column with values that did not convert logs one warning, whose record carries
     ``cast_source`` (``source``, the name of what the rows came from) and
     ``cast_column``, so that a caller can tell the warnings of one column of one source
     from those of another whatever the count in their text.
     """
-    out = df.copy()
+    # Shallow: the columns that are not cast are shared with ``df``, never rewritten.
+    out = df.copy(deep=False)
     for col in out.columns:
+        if columns is not None and col not in columns:
+            continue
         kind = kinds.get(col, "string")
         if kind not in ("integer", "float", "boolean", "datetime"):
             continue
@@ -262,5 +308,4 @@ def cast_frame(
                 col, fallbacks, kind, outcome,
                 extra={"cast_source": source, "cast_column": col},
             )
-        logger.debug("column %r cast to %s (%d value(s))", col, kind, len(out[col]))
     return out

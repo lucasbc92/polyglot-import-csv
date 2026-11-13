@@ -537,3 +537,21 @@ def test_inspect_rows_sees_file_row_positions_of_a_union_across_chunks(tmp_path)
 
     assert seen == [("a", 1, "a1"), ("a", 3, "a3"), ("a", 5, "a5")] + [
         ("b", i, f"b{i}") for i in range(5)]
+
+
+def test_the_relationship_pass_reads_only_the_from_source_and_the_columns_of_an_edge(
+    tmp_path, reads
+):
+    config = _likes_config(tmp_path)
+    plan = plan_import(config, tmp_path, dbms_names=["neo4j"])
+    reads.clear()  # the plan's own reads
+
+    sr.run_stream_import(plan, sink_factories={"neo4j": lambda cfg: _FakeSink()})
+
+    # Nodes: every source, whole. Relationships: the `from` source again, and of it the
+    # two endpoint keys and the edge's property.
+    assert reads == [
+        ("people.csv", None),
+        ("things.csv", None),
+        ("people.csv", ["person_id", "thing_id", "weight"]),
+    ]

@@ -183,15 +183,35 @@ def test_empty_cassandra_partition_or_cluster_is_an_error(tmp_path):
 
 def test_text_in_a_declared_bigint_is_an_error(tmp_path):
     amount = [str(i * 10) for i in range(10)]
-    amount[3] = "n/a"  # the column is text; PostgreSQL would refuse it in BIGINT
+    amount[3] = "n/a"  # the values make it text; declared BIGINT, it is cast to integers
     _write_csv(tmp_path / "ev.csv", ["id", "amount"], list(zip(range(10), amount)))
     config = _events_config({"id": {"is_key": True}, "amount": {"db_type": "BIGINT"}})
     report, _ = _validate(tmp_path, config)
-    group = _only_group(report)
-    assert (group.rule, group.where, group.count) == ("db_type", "postgres · events", 1)
-    assert "amount" in group.detail and "BIGINT" in group.detail
+    group = _only_group(report)  # reported once: not also as a db_type problem
+    assert (group.rule, group.where, group.count) == ("not_convertible", "postgres · events", 1)
+    assert group.detail == "column 'amount' does not convert to integer"
     (ex,) = group.examples
-    assert (ex.line, ex.column, ex.value, ex.reason) == (5, "amount", "n/a", "not an integer")
+    assert (ex.line, ex.column, ex.value) == (5, "amount", "n/a")
+
+
+def test_a_column_declared_text_keeps_its_leading_zeros(tmp_path):
+    """Its values are all digits, so they infer as integers; declared TEXT, none is cast."""
+    codes = [f"{i:05d}" for i in range(10)]
+    _write_csv(tmp_path / "ev.csv", ["id", "code"], list(zip(range(10), codes)))
+    config = _events_config({"id": {"is_key": True}, "code": {"db_type": "TEXT"}})
+    plan = plan_import(config, tmp_path, dbms_names=["postgres"])
+    assert plan.bindings["postgres"]["events"].kinds["code"] == "string"
+    sent = []
+
+    class _Sink(_RecordingSink):
+        def write_batch(self, partition_name, binding, batch):
+            sent.extend(batch["code"])
+            return len(batch)
+
+    report, _ = validate_data(plan)
+    assert report.ok()
+    run_stream_import(plan, sink_factories={"postgres": _Sink})
+    assert sent == codes
 
 
 def test_a_value_out_of_the_cassandra_bigint_range_is_an_error(tmp_path):

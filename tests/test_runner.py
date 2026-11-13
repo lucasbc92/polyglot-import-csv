@@ -457,17 +457,37 @@ _CAST_LOGGER = logging.getLogger("polyglotimportcsv.casting")
 _WHEN_WARNING = "column 'when': 1 value(s) could not be cast to datetime and became None"
 
 
+#: Keeps every row, the impossible dates too: a filter column is cast, but only a mapped
+#: column that does not convert is a validation error.
+_WHEN_FILTER = [{"column": "when", "operator": "!=", "value": "2000-01-01"}]
+
+
 def _unmapped_cast_fallback(tmp_path):
-    """ev.csv with an unmapped ``when`` column holding one impossible date the datetime
-    cast turns into None: a cast warning in each read that casts it, not a validation
-    error."""
+    """ev.csv with a ``when`` column that is filtered on but not mapped, holding one
+    impossible date the datetime cast turns into None: a cast warning in each read that
+    casts it, not a validation error."""
     when = [f"2023-01-{1 + i % 28:02d}" for i in range(10)]
     when[4] = "2023-02-30"
     _write_csv(tmp_path / "ev.csv", ["id", "when"], list(zip(range(10), when)))
     return _config_file(tmp_path, {
         "sources": {"ev": "ev.csv"},
+        "postgres": {"entities": {"events": {
+            "source": "ev", "columns": {"id": {"is_key": True}}, "filters": _WHEN_FILTER}}},
+    })
+
+
+def test_an_unmapped_column_is_not_cast(tmp_path, caplog):
+    """Nothing reads it, so it costs no cast and its impossible date no warning."""
+    when = [f"2023-01-{1 + i % 28:02d}" for i in range(10)]
+    when[4] = "2023-02-30"
+    _write_csv(tmp_path / "ev.csv", ["id", "when"], list(zip(range(10), when)))
+    cfg = _config_file(tmp_path, {
+        "sources": {"ev": "ev.csv"},
         "postgres": {"entities": {"events": {"source": "ev", "columns": {"id": {"is_key": True}}}}},
     })
+    with caplog.at_level(logging.WARNING, logger=_CAST_LOGGER.name):
+        run_import(cfg, sink_factories=_factories())
+    assert _cast_messages(caplog) == []
 
 
 def _cast_messages(caplog):
@@ -494,8 +514,10 @@ def test_a_cast_warning_is_logged_once_per_source_and_column(tmp_path, monkeypat
     _write_csv(tmp_path / "ev.csv", ["id", "when"], list(zip(range(40), when)))
     cfg = _config_file(tmp_path, {
         "sources": {"ev": "ev.csv"},
-        "postgres": {"entities": {"events": {"source": "ev", "columns": {"id": {"is_key": True}}}}},
-        "redis": {"entities": {"sessions": {"source": "ev", "columns": {"id": {"is_key": True}}}}},
+        "postgres": {"entities": {"events": {
+            "source": "ev", "columns": {"id": {"is_key": True}}, "filters": _WHEN_FILTER}}},
+        "redis": {"entities": {"sessions": {
+            "source": "ev", "columns": {"id": {"is_key": True}}, "filters": _WHEN_FILTER}}},
     })
     chunk_mb = 0.0003
     assert chunk_rows("ev", tmp_path / "ev.csv", chunk_mb) <= 5  # blocks of a few rows

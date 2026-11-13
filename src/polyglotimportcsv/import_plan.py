@@ -14,7 +14,12 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
 
 from polyglotimportcsv.business_exception import MappingError
 from polyglotimportcsv.source_profile import SourceProfile, profile_sources
-from polyglotimportcsv.stream_binding import EntityBinding, bind_entity, entity_source_names
+from polyglotimportcsv.stream_binding import (
+    EntityBinding,
+    bind_entity,
+    entity_source_names,
+    set_cast_columns,
+)
 from polyglotimportcsv.stream_source import DEFAULT_CHUNK_MB, chunk_rows, source_path
 
 #: Rows per write batch: the default and the bounds a user may choose within.
@@ -143,6 +148,8 @@ def plan_import(
         }
         for dbms in dbms_names
     }
+    for dbms in dbms_names:
+        set_cast_columns(config[dbms], bindings[dbms])
     return ImportPlan(
         config=config, base_dir=base_dir, overrides=overrides, dbms_names=list(dbms_names),
         batch_size=batch_size, sources_cfg=sources_cfg, rows_per_chunk=rows_per_chunk,

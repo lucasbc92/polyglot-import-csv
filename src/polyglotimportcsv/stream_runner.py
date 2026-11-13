@@ -115,7 +115,7 @@ def _process_chunk(
 
     Union entities are widened to the binding's superset (data_cols + _source,
     missing filled ""); then non-`each` filters and the vectorized cast are
-    applied. Returns (filtered raw rows, cast rows, filters) so the node loop can
+    applied, the cast to the binding's ``cast_columns`` only. Returns (filtered raw rows, cast rows, filters) so the node loop can
     `expand_each` on the same filters. Both frames keep the chunk's index, the
     position of each data row in its file. Reused by the node loop and the
     relationship pass so both shape rows identically.
@@ -126,7 +126,7 @@ def _process_chunk(
     filters = binding.cfg.get("filters") or []
     non_each = [f for f in filters if f.get("operator") != "each"]
     filtered = apply_filters(working, non_each, binding.kinds)
-    casted = cast_frame(filtered, binding.kinds, source)
+    casted = cast_frame(filtered, binding.kinds, source, binding.cast_columns)
     return filtered, casted, filters
 
 
@@ -232,6 +232,22 @@ class DbmsStream:
         names = [n for e in self._from_rels for n in entity_source_names(e, self._entities[e])]
         return declared_sources(self.plan.sources_cfg, names)
 
+    def relationship_columns(self) -> Dict[str, Optional[Set[str]]]:
+        """Declared source -> the columns the relationship pass needs of it: those the
+        `from` entities reading it have cast (``EntityBinding.cast_columns``), which
+        hold everything an edge is built from. ``None`` for a source to read whole."""
+        wanted: Dict[str, Optional[Set[str]]] = {}
+        for from_e in self._from_rels:
+            needed = self._bindings[from_e].cast_columns
+            for name in entity_source_names(from_e, self._entities[from_e]):
+                profile = self.plan.profiles[name]
+                columns = None if needed is None else needed & set(profile.header)
+                if not columns or wanted.get(profile.declared, set()) is None:
+                    wanted[profile.declared] = None
+                else:
+                    wanted.setdefault(profile.declared, set()).update(columns)
+        return wanted
+
     def feed_relationships(self, source: str, chunk: pd.DataFrame) -> None:
         """Write the relationships driven by one chunk of their `from` entity's source."""
         for from_e, rlist in self._from_rels.items():
@@ -249,11 +265,29 @@ class DbmsStream:
                 self.written[key] = self.written.get(key, 0) + n
 
 
-def _read(plan: ImportPlan, sources_cfg: Dict[str, Any]) -> Iterator[Tuple[str, pd.DataFrame]]:
+def _read(
+    plan: ImportPlan,
+    sources_cfg: Dict[str, Any],
+    only_columns: Optional[Dict[str, List[str]]] = None,
+) -> Iterator[Tuple[str, pd.DataFrame]]:
     """The chunks of ``sources_cfg``, cut in the plan's read blocks."""
     return iter_entity_chunks(
-        sources_cfg, plan.base_dir, plan.overrides, rows_per_chunk=plan.rows_per_chunk
+        sources_cfg, plan.base_dir, plan.overrides, rows_per_chunk=plan.rows_per_chunk,
+        only_columns=only_columns,
     )
+
+
+def _relationship_read_columns(streams: List[DbmsStream]) -> Dict[str, List[str]]:
+    """Declared source -> the columns the relationship pass reads of it, for every
+    source no stream needs whole."""
+    merged: Dict[str, Optional[Set[str]]] = {}
+    for stream in streams:
+        for declared, columns in stream.relationship_columns().items():
+            if columns is None or merged.get(declared, set()) is None:
+                merged[declared] = None
+            else:
+                merged.setdefault(declared, set()).update(columns)
+    return {declared: sorted(cols) for declared, cols in merged.items() if cols}
 
 
 def run_single_pass(
@@ -265,8 +299,8 @@ def run_single_pass(
     """Feed every DBMS of the plan from one read of the sources.
 
     One read of ``plan.sources_cfg`` feeds the nodes of every DBMS; then one read of
-    the sources any of them needs for relationships feeds those; then every sink is
-    closed. ``create_schema`` is not called. ``on_batch(dbms, partition, frame)`` is
+    the sources any of them needs for relationships, limited to the columns an edge is
+    built from, feeds those; then every sink is closed. ``create_schema`` is not called. ``on_batch(dbms, partition, frame)`` is
     called after every node batch is written.
 
     The plan's config must have passed ``validation.validate_headers``. Sinks are
@@ -281,7 +315,7 @@ def run_single_pass(
     needed = {name for stream in streams for name in stream.relationship_sources()}
     if needed:
         rel_sources = {k: v for k, v in plan.sources_cfg.items() if k in needed}
-        for source, chunk in _read(plan, rel_sources):
+        for source, chunk in _read(plan, rel_sources, _relationship_read_columns(streams)):
             for stream in streams:
                 stream.feed_relationships(source, chunk)
     for stream in streams:

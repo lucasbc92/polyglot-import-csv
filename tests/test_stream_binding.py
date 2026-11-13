@@ -21,7 +21,7 @@ def test_bind_entity_takes_the_kinds_from_the_whole_file_profile():
     profiles = {"e": _profile("e", id=["1", "2"], when=["2023-01-01", "2023-01-02"])}
     ecfg = {"source": "e", "columns": {"id": {"db_type": "TEXT"}}}  # declared TEXT wins
     b = sb.bind_entity("e", ecfg, profiles)
-    assert b.kinds == {"id": "integer", "when": "datetime", SOURCE_COLUMN: "string"}
+    assert b.kinds == {"id": "string", "when": "datetime", SOURCE_COLUMN: "string"}
     assert b.cfg["columns"]["id"]["db_type"] == "TEXT"
     assert b.source_name == "e"
     assert not {"source", "csv_columns", "auto_map"} & set(b.cfg)
@@ -84,3 +84,49 @@ def test_entity_source_names():
     assert sb.entity_source_names("e", {}) == ["e"]
     assert sb.entity_source_names("e", {"source": "s"}) == ["s"]
     assert sb.entity_source_names("e", {"source": ["a", "b"]}) == ["a", "b"]
+
+
+@pytest.mark.parametrize("db_type, inferred, kind", [
+    ("TEXT", "integer", "string"),            # "00123" keeps its zeros
+    ("varchar(10)", "datetime", "string"),
+    ("BIGINT", "string", "integer"),          # what does not convert is reported
+    ("TIMESTAMPTZ", "integer", "datetime"),   # YYYYMMDD
+    ("NUMERIC(14, 2)", "string", "float"),
+    ("NUMERIC", "integer", "integer"),        # an integer is exact and fits
+    ("BOOLEAN", "string", "string"),          # the DBMS reads "yes"; the cast would not
+    ("JSONB", "string", "string"),            # a type the table does not know
+    ("TEXT", "empty", "empty"),               # a column without values
+    (None, "integer", "integer"),
+])
+def test_a_declared_db_type_decides_the_kind_a_column_is_cast_to(db_type, inferred, kind):
+    from polyglotimportcsv.casting import declared_kind
+
+    assert declared_kind(db_type, inferred) == kind
+
+
+def test_one_csv_column_cannot_be_declared_with_two_kinds():
+    profiles = {"e": _profile("e", id=["1", "2"])}
+    ecfg = {"source": "e", "columns": {
+        "id": {"db_type": "TEXT"},
+        "id_number": {"csv_column": "id", "db_type": "BIGINT"},
+    }}
+    with pytest.raises(MappingError, match=r"CSV column 'id' is mapped with db_types of different"):
+        sb.bind_entity("e", ecfg, profiles)
+
+
+def test_cast_columns_are_what_the_entity_and_its_relationships_read():
+    people = sb.EntityBinding(
+        cfg={"columns": {"person_id": {"is_key": True}},
+             "filters": [{"column": "age", "operator": ">", "value": 18}]},
+        kinds=dict.fromkeys(["person_id", "thing_id", "weight", "age", "bio"], "string"),
+        source_name="people",
+    )
+    things = sb.EntityBinding(
+        cfg={"columns": {"thing_id": {"is_key": True}, "label": {}}},
+        kinds=dict.fromkeys(["thing_id", "label", "notes"], "string"), source_name="things",
+    )
+    dbms_cfg = {"relationships": {"LIKES": {"from": "User", "to": "Thing",
+                                            "columns": {"weight": {}}}}}
+    sb.set_cast_columns(dbms_cfg, {"User": people, "Thing": things})
+    assert people.cast_columns == {"person_id", "age", "thing_id", "weight"}  # not bio
+    assert things.cast_columns == {"thing_id", "label"}  # not notes

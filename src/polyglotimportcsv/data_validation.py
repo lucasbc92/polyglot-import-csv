@@ -198,7 +198,17 @@ def _check_values(
     cast: pd.DataFrame,
     col: str,
     problem: Callable[[Any], Optional[str]],
+    kinds: Optional[Dict[str, str]] = None,
 ) -> None:
+    """Add a ``db_type`` problem for every cell of ``col`` that ``problem`` refuses.
+
+    With ``kinds``, a cell that did not convert to the column's kind is left out: it is
+    already a ``not_convertible`` problem, and one cell is reported once.
+    """
+    kind = (kinds or {}).get(col, "string")
+    if kind in _CONVERTED_KINDS:
+        converted = ~_unconverted(raw[col], cast[col], kind)
+        raw, cast = raw[converted], cast[converted]
     # Columns repeat their values (statuses, prices, dates), so each distinct cell is
     # checked once per block; the type is in the key so that True and 1 stay apart.
     verdicts: Dict[Tuple[type, Any], Optional[str]] = {}
@@ -275,13 +285,15 @@ def check_rows(
             if db_type:
                 _check_values(report, where, f"column '{col}' does not fit {db_type}",
                               file_label, raw, cast, col,
-                              lambda v, t=db_type: postgres_value_problem(t, v))
+                              lambda v, t=db_type: postgres_value_problem(t, v),
+                              binding.kinds)
     elif dbms == "cassandra":
         cql_by_src = _cassandra_column_plan(binding.cfg, binding.kinds, columns)[3]
         for col, cql in cql_by_src.items():
             _check_values(report, where, f"column '{col}' does not fit CQL {cql}",
                           file_label, raw, cast, col,
-                          lambda v, t=cql: cassandra_value_problem(t, v))
+                          lambda v, t=cql: cassandra_value_problem(t, v),
+                          binding.kinds)
     elif dbms in _INT64_DBMS:
         _check_int64(report, where, file_label, binding.kinds, raw, cast,
                      [col for _, col in leaves])
