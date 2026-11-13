@@ -18,6 +18,9 @@ def select_columns(
 
     Returns the selected column names in header order, without duplicates.
     Raises MappingError for out-of-bounds indices/ranges or unknown names.
+
+    A token made only of digits is always a position, also when a column has that
+    name: a column called ``2020`` is selected by its position, not by its name.
     """
     header = list(header)
     where = f" in {context}" if context else ""

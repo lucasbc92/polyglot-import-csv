@@ -30,3 +30,7 @@ def test_out_of_bounds_raises_mapping_error(token):
 def test_unknown_name_raises_with_context():
     with pytest.raises(MappingError, match="entity 'x'"):
         select_columns(["nope"], HEADER, context="entity 'x'")
+
+
+def test_a_token_of_digits_is_a_position_even_when_a_column_has_that_name():
+    assert select_columns(["2"], ["2020", "2021", "2"]) == ["2021"]

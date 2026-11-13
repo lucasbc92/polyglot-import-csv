@@ -115,7 +115,7 @@ An import runs in this order:
 
 The validation read reports these problems:
 
-- a value that does not convert to the type inferred for its column, such as a malformed date in a column of dates;
+- a value that does not convert to the type of its column, such as a malformed date in a column of dates. The type is the one inferred from the values, unless the column declares a `db_type`, which then decides: a column declared `TEXT` is never converted (`00123` keeps its zeros), and one declared as a number or a timestamp is converted to it. Two cases keep the inferred type: an integer column declared with a fractional type, and `BOOLEAN`, whose spellings the DBMS reads itself. Only the columns an entity maps, filters on or uses as a key are converted;
 - a value that the declared `db_type` (PostgreSQL) or the CQL type (Cassandra) would refuse, such as text in a `BIGINT`, an integer out of range, an invalid `TIMESTAMP` or `DATE`, or a non-boolean in a `BOOLEAN`;
 - an integer beyond 64 bits in a column written to MongoDB or Neo4j, which refuse it;
 - an empty key: an empty `is_key` column (PostgreSQL, Redis, Neo4j) or an empty Cassandra partition or clustering column;
@@ -278,7 +278,11 @@ entity,phase,rows,median_seconds,rows_per_second,peak_memory_mb,free_memory_mb`)
 report graphs. The JSON metadata also records the measured commit (`git_commit`,
 suffixed `-dirty` when `src/` has uncommitted changes).
 The `phase` column holds `infer` and `validate`, once per import, and `write`, once
-per DBMS.
+per DBMS. A `write` is the whole write read of its DBMS, not only the time spent in
+the DBMS: it runs from opening the connection to closing it, and so includes creating
+the schema, reading and converting the CSV again and, for Neo4j, the second pass over
+the relationships. Its `rows` are the node rows plus the relationship rows sent. The
+`rows` of `infer` and `validate` are those of every source read.
 
 ### License
 
@@ -398,7 +402,7 @@ Uma importação segue esta ordem:
 
 A leitura de validação reporta estes problemas:
 
-- valor que não converte para o tipo inferido da coluna, como uma data malformada em uma coluna de datas;
+- valor que não converte para o tipo da coluna, como uma data malformada em uma coluna de datas. O tipo é o inferido dos valores, a menos que a coluna declare um `db_type`, que então decide: uma coluna declarada `TEXT` nunca é convertida (`00123` mantém os zeros), e uma declarada como número ou *timestamp* é convertida para ele. Dois casos mantêm o tipo inferido: coluna de inteiros declarada com tipo fracionário, e `BOOLEAN`, cujas grafias o próprio SGBD interpreta. Só são convertidas as colunas que a entidade mapeia, filtra ou usa como chave;
 - valor que o `db_type` declarado (PostgreSQL) ou o tipo CQL (Cassandra) recusaria, como texto em `BIGINT`, inteiro fora da faixa, `TIMESTAMP` ou `DATE` inválido ou valor não booleano em `BOOLEAN`;
 - inteiro além de 64 bits em coluna gravada no MongoDB ou no Neo4j, que os recusam;
 - chave vazia: coluna `is_key` vazia (PostgreSQL, Redis, Neo4j) ou coluna de partição ou agrupamento do Cassandra vazia;
@@ -563,7 +567,12 @@ entity,phase,rows,median_seconds,rows_per_second,peak_memory_mb,free_memory_mb`)
 gráficos do relatório. Os metadados do JSON também registram o commit medido
 (`git_commit`, com o sufixo `-dirty` quando `src/` tem mudanças não commitadas).
 A coluna `phase` traz `infer` e `validate`, uma vez por importação, e `write`, uma
-vez por SGBD.
+vez por SGBD. Um `write` é a leitura de gravação inteira do seu SGBD, não só o tempo
+gasto no SGBD: vai da abertura da conexão ao seu fechamento e, portanto, inclui a
+criação do esquema, a nova leitura e conversão do CSV e, no Neo4j, a segunda passagem
+pelos relacionamentos. As suas `rows` são as linhas de nós mais as linhas de
+relacionamentos enviadas. As `rows` de `infer` e `validate` são as de todas as fontes
+lidas.
 
 ### Licença
 

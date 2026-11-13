@@ -3,9 +3,10 @@
 Reads the plan's sources in the plan's read blocks (``stream_source``), applies
 row-local filters/casting/each-splitting per block (``filter_engine``,
 ``casting``) to the entities bound in the plan (``import_plan``), and flushes
-batch-sized row groups to a ``DbmsSink`` per partition. Peak memory stays ~one
-read block plus the still-open partition buffers (each smaller than one block),
-regardless of total file size.
+batch-sized row groups to a ``DbmsSink`` per partition. What the engine holds is
+bounded by one read block plus the still-open partition buffers (each smaller than
+one block), whatever the size of the file; how large a block is, and so the peak of
+an import, is the choice of ``auto_size`` or of ``--chunk-size``.
 
 ``DbmsStream`` is one DBMS's share of that work. ``run_single_pass`` feeds every
 DBMS of a plan from one read of its sources, for sinks that only check;

@@ -2,6 +2,20 @@
 
 The runner owns one ``MetricsCollector`` per run and records the three reads of
 an import into it: ``infer`` and ``validate`` once each, ``write`` once per DBMS.
+
+What each phase covers:
+
+- ``infer``: ``plan_import``, the whole-file profile and the binding. Its rows are
+  those of every source read. The header and size probes that come before are not in it.
+- ``validate``: the validation read of every selected DBMS at once, with the same
+  rows as ``infer`` (every row read, also of an origin no entity uses).
+- ``write``: the whole write read of one DBMS, from opening its sink to closing it. It
+  includes creating the schema, reading and casting the CSV again and the relationship
+  pass, so it is a wall-clock time of the import into that DBMS, not the time spent in
+  the DBMS. Its rows are the node rows plus the relationship rows sent.
+
+These definitions are those of the published campaigns: changing one makes its
+numbers incomparable with theirs.
 """
 
 from __future__ import annotations

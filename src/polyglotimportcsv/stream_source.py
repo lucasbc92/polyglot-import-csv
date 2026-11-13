@@ -1,8 +1,11 @@
 """Chunked reading of declared data sources (per-entity CSVs; combined CSVs routed by an
 origin column).
 
-Each file is read in fixed-size chunks via pandas ``chunksize`` rather than whole, so peak
-memory stays ~constant in file size.
+Each file is read in chunks via pandas ``chunksize``, so the memory a read holds is
+bounded by the read block, not by the file. The block is chosen per run, and the default
+(``auto_size``) reads the largest source whole when that fits the memory budget; the
+peak of an import then follows the block (``auto_size``: about ``PEAK_BASE_MB`` +
+``PEAK_BASE_PER_DISK_MB`` × MiB of sources on disk + ``PEAK_MB_PER_CHUNK_MB`` × block).
 """
 
 from __future__ import annotations
