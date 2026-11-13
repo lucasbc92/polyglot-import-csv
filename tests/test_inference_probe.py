@@ -112,3 +112,42 @@ def test_is_boolean_series_does_not_consume_the_whole_column():
 
     assert is_boolean_series(values()) is False
     assert len(consumed) == 1
+
+
+def test_a_column_that_is_not_dates_stops_being_parsed_once_that_is_settled(
+    monkeypatch, small_probe_rounds
+):
+    """The verdict alone does not show the early stop: count what reaches the parser.
+
+    10,000 distinct non-dates are settled once 15% of them failed, in rounds of 50.
+    """
+    from polyglotimportcsv import csv_reader
+
+    parsed = []
+    real = csv_reader._parse_datetimes
+    monkeypatch.setattr(csv_reader, "_parse_datetimes",
+                        lambda s: parsed.append(len(s)) or real(s))
+    s = pd.Series([f"name-{i}" for i in range(10_000)], dtype=object)
+
+    assert _exceeds_datetime_share(s, _DATETIME_THRESHOLD) is False
+    assert max(parsed) == 50
+    assert sum(parsed) <= 1_550  # 15% of the values, to the end of that round
+
+
+def test_iso_dates_never_reach_the_per_value_parser(monkeypatch):
+    """pandas parses ISO-8601 in C; with no format it falls back to one dateutil call
+    per value, which was the largest cost of a large import."""
+    from polyglotimportcsv import csv_reader
+
+    formats = []
+    real = pd.to_datetime
+
+    def spy(*args, **kwargs):
+        formats.append(kwargs.get("format"))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(pd, "to_datetime", spy)
+    s = pd.Series([f"2023-11-{1 + i % 28:02d}T0{i % 10}:00:00Z" for i in range(200)])
+
+    assert csv_reader._parse_datetimes(s).notna().all()
+    assert formats == ["ISO8601"]

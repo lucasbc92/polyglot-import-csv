@@ -129,3 +129,21 @@ def test_row_view_surface_matches_series():
         assert view["b"] == series["b"]
         assert view.get("a") == series.get("a")
         assert view.get("missing") is None
+
+
+def test_iter_rows_never_builds_the_whole_frame_as_one_matrix(monkeypatch):
+    """Equal values do not show it: ``iterrows`` and ``DataFrame.values`` interleave
+    every column into one object matrix, the allocation that aborted a benchmark."""
+    import pandas as pd
+
+    df = pd.DataFrame({"a": ["1", "2"], "b": [1.5, 2.5], "c": ["y", "x"]})
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("the frame was materialized")
+
+    monkeypatch.setattr(pd.DataFrame, "iterrows", forbidden)
+    monkeypatch.setattr(pd.DataFrame, "values", property(forbidden))
+    monkeypatch.setattr(pd.DataFrame, "to_numpy", forbidden)
+
+    rows = [(row["a"], row["b"], row.get("c"), row.get("missing")) for row in iter_rows(df)]
+    assert rows == [("1", 1.5, "y", None), ("2", 2.5, "x", None)]

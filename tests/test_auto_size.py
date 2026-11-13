@@ -93,3 +93,30 @@ def test_auto_chunk_reads_the_combined_file(tmp_path):
         _config({"ecommerce": {"file": "join.csv"}}), tmp_path, ["postgres"], None, 890.0
     )
     assert f"({source_memory_mb('ecommerce', join):.1f} MB)" in c.reason
+
+
+def test_auto_chunk_follows_the_largest_source_of_the_selected_dbms(tmp_path, monkeypatch):
+    """The block reads the largest source whole, and the memory limit counts every
+    source the import reads: both over the selected DBMS only."""
+    from polyglotimportcsv import auto_size
+
+    small = _csv(tmp_path / "small.csv", 10)
+    big = _csv(tmp_path / "big.csv", 5000)
+    _csv(tmp_path / "other.csv", 20000)  # read by a DBMS that is not selected
+    config = {
+        "sources": {"small": "small.csv", "big": "big.csv", "other": "other.csv"},
+        "postgres": {"entities": {"a": {"source": "small"}, "b": {"source": "big"}}},
+        "redis": {"entities": {"c": {"source": "other"}}},
+    }
+    seen = {}
+
+    def choose(largest_source_mb, sources_disk_mb, free_mb):
+        seen.update(largest=largest_source_mb, disk=sources_disk_mb, free=free_mb)
+        return auto_size.AutoChunk(16, "spy")
+
+    monkeypatch.setattr(auto_size, "choose_chunk_mb", choose)
+    auto_chunk_mb(config, tmp_path, ["postgres"], None, 890.0)
+
+    assert seen["largest"] == source_memory_mb("big", big) > source_memory_mb("small", small)
+    assert seen["disk"] == (small.stat().st_size + big.stat().st_size) / 2**20
+    assert seen["free"] == 890.0
