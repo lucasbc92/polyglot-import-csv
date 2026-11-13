@@ -274,3 +274,20 @@ def test_a_block_of_the_whole_source_rounded_up_reads_it_in_one_chunk(tmp_path):
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     block = math.ceil(ss.source_memory_mb("items", path))
     assert ss.chunk_rows("items", path, block) >= 5000
+
+
+def test_a_row_with_too_many_fields_is_a_source_error(tmp_path):
+    """pandas' ParserError would reach the CLI as a traceback, possibly far into a read."""
+    (tmp_path / "bad.csv").write_text("a,b\n1,2\n3,4,5,6\n", encoding="utf-8")
+    with pytest.raises(SourceError, match=r"Source 'src': malformed CSV"):
+        list(ss.iter_entity_chunks({"src": "bad.csv"}, tmp_path, rows_per_chunk={"src": 10}))
+    with pytest.raises(SourceError, match=r"Source 'src': malformed CSV"):
+        ss.chunk_rows("src", tmp_path / "bad.csv", 8)
+
+
+def test_a_file_that_is_not_utf8_is_a_source_error(tmp_path):
+    (tmp_path / "latin.csv").write_bytes("a,b\n1,ação\n".encode("latin-1"))
+    with pytest.raises(SourceError, match=r"Source 'src': .*not valid UTF-8"):
+        list(ss.iter_entity_chunks({"src": "latin.csv"}, tmp_path, rows_per_chunk={"src": 10}))
+    with pytest.raises(SourceError, match=r"Source 'src': .*not valid UTF-8"):
+        ss.read_source_headers({"src": "latin.csv"}, tmp_path)

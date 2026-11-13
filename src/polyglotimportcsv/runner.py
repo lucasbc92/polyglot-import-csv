@@ -143,6 +143,7 @@ def run_check(
 ) -> DbmsCheckReport:
     """Check the DBMS the import would use and return the report (CLI --check-dbms)."""
     config_path = Path(config_path)
+    only = None if only is None else tuple(only)  # read more than once below
     banner("Polyglot Import CSV", subtitle="mode: check")
     step("Load config", str(config_path))
     config = load_config(config_path, dbms_config_path)
@@ -316,6 +317,7 @@ def run_import(
     implies ``False``. Returns the summary lines, one per partition.
     """
     config_path = Path(config_path)
+    only = None if only is None else tuple(only)  # read more than once below
     banner("Polyglot Import CSV", subtitle=f"mode: {'dry-run' if dry_run else 'import'}")
     collector = collector if collector is not None else metrics.MetricsCollector()
 

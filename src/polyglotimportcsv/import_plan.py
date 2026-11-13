@@ -38,15 +38,15 @@ class ImportPlan:
 
     def entity_batch(self, dbms: str, ename: str) -> int:
         """Rows per write batch of an entity: ``batch_size``, but never more than the
-        rows of one read block of any of its sources."""
+        rows of one read block of any of its sources that has rows. A source without
+        rows sizes its block at one row and sends nothing, so it does not count."""
         ecfg = self.config[dbms]["entities"][ename]
-        return min(
-            self.batch_size,
-            min(
-                self.rows_per_chunk[self.profiles[n].declared]
-                for n in entity_source_names(ename, ecfg)
-            ),
-        )
+        blocks = [
+            self.rows_per_chunk[self.profiles[n].declared]
+            for n in entity_source_names(ename, ecfg)
+            if self.profiles[n].rows
+        ]
+        return min([self.batch_size, *blocks])
 
 
 def declared_sources(declared: Dict[str, Any], names: Iterable[str]) -> Dict[str, Any]:

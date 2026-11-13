@@ -28,25 +28,45 @@ PROBE_ROWS = 1000
 _READ_OPTIONS = {"dtype": str, "keep_default_na": False, "encoding": "utf-8-sig"}
 
 
+def _unreadable(name: str, path: Path, exc: Exception) -> SourceError:
+    """The ``SourceError`` of a file pandas cannot parse; its own error would reach the
+    CLI as a traceback."""
+    if isinstance(exc, pd.errors.EmptyDataError):
+        return SourceError(f"Source '{name}': CSV file is empty (no header row): {path}")
+    if isinstance(exc, UnicodeDecodeError):
+        return SourceError(f"Source '{name}': CSV file is not valid UTF-8: {path} ({exc})")
+    return SourceError(f"Source '{name}': malformed CSV: {path} ({exc})")
+
+
+_READ_ERRORS = (pd.errors.EmptyDataError, pd.errors.ParserError, UnicodeDecodeError)
+
+
 def _read_csv(name: str, path: Path, **options: Any):
     """``pd.read_csv`` of source ``name`` with the read options of this module.
 
-    A file with no header row at all (zero bytes, or only blank lines) is a
-    ``SourceError``: pandas' ``EmptyDataError`` would reach the CLI as a traceback.
-    pandas raises it when the read starts, also for a chunked read.
+    A file pandas cannot read is a ``SourceError``: one with no header row at all (zero
+    bytes, or only blank lines), which pandas reports when the read starts, also for a
+    chunked read; a row with more fields than the header; bytes that are not UTF-8.
     """
     try:
         return pd.read_csv(path, **options, **_READ_OPTIONS)
-    except pd.errors.EmptyDataError as e:
-        raise SourceError(f"Source '{name}': CSV file is empty (no header row): {path}") from e
+    except _READ_ERRORS as e:
+        raise _unreadable(name, path, e) from e
 
 
-def _read_chunks(name: str, path: Path, chunksize: int, usecols: Optional[List[str]] = None):
-    """Same read options as csv_reader.read_csv, with chunksize for streaming.
+def _read_chunks(
+    name: str, path: Path, chunksize: int, usecols: Optional[List[str]] = None
+) -> Iterator[pd.DataFrame]:
+    """The file in chunks of ``chunksize`` rows, read with this module's options.
 
-    ``usecols`` limits the read to those columns, which skips building the others.
+    ``usecols`` limits the read to those columns, which skips building the others. A
+    malformed row is only met when its chunk is read, so the same ``SourceError`` as
+    ``_read_csv`` is raised from there.
     """
-    return _read_csv(name, path, chunksize=chunksize, usecols=usecols)
+    try:
+        yield from _read_csv(name, path, chunksize=chunksize, usecols=usecols)
+    except _READ_ERRORS as e:
+        raise _unreadable(name, path, e) from e
 
 
 def _read_header(name: str, path: Path) -> List[str]:
@@ -188,9 +208,7 @@ def iter_entity_chunks(
         if isinstance(decl, str):
             path = source_path(name, decl, base_dir, overrides)
             for chunk in _read_chunks(name, path, size, None if columns is None else list(columns)):
-                chunk = chunk.copy()
-                chunk[SOURCE_COLUMN] = name
-                yield name, chunk
+                yield name, chunk.assign(**{SOURCE_COLUMN: name})
             continue
 
         # Combined file: column 0 is the origin column (spec §2.2).
@@ -209,6 +227,4 @@ def iter_entity_chunks(
                 )
             data = chunk[data_columns]
             for value, group in data.groupby(origins, sort=True):
-                sub = group.copy()
-                sub[SOURCE_COLUMN] = str(value)
-                yield str(value), sub
+                yield str(value), group.assign(**{SOURCE_COLUMN: str(value)})

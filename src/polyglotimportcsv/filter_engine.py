@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import operator
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 
 from polyglotimportcsv.business_exception import BusinessException
+from polyglotimportcsv.casting import parse_datetimes
 
 #: Placeholder of an ``each`` filter's ``target_suffix`` template.
 VALUE_MARKER = "{value}"
@@ -18,13 +21,33 @@ def _slugify(value: str) -> str:
     return s or "value"
 
 
+#: Kinds whose filter values are compared as numbers or instants, not as text.
+_TYPED_KINDS = ("integer", "float", "datetime")
+
+_COMPARE = {
+    "==": operator.eq,
+    "!=": operator.ne,
+    ">": operator.gt,
+    "<": operator.lt,
+    ">=": operator.ge,
+    "<=": operator.le,
+}
+
+
 def _coerce_compare(series: pd.Series, value: Any, kind: str) -> Any:
+    """``(column, value)`` as what the column's kind compares: numbers, instants or text.
+
+    ``value`` may be a list (``in``/``not_in``). Instants are parsed with
+    ``casting.parse_datetimes``, so a filter keeps the rows the cast would convert.
+    """
     if kind in ("integer", "float"):
         return pd.to_numeric(series, errors="coerce"), pd.to_numeric(value, errors="coerce")
     if kind == "datetime":
-        return pd.to_datetime(series, errors="coerce", utc=True), pd.to_datetime(
-            value, errors="coerce", utc=True
+        return parse_datetimes(series), pd.to_datetime(
+            value, errors="coerce", utc=True, format="mixed"
         )
+    if isinstance(value, list):
+        return series, [str(v) for v in value]
     return series.astype(str), str(value)
 
 
@@ -51,53 +74,24 @@ def _apply_one(df: pd.DataFrame, flt: Dict[str, Any], column_kinds: Dict[str, st
     kind = column_kinds.get(col, "string")
     s = df[col].replace("", pd.NA)
 
-    if op == "==":
-        if kind in ("integer", "float"):
-            left, right = _coerce_compare(s, val, kind)
-            mask = left == right
-        elif kind == "datetime":
-            left, right = _coerce_compare(s, val, kind)
-            mask = left == right
-        else:
-            mask = s.astype(str) == str(val)
-        return df.loc[mask].copy()
+    if op in ("in", "not_in"):
+        if not isinstance(val, list):
+            raise BusinessException(f"Filter '{op}' for {col} requires a list value")
+    elif op not in _COMPARE:
+        raise BusinessException(f"Unsupported filter operator in apply_filters: {op}")
 
-    if op == "!=":
-        if kind in ("integer", "float"):
-            left, right = _coerce_compare(s, val, kind)
-            mask = left != right
-        elif kind == "datetime":
-            left, right = _coerce_compare(s, val, kind)
-            mask = left != right
-        else:
-            mask = s.astype(str) != str(val)
-        return df.loc[mask].copy()
-
-    if op in (">", "<", ">=", "<="):
-        left, right = _coerce_compare(s, val, kind)
-        if pd.isna(right):
-            raise BusinessException(f"Filter {op} value is not comparable for column {col}")
-        if op == ">":
-            mask = left > right
-        elif op == "<":
-            mask = left < right
-        elif op == ">=":
-            mask = left >= right
-        else:
-            mask = left <= right
-        return df.loc[mask].copy()
-
+    left, right = _coerce_compare(s, val, kind)
+    # A value that is not of the column's kind compares as NaN: it would silently keep
+    # no row, or every row.
+    if kind in _TYPED_KINDS and np.any(pd.isna(right)):
+        raise BusinessException(f"Filter {op} value is not comparable for column {col}")
     if op == "in":
-        if not isinstance(val, list):
-            raise BusinessException(f"Filter 'in' for {col} requires a list value")
-        return df.loc[s.isin(val)].copy()
-
-    if op == "not_in":
-        if not isinstance(val, list):
-            raise BusinessException(f"Filter 'not_in' for {col} requires a list value")
-        return df.loc[~s.isin(val)].copy()
-
-    raise BusinessException(f"Unsupported filter operator in apply_filters: {op}")
+        mask = left.isin(right)
+    elif op == "not_in":
+        mask = ~left.isin(right)
+    else:
+        mask = _COMPARE[op](left, right)
+    return df.loc[mask]
 
 
 def expand_each(
@@ -120,7 +114,7 @@ def expand_each(
         raise BusinessException(f"each filter references unknown column: {col}")
     parts: List[Tuple[str, pd.DataFrame]] = []
     for val, group in df.groupby(df[col].replace("", pd.NA)):
-        parts.append((_partition_name(base_entity_name, flt, _slugify(val)), group.copy()))
+        parts.append((_partition_name(base_entity_name, flt, _slugify(val)), group))
     return parts
 
 

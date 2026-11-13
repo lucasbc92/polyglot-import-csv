@@ -210,7 +210,8 @@ def test_a_source_without_rows_still_binds(tmp_path):
     plan = plan_import(cfg, tmp_path, dbms_names=["postgres"])
     assert plan.profiles["s"].rows == 0
     assert set(plan.bindings["postgres"]["t"].cfg["columns"]) == {"a", "b"}
-    assert plan.entity_batch("postgres", "t") == min(DEFAULT_BATCH_LINES, plan.rows_per_chunk["s"])
+    assert plan.rows_per_chunk["s"] == 1
+    assert plan.entity_batch("postgres", "t") == DEFAULT_BATCH_LINES  # no rows: no cap
 
 
 #: 2000 distinct ISO datetimes shared out between two sources: the first is all dates, the
@@ -258,3 +259,16 @@ def test_no_file_is_reread_when_the_union_columns_are_decided(tmp_path, small_pr
     plan = plan_import(cfg, tmp_path, dbms_names=["postgres"])
     assert reads == [("a.csv", None), ("b.csv", None)]
     assert plan.bindings["postgres"]["u"].kinds["d"] == "datetime"
+
+
+def test_a_union_source_without_rows_does_not_shrink_the_batch(tmp_path):
+    """A file without rows sizes its block at one row, which would write the union row by row."""
+    _write_csv(tmp_path / "full.csv", ["id"], [(i,) for i in range(50)])
+    _write_csv(tmp_path / "empty.csv", ["id"], [])
+    cfg = {
+        "sources": {"full": "full.csv", "empty": "empty.csv"},
+        "postgres": _entities(u={"source": ["full", "empty"]}, e={"source": "empty"}),
+    }
+    plan = plan_import(cfg, tmp_path, dbms_names=["postgres"], batch_size=1024)
+    assert plan.entity_batch("postgres", "u") == 1024
+    assert plan.entity_batch("postgres", "e") == 1024

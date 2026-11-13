@@ -219,9 +219,7 @@ class ColumnStats:
         need = _DATETIME_THRESHOLD * self.non_empty
         if self.dates_min > need:
             return "datetime"
-        if self.dates_max <= need:
-            return "string"
-        return "string"  # undecided, see above
+        return "string"  # not dates, or undecided (see above)
 
 
 def infer_column_kinds(df: pd.DataFrame) -> Dict[str, str]:
