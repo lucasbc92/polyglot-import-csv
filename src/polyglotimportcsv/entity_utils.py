@@ -27,11 +27,6 @@ def target_field_name(field_key: str, spec: Dict[str, Any]) -> str:
     return spec.get("schema_column") or field_key
 
 
-def output_column_name(source_col: str, spec: Dict[str, Any]) -> str:
-    """Backward-compatible alias for target_field_name (first arg is the field key)."""
-    return target_field_name(source_col, spec)
-
-
 def resolve_csv_column(
     field_key: str, spec: Dict[str, Any], csv_columns: Sequence[str]
 ) -> str:

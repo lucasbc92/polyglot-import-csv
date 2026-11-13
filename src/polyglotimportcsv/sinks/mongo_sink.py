@@ -1,6 +1,6 @@
 """MongoSink: DbmsSink adapter for MongoDB.
 
-Shapes each row into a document with ``mongo_document_from_row``.
+Shapes each batch into documents with ``mongo_documents``.
 """
 
 from __future__ import annotations
@@ -11,8 +11,7 @@ import pandas as pd
 from pymongo import MongoClient
 
 from polyglotimportcsv.business_exception import ImportExecutionError
-from polyglotimportcsv.row_shaping import mongo_document_from_row
-from polyglotimportcsv.row_view import iter_rows
+from polyglotimportcsv.row_shaping import mongo_documents
 from polyglotimportcsv.stream_binding import EntityBinding
 
 
@@ -43,7 +42,7 @@ class MongoSink:
         """No-op: collections are created implicitly on first insert."""
 
     def write_batch(self, partition_name: str, binding: EntityBinding, batch: pd.DataFrame) -> int:
-        docs = [mongo_document_from_row(row, binding.cfg) for row in iter_rows(batch)]
+        docs = mongo_documents(batch, binding.cfg)
         if not docs:
             return 0
         self.db[partition_name].insert_many(docs)

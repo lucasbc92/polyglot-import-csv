@@ -6,8 +6,7 @@ from typing import Any, Dict, List, Tuple
 
 import redis
 
-from polyglotimportcsv.row_shaping import redis_payload_from_row
-from polyglotimportcsv.row_view import iter_rows
+from polyglotimportcsv.row_shaping import redis_payloads
 
 
 def _default_redis_client(conn: Dict[str, Any]):
@@ -21,13 +20,7 @@ def _default_redis_client(conn: Dict[str, Any]):
 
 
 def _kv_pairs(part_df, entity_cfg) -> List[Tuple[str, str]]:
-    pairs: List[Tuple[str, str]] = []
-    for row in iter_rows(part_df):
-        try:
-            pairs.append(redis_payload_from_row(row, entity_cfg))
-        except ValueError:
-            continue
-    return pairs
+    return redis_payloads(part_df, entity_cfg)
 
 
 def _write_batched(client, pairs: List[Tuple[str, str]], advance, batch: int = 1000) -> int:

@@ -130,7 +130,7 @@ def test_write_batch_inserts_deduped_rows_with_on_conflict():
     written = sink.write_batch("inventory", binding, _stock_sample())
 
     # product_id "1" is duplicated in the sample; flatten_entity_dataframe
-    # dedupes on the pk (keep last), so only 2 rows should be inserted.
+    # dedupes on the pk (keep first), so only 2 rows should be inserted.
     assert written == 2
     assert len(conn.cur.execute_values_calls) == 1
     sql_obj, tuples, page_size = conn.cur.execute_values_calls[0]
