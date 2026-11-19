@@ -68,6 +68,64 @@ def test_import_schema_accepts_nested_columns_mongodb():
     validate_import_config_schema(data)
 
 
+def _postgres_column(spec):
+    return {
+        "sources": {"s": "s.csv"},
+        "postgres": {"entities": {"t": {"source": "s", "columns": {"id": spec}}}},
+    }
+
+
+def test_schema_error_points_at_the_wrong_field_of_a_column():
+    # A column is either a leaf spec or a MongoDB subdocument (oneOf). A bad
+    # is_key must be reported on is_key, not on a sibling the subdocument
+    # reading happens to reject too.
+    data = _postgres_column({"is_key": "sim", "db_type": "BIGINT"})
+    with pytest.raises(ConfigError) as caught:
+        validate_import_config_schema(data)
+    message = str(caught.value)
+    assert "$.postgres.entities.t.columns.id.is_key" in message
+    assert "'sim' is not of type 'boolean'" in message
+
+
+def test_schema_error_points_at_an_unknown_column_key():
+    data = _postgres_column({"is_kye": True, "db_type": "BIGINT"})
+    with pytest.raises(ConfigError) as caught:
+        validate_import_config_schema(data)
+    message = str(caught.value)
+    assert "$.postgres.entities.t.columns.id" in message
+    assert "'is_kye' was unexpected" in message
+
+
+def test_schema_error_inside_a_mongodb_subdocument_keeps_its_path():
+    data = {
+        "sources": {"s": "s.csv"},
+        "mongodb": {
+            "entities": {
+                "doc": {
+                    "source": "s",
+                    "columns": {"sub": {"b": {"is_key": "sim"}, "c": {}}},
+                }
+            }
+        },
+    }
+    with pytest.raises(ConfigError) as caught:
+        validate_import_config_schema(data)
+    message = str(caught.value)
+    assert "$.mongodb.entities.doc.columns.sub.b.is_key" in message
+    assert "'sim' is not of type 'boolean'" in message
+
+
+def test_schema_error_keeps_the_oneof_message_when_no_form_stands_out():
+    # A source is a path or an object; a number is neither, and saying only
+    # "not of type 'string'" would hide the object form (Figura 15 do relatório).
+    data = {"sources": {"stock": 12345}}
+    with pytest.raises(ConfigError) as caught:
+        validate_import_config_schema(data)
+    message = str(caught.value)
+    assert "$.sources.stock" in message
+    assert "12345 is not valid under any of the given schemas" in message
+
+
 def test_dbms_schema_rejects_entities_block():
     # Mapping (entities) belongs in the import config, not the DBMS config.
     data = {

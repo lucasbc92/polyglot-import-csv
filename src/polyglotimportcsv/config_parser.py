@@ -20,7 +20,7 @@ import copy
 import json
 from importlib import resources
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import jsonschema
 
@@ -75,20 +75,60 @@ def load_import_config(path: Union[str, Path]) -> Dict[str, Any]:
     return data
 
 
+_ALTERNATIVES = ("oneOf", "anyOf")
+
+
+def _branch_rank(errors: List[jsonschema.ValidationError]) -> Tuple[int, int, int]:
+    """Order the failed branches of a oneOf/anyOf, most likely intended first.
+
+    The branch the author meant is the one with the fewest failures; on a tie,
+    the one whose failures go deepest into the instance, then the one with
+    fewer failures that are themselves just another oneOf/anyOf.
+    """
+    deepest = max(len(error.path) for error in errors)
+    vague = sum(error.validator in _ALTERNATIVES for error in errors)
+    return (len(errors), -deepest, vague)
+
+
+def _most_useful_error(
+    errors: Iterable[jsonschema.ValidationError],
+) -> Optional[jsonschema.ValidationError]:
+    """The error to report, descending oneOf/anyOf into the intended branch.
+
+    ``jsonschema.best_match`` descends a failed oneOf into its deepest error,
+    whichever branch it came from. A column is either a leaf spec or a MongoDB
+    subdocument, so a leaf with a bad ``is_key`` was reported on a sibling
+    (``db_type``) that only the subdocument reading rejects.
+
+    When no branch stands out (e.g. a source that is neither a path nor an
+    object), the oneOf error itself is kept: it says that every form failed.
+    """
+    best = max(errors, key=jsonschema.exceptions.relevance, default=None)
+    while best is not None and best.validator in _ALTERNATIVES and best.context:
+        branches: Dict[Any, List[jsonschema.ValidationError]] = {}
+        for error in best.context:
+            branches.setdefault(error.relative_schema_path[0], []).append(error)
+        ranked = sorted(branches.values(), key=_branch_rank)
+        if len(ranked) > 1 and _branch_rank(ranked[0]) == _branch_rank(ranked[1]):
+            return best
+        best = max(ranked[0], key=jsonschema.exceptions.relevance)
+    return best
+
+
+def _validate(data: Dict[str, Any], schema_name: str, label: str) -> None:
+    schema = _load_schema(schema_name)
+    validator = jsonschema.validators.validator_for(schema)(schema)
+    error = _most_useful_error(validator.iter_errors(data))
+    if error is not None:
+        raise ConfigError(f"Invalid {label} JSON at {error.json_path}: {error.message}")
+
+
 def validate_dbms_config(data: Dict[str, Any]) -> None:
-    schema = _load_schema("dbms_config.schema.json")
-    try:
-        jsonschema.validate(instance=data, schema=schema)
-    except jsonschema.ValidationError as e:
-        raise ConfigError(f"Invalid DBMS configuration JSON at {e.json_path}: {e.message}") from e
+    _validate(data, "dbms_config.schema.json", "DBMS configuration")
 
 
 def validate_import_config_schema(data: Dict[str, Any]) -> None:
-    schema = _load_schema("import_config.schema.json")
-    try:
-        jsonschema.validate(instance=data, schema=schema)
-    except jsonschema.ValidationError as e:
-        raise ConfigError(f"Invalid import configuration JSON at {e.json_path}: {e.message}") from e
+    _validate(data, "import_config.schema.json", "import configuration")
 
 
 def merge_configs(
