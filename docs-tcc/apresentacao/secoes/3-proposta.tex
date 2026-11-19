@@ -7,7 +7,7 @@
   visivel em/.style={alt={#1{}{invisivel}}},
   alt/.code args={<#1>#2#3}{\alt<#1>{\pgfkeysalso{#2}}{\pgfkeysalso{#3}}}}
 
-% Slide 6: visão geral (relatório §4.1, Fig. 7)
+% Slide 7: visão geral (relatório §4.1, Fig. 7)
 % A Fig. 7 (images/figure7-overview.png, 1376 x 1380 px) rende texto de ~3,6 pt na altura
 % útil do slide; o desenho abaixo repete as suas caixas e setas em TikZ, com texto legível.
 \begin{frame}{Visão geral}
@@ -28,8 +28,9 @@
       {\textbf{arquivo de conexão}\\[-1pt]{\scriptsize\texttt{dbms\_config.json}}\\[-1pt]
        {\scriptsize SGBDs e como alcançá-los}};
     \node[caixa, fill=ufscfundo, text width=40mm] (csv) at (20, -14)
-      {\textbf{arquivos de dados}\\[-1pt]{\scriptsize multifonte: um CSV por evento}\\[-1pt]
-       {\scriptsize combinado: um só CSV}};
+      {\textbf{arquivos de dados}\\[-1pt]{\scriptsize multifonte: um CSV por conjunto de
+       dados}\\[-1pt]
+       {\scriptsize combinado: um CSV unificado}};
     % processamento
     \begin{scope}[visivel em=<2->]
       \node[caixa, fill=ufscazul, draw=ufscazul, text=white, text width=38mm,
@@ -55,9 +56,9 @@
    destino.\par}
 \end{frame}
 
-% Slide 7: os dois arquivos de configuração (relatório §4.2.1, §4.2.3; trecho de
+% Slide 8: os dois arquivos de configuração (relatório §4.2.1, §4.2.3; trecho de
 % data/ecommerce/import_config.json). Os dois modos de entrada (§4.2.1.1) estão na caixa
-% "arquivos de dados" do slide 6.
+% "arquivos de dados" do slide 7.
 % O trecho mantém as chaves e o aninhamento do arquivo real; "..." marca o que foi omitido
 % (entidades categories e products antes de inventory, relationships, os outros SGBDs).
 \begin{frame}[fragile]{Configuração em dois arquivos JSON}
@@ -98,14 +99,65 @@
   \end{minipage}
 \end{frame}
 
-% Slide 8: validação prévia (relatório §4.2.4, Figura 10)
+% Slide 9: os JSON Schemas como contribuição (relatório §4.2, Apêndice dos esquemas, §3.3 e
+% a lacuna do Cap. 3). Fiel a src/polyglotimportcsv/schemas/: rascunho 2020-12, um bloco
+% por SGBD ($defs postgresMapping ... neo4jMapping), additionalProperties false na raiz e
+% operadores de filtro enumerados. A mensagem é a saída real da CLI (3.2.0) com o bloco
+% "postgres" renomeado para "postgress" no import_config.json do cenário; a etapa 1 roda em
+% load_config, antes de abrir qualquer CSV ou conectar a um SGBD.
+\begin{frame}[fragile]{Contribuição: mapeamento declarativo e validado}
+  \begingroup\small O mapeamento é \destaque{declarado} em JSON, sem programar, e cada
+  arquivo é conferido pelo seu \destaque{JSON Schema}.\par
+  \endgroup
+  \smallskip
+  \begingroup\footnotesize\tcbset{equal height group=esquema, halign=flush left}
+  \begin{minipage}[t]{0.47\textwidth}\vspace{0pt}
+    \begin{painel}{O que os dois esquemas garantem}{}
+      \setlength{\leftmargini}{1.1em}
+      \begin{itemize}
+        \setlength{\itemsep}{1pt}
+        \item Um \destaque{bloco por SGBD}: tabelas, documentos, partições, chave-valor,
+              nós e arestas.
+        \item \destaque{Nada fora do esquema} passa: nome, tipo ou operador errado.
+        \item O erro aponta o \destaque{caminho do campo}.
+        \item Os mesmos esquemas na \destaque{CLI} e na \destaque{GUI}.
+      \end{itemize}
+    \end{painel}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.51\textwidth}\vspace{0pt}
+    \begin{painel}{Exemplo: um erro de digitação}{}
+\begin{lstlisting}[style=jsonslide, aboveskip=0pt, belowskip=2pt]
+"postgress": { "entities": { ... } }
+\end{lstlisting}
+\begin{lstlisting}[style=bashslide, aboveskip=0pt, belowskip=0pt, basicstyle=\ttfamily\scriptsize\color{red!55!black}]
+ERROR Invalid import configuration JSON at $:
+      Additional properties are not allowed
+      ('postgress' was unexpected)
+\end{lstlisting}
+      \smallskip
+      Erro \destaque{antes de abrir qualquer CSV} ou de conectar a um SGBD:
+      nada é gravado.
+    \end{painel}
+  \end{minipage}\par
+  \endgroup
+  \vfill
+  \begin{tcolorbox}[colback=ufscfundo, colframe=ufscazul, sharp corners, boxrule=0pt,
+      leftrule=1mm, left=2mm, right=2mm, top=1mm, bottom=1mm, boxsep=0pt]
+    \footnotesize
+    \destaque{Diferencial:} nenhum dos trabalhos relacionados oferece um mapeamento
+    declarativo validado.
+  \end{tcolorbox}
+\end{frame}
+
+% Slide 10: validação prévia (relatório §4.2.4, Figura 10)
 % A Figura 10 (images/figure10-config-pipeline.png) é um retrato alto; o desenho foi refeito
 % na horizontal, com as três etapas de validação reveladas uma a uma.
 % Fiel ao código da 3.0.0: as etapas 1 e 2 rodam em runner.py (load_config) antes de abrir
 % qualquer CSV; a etapa 3 confere primeiro os cabeçalhos (validation.validate_headers) e depois
 % os dados, na leitura de validação (stream_runner: a mesma passagem da gravação, com sinks que
 % só conferem). Qualquer falha termina com código 1 antes da primeira gravação. A leitura de
-% inferência e a verificação dos SGBDs ficam entre as duas partes da etapa 3 (slide 10).
+% inferência e a verificação dos SGBDs ficam entre as duas partes da etapa 3 (slide 11), por
+% isso elas aparecem como 3.1 (cabeçalhos, passo 2 do fluxo) e 3.2 (dados, passo 5).
 \begin{frame}{Validação prévia em três etapas}
   A validação prévia tem \destaque{três etapas}, todas antes de gravar:\par
   \medskip
@@ -129,7 +181,7 @@
       \draw[seta] (con.east) -- (c1.west);
       \node[caixa, draw=red!55!black, fill=red!6, text width=92mm, minimum height=7mm,
             anchor=north] (erro) at (78, -13.5)
-        {\textbf{Falha em qualquer etapa:} a execução termina com código~1 e \textbf{nada
+        {\textbf{Falha em qualquer etapa:} a execução termina com erro e \textbf{nada
          é gravado} nos SGBDs.};
       \draw[falha] (c1.south) -- (c1.south |- erro.north);
     \end{scope}
@@ -146,8 +198,8 @@
       \node[entrada, minimum height=7mm, text width=24mm] (csv) at (99, 17) {CSVs (fontes)};
       \node[etapa, text width=46mm] (c3) at (99, 0)
         {\textbf{3. Mapeamento contra os CSVs}\\[2pt]
-         \textbf{cabeçalhos:} colunas, filtros e relacionamentos\\[2pt]
-         \textbf{dados:} cada linha pelo código da gravação, sem gravar};
+         \textbf{3.1 cabeçalhos:} colunas, filtros e relacionamentos\\[2pt]
+         \textbf{3.2 dados:} todas as linhas, preparadas como na gravação, sem gravar};
       \draw[seta] (c2.east) -- (c3.west);
       \draw[seta] (csv.south) -- (c3.north);
       \draw[falha] (c3.south) -- (c3.south |- erro.north);
@@ -164,7 +216,79 @@
    (Figura~10 do relatório).\par}
 \end{frame}
 
-% Slide 9: o mesmo cenário em cinco modelos de dados (relatório §4.3.3)
+% Slide 11: fluxo de execução (relatório §4.3, Figura 11; fonte do desenho:
+% images/figure11-import-algorithm.mmd). A Figura 11 é um retrato alto; o fluxo foi
+% redesenhado na horizontal. A faixa de cima reúne os passos 1 a 3, que não leem as linhas
+% de dados; as três caixas de baixo são as três leituras: inferência (passo 4), validação
+% (passo 5) e gravação (passos 6 a 9, repetidos para cada SGBD destino). Conferido no código
+% da 3.0.0: runner.py (load_config, validate_headers, _require_dbms) e stream_runner.py (as
+% três passagens; o --dry-run para depois da validação, com as contagens).
+\begin{frame}{Fluxo de execução}
+  A importação valida as configurações e os cabeçalhos e lê os dados \destaque{três
+  vezes}:\par
+  \smallskip
+  \centering
+  \hyphenpenalty=10000 \exhyphenpenalty=10000
+  \begin{tikzpicture}[x=1mm, y=1mm, font=\scriptsize,
+      caixa/.style={draw=ufscborda, fill=white, rounded corners=0.6mm, inner sep=2pt,
+                    align=center, text=ufsctexto},
+      passo/.style={caixa, fill=ufscfundo, text width=36mm, minimum height=9mm},
+      leitura/.style={caixa, text width=40mm, minimum height=23mm},
+      seta/.style={->, >=stealth, draw=ufscazul!70, thick},
+      falha/.style={->, >=stealth, draw=red!55!black, thick}]
+    % passos 1 a 3: antes de ler os dados
+    \node[passo] (p1) at (19, 17) {\textbf{1. Configurações}\\ etapas 1 e 2};
+    \node[passo] (p2) at (58, 17) {\textbf{2. Cabeçalhos}\\ etapa 3.1 de validação};
+    \node[passo] (p3) at (97, 17)
+      {\textbf{3. Verificação dos SGBDs}\\ {\color{black!60}não no \texttt{-{}-dry-run}}};
+    \draw[seta] (p1.east) -- (p2.west);
+    \draw[seta] (p2.east) -- (p3.west);
+    \node[caixa, draw=red!55!black, fill=red!6, text width=24mm, minimum height=9mm]
+      (fora) at (132, 17)
+      {\textbf{fora do ar:} termina e mostra como iniciá-lo};
+    \draw[falha] (p3.east) -- (fora.west);
+    % passo 4: leitura de inferência
+    \begin{scope}[visivel em=<2->]
+      \node[leitura] (l1) at (22, -2)
+        {\footnotesize\textbf{4. Leitura de inferência}\\[2pt]
+         percorre cada CSV inteiro, em blocos, e fixa o tipo de cada coluna};
+      \draw[seta] (p3.south) |- ++(0,-1.5) -| (l1.north);
+    \end{scope}
+    % passo 5: leitura de validação
+    \begin{scope}[visivel em=<3->]
+      \node[leitura, text width=50mm] (l2) at (71, -2)
+        {{\footnotesize\textbf{5. Leitura de validação}}\\
+         etapa 3.2 de validação\\
+         lê todas as linhas e as prepara como na gravação, sem gravar\\
+         aponta: valor inválido para o tipo ou para o SGBD, chave vazia, referência sem
+         destino};
+      \draw[seta] (l1.east) -- (l2.west);
+      \node[caixa, draw=red!55!black, fill=red!6, text width=44mm, minimum height=8mm]
+        (erro) at (71, -22)
+        {\textbf{erro:} \textbf{nada é gravado}\\
+         {\color{black!60}\texttt{-{}-dry-run}: para aqui, com as contagens}};
+      \draw[falha] (l2.south) -- (erro.north);
+    \end{scope}
+    % passos 6 a 9: leitura de gravação e saída
+    \begin{scope}[visivel em=<4->]
+      \node[leitura, fill=ufscazul, draw=ufscazul, text=white] (l3) at (120, -2)
+        {\footnotesize\textbf{6--9. Leitura de gravação}\\[2pt]
+         um SGBD destino por vez: prepara, relê as fontes dele em blocos e grava em
+         lotes};
+      \draw[seta] (l2.east) -- (l3.west);
+      \node[caixa, fill=ufscfundo, text width=40mm, minimum height=8mm] (saida)
+        at (120, -22)
+        {\textbf{Saída:} contagens por entidade e métricas por fase};
+      \draw[seta] (l3.south) -- (saida.north);
+    \end{scope}
+  \end{tikzpicture}\par
+  \medskip
+  {\footnotesize Passos do fluxo (Figura~11 do relatório); os passos 6 a 9 se repetem para
+   cada SGBD destino.\par}
+\end{frame}
+
+% Slide 12: o resultado, o mesmo cenário em cinco modelos de dados (relatório §4.3.3).
+% Vem depois do fluxo de execução (slide 11), como o resultado dele.
 % Valores e nomes de campo copiados de tab:pg-inventory, lst:mongo-doc,
 % tab:cassandra-particao, lst:redis-pares e lst:neo4j-grafo, que a v2.4 leu de uma
 % importação real: números gravados como números (tipos da leitura de inferência) e o preço
@@ -177,13 +301,13 @@
 \newcommand{\pent}[1]{\textbf{#1}\par}
 \newcommand{\pind}{\hspace*{0.4em}}
 \newcommand{\prot}[1]{{\color{black!60}#1}}
-% Corpo em \fontsize{8}{9}: mesmo corpo do \scriptsize, entrelinha menor (como no slide 7).
+% Corpo em \fontsize{8}{9}: mesmo corpo do \scriptsize, entrelinha menor (como no slide 8).
 \newcommand{\modelo}[4]{% #1 passo, #2 SGBD, #3 modelo de dados, #4 corpo
   \onslide<#1->{\begin{minipage}[t]{0.194\textwidth}
     \footnotesize
     \begin{painel}{#2}{#3}\fontsize{8}{9}\selectfont\estreita\shorthandoff{"}#4\end{painel}
   \end{minipage}}}
-\begin{frame}{O mesmo cenário em cinco modelos de dados}
+\begin{frame}{Resultado: um cenário em cinco modelos de dados}
   \begin{tcolorbox}[colback=ufscfundo, colframe=ufscazul, sharp corners, boxrule=0pt,
       leftrule=1mm, left=2mm, right=2mm, top=1mm, bottom=1mm, boxsep=0pt]
     \footnotesize
@@ -261,82 +385,11 @@
   \endgroup
 \end{frame}
 
-% Slide 10: fluxo de execução (relatório §4.3, Figura 11; fonte do desenho:
-% images/figure11-import-algorithm.mmd). A Figura 11 é um retrato alto; o fluxo foi
-% redesenhado na horizontal. A faixa de cima reúne os passos 1 a 3, que não leem as linhas
-% de dados; as três caixas de baixo são as três leituras: inferência (passo 4), validação
-% (passo 5) e gravação (passos 6 a 9, repetidos para cada SGBD destino). Conferido no código
-% da 3.0.0: runner.py (load_config, validate_headers, _require_dbms) e stream_runner.py (as
-% três passagens; o --dry-run para depois da validação, com as contagens).
-\begin{frame}{Fluxo de execução}
-  A importação valida as configurações e os cabeçalhos e lê os dados \destaque{três
-  vezes}:\par
-  \smallskip
-  \centering
-  \hyphenpenalty=10000 \exhyphenpenalty=10000
-  \begin{tikzpicture}[x=1mm, y=1mm, font=\scriptsize,
-      caixa/.style={draw=ufscborda, fill=white, rounded corners=0.6mm, inner sep=2pt,
-                    align=center, text=ufsctexto},
-      passo/.style={caixa, fill=ufscfundo, text width=36mm, minimum height=9mm},
-      leitura/.style={caixa, text width=40mm, minimum height=23mm},
-      seta/.style={->, >=stealth, draw=ufscazul!70, thick},
-      falha/.style={->, >=stealth, draw=red!55!black, thick}]
-    % passos 1 a 3: antes de ler os dados
-    \node[passo] (p1) at (19, 17) {\textbf{1. Configurações}\\ etapas 1 e 2};
-    \node[passo] (p2) at (58, 17) {\textbf{2. Cabeçalhos}\\ etapa 3};
-    \node[passo] (p3) at (97, 17)
-      {\textbf{3. Verificação dos SGBDs}\\ {\color{black!60}não no \texttt{-{}-dry-run}}};
-    \draw[seta] (p1.east) -- (p2.west);
-    \draw[seta] (p2.east) -- (p3.west);
-    \node[caixa, draw=red!55!black, fill=red!6, text width=24mm, minimum height=9mm]
-      (fora) at (132, 17)
-      {\textbf{fora do ar:} termina e mostra como iniciá-lo};
-    \draw[falha] (p3.east) -- (fora.west);
-    % passo 4: leitura de inferência
-    \begin{scope}[visivel em=<2->]
-      \node[leitura] (l1) at (22, -2)
-        {\footnotesize\textbf{4. Leitura de inferência}\\[2pt]
-         percorre cada CSV inteiro, em blocos, e fixa o tipo de cada coluna};
-      \draw[seta] (p3.south) |- ++(0,-1.5) -| (l1.north);
-    \end{scope}
-    % passo 5: leitura de validação
-    \begin{scope}[visivel em=<3->]
-      \node[leitura, text width=46mm] (l2) at (71, -2)
-        {\footnotesize\textbf{5. Leitura de validação}\\[2pt]
-         cada linha pelo código da gravação, sem gravar\\[2pt]
-         {\scriptsize aponta: valor que não converte ou que o \texttt{db\_type} recusa,
-          chave vazia, referência pendente}};
-      \draw[seta] (l1.east) -- (l2.west);
-      \node[caixa, draw=red!55!black, fill=red!6, text width=44mm, minimum height=8mm]
-        (erro) at (71, -22)
-        {\textbf{erro:} código 1, \textbf{nada é gravado}\\
-         {\color{black!60}\texttt{-{}-dry-run}: para aqui, com as contagens}};
-      \draw[falha] (l2.south) -- (erro.north);
-    \end{scope}
-    % passos 6 a 9: leitura de gravação e saída
-    \begin{scope}[visivel em=<4->]
-      \node[leitura, fill=ufscazul, draw=ufscazul, text=white] (l3) at (120, -2)
-        {\footnotesize\textbf{6--9. Leitura de gravação}\\[2pt]
-         um SGBD destino por vez: prepara, relê as fontes dele em blocos e grava em
-         lotes};
-      \draw[seta] (l2.east) -- (l3.west);
-      \node[caixa, fill=ufscfundo, text width=40mm, minimum height=8mm] (saida)
-        at (120, -22)
-        {\textbf{Saída:} contagens por entidade e métricas por fase};
-      \draw[seta] (l3.south) -- (saida.north);
-    \end{scope}
-  \end{tikzpicture}\par
-  \medskip
-  {\footnotesize Passos do fluxo (Figura~11 do relatório); os passos 6 a 9 se repetem para
-   cada SGBD destino.\par}
-\end{frame}
-
-% Slide 11: estratégia de escrita, modelo de execução e escolha automática (relatório §4.5.1
-% e §4.5.2). Os números das duas decisões são os do §4.5.1, medidos com uma versão anterior
-% da ferramenta (sem a coleção orders do MongoDB): servem só de justificativa, e o Cap. 5
-% mede apenas a versão final. Escolha automática: §4.5.2 (lote de 2.048 linhas; bloco que lê
-% a maior fonte inteira, com o pico previsto limitado a 25% da memória livre; de 16 a
-% 256 MB; --chunk-size e --batch-size fixam os dois à mão, o que o slide não diz).
+% Slide 13: estratégia de escrita e modelo de execução (relatório §4.5.1). Os números das
+% duas decisões são os do §4.5.1, medidos com uma versão anterior da ferramenta (sem a
+% coleção orders do MongoDB): servem só de justificativa, e o Cap. 5 mede apenas a versão
+% final. A escolha automática do bloco e do lote (§4.5.2) saiu do slide a pedido do
+% orientador; ela aparece no slide 19 (QP5) e pode ser explicada na arguição.
 \newcommand{\decisao}[4]{% #1 antes, #2 depois, #3 subtítulo do depois, #4 ganho medido
   \begin{painel}{#2}{#3}
     {\color{black!60}Antes: #1}\par\smallskip
@@ -360,39 +413,32 @@
        10\% a mais de tempo.}
   \end{minipage}\par
   \endgroup
-  \onslide<2->{%
-  \smallskip
-  \begin{tcolorbox}[colback=ufscfundo, colframe=ufscazul, sharp corners, boxrule=0pt,
-      leftrule=1mm, left=2mm, right=2mm, top=1mm, bottom=1mm, boxsep=0pt]
-    \footnotesize
-    \destaque{Bloco escolhido a cada execução:} o que lê a maior fonte inteira, entre 16 e
-    256~MB, desde que o pico previsto caiba em 25\% da memória livre; senão, o maior que
-    cabe.\enspace \destaque{Lote:} \num{2048} linhas.
-  \end{tcolorbox}}
   \vfill
   {\scriptsize\color{black!60}Fonte: §4.5 do relatório; ganhos medidos com uma versão
    anterior da ferramenta.\par}
 \end{frame}
 
-% Slide 12: interface gráfica (relatório §4.6; figure12-gui-ocioso, figure14-gui-sucesso e
-% figure16-gui-verificacao, capturas da 3.2.0, em inglês e sem os controles de bloco e lote)
-% As capturas têm 1240 x 1020 px. Inteiras, o texto delas sairia com ~2 pt no slide; por
-% isso cada passo mostra recortes (coordenadas em px da captura original), ampliados até o
-% texto ficar legível. Legendas: as do relatório, encurtadas.
+% Slide 14: interface gráfica (relatório §4.6). Passo 1: gui-combinado.png, captura da 3.2.0
+% feita por scripts/capture_gui_slide.py (modo combinado, todos os campos preenchidos, com
+% --dry-run, 1200 x 1025 px), para mostrar que o comando montado repete o formulário.
+% Passos 2 e 3: figure14-gui-sucesso e figure16-gui-verificacao (1240 x 1020 px), as
+% capturas do relatório. Inteiras, o texto delas sairia com ~2 pt no slide; por isso cada
+% passo mostra recortes (coordenadas em px da captura original), ampliados até o texto
+% ficar legível. Legendas: as do relatório, encurtadas.
 \definecolor{guiconsole}{HTML}{161A21}% fundo do console, lido da captura
 \definecolor{guistatus}{HTML}{EEF1F5}% fundo da barra de estado, lido da captura
-% \recorte{captura}{x0}{y0}{x1}{y1}{largura em mm}
-\newcommand{\recorte}[6]{%
-  \pgfmathsetmacro{\rs}{#6/(#4-#2)}%
-  \pgfmathsetmacro{\rh}{(#5-#3)*\rs}%
-  \pgfmathsetmacro{\ri}{1240*\rs}%
+% \recorte[largura da captura em px]{captura}{x0}{y0}{x1}{y1}{largura em mm}
+\newcommand{\recorte}[7][1240]{%
+  \pgfmathsetmacro{\rs}{#7/(#5-#3)}%
+  \pgfmathsetmacro{\rh}{(#6-#4)*\rs}%
+  \pgfmathsetmacro{\ri}{#1*\rs}%
   \begin{tikzpicture}[x=1mm, y=1mm]
     \begin{scope}
-      \clip (0,0) rectangle (#6,-\rh);
-      \node[anchor=north west, inner sep=0pt] at ({-#2*\rs},{#3*\rs})
-        {\includegraphics[width=\ri mm]{#1}};
+      \clip (0,0) rectangle (#7,-\rh);
+      \node[anchor=north west, inner sep=0pt] at ({-#3*\rs},{#4*\rs})
+        {\includegraphics[width=\ri mm]{#2}};
     \end{scope}
-    \draw[ufscborda, line width=0.5pt] (0,0) rectangle (#6,-\rh);
+    \draw[ufscborda, line width=0.5pt] (0,0) rectangle (#7,-\rh);
   \end{tikzpicture}\par}
 % \faixa{captura}{y0}{y1}{xa0}{xa1}{xb0}{xb1}{escala em mm por px}{cor do fundo}: barra em
 % que só importam as pontas (o miolo é vazio na captura); o miolo é encurtado e marcado.
@@ -416,44 +462,25 @@
     \node[text=gray] at ({(\wa+147.2-\wb)/2},{-\rh/2}) {\scriptsize$\cdots$};
     \draw[ufscborda, line width=0.5pt] (0,0) rectangle (147.2,-\rh);
   \end{tikzpicture}\par}
-% \comandogui{captura}{y0}{xa0}{xa1}{xb0}{xb1}{escala em mm por px}: o comando montado ocupa
-% duas linhas de 14 px no console. Mostra o começo da 1.ª (a partir de y0) e o fim da 2.ª
-% (14 px abaixo), que traz as opções; os caminhos entre elas são encurtados e marcados.
-\definecolor{guicomando}{HTML}{1E242D}% fundo da linha de comando, lido da captura
-\newcommand{\comandogui}[7]{%
-  \pgfmathsetmacro{\rh}{14*#7}%
-  \pgfmathsetmacro{\wa}{(#4-#3)*#7}%
-  \pgfmathsetmacro{\wb}{(#6-#5)*#7}%
-  \pgfmathsetmacro{\ri}{1240*#7}%
-  \begin{tikzpicture}[x=1mm, y=1mm]
-    \fill[guicomando] (0,0) rectangle (147.2,-\rh);
-    \begin{scope}
-      \clip (0,0) rectangle (\wa,-\rh);
-      \node[anchor=north west, inner sep=0pt] at ({-#3*#7},{#2*#7})
-        {\includegraphics[width=\ri mm]{#1}};
-    \end{scope}
-    \begin{scope}[shift={({147.2-\wb},0)}]
-      \clip (0,0) rectangle (\wb,-\rh);
-      \node[anchor=north west, inner sep=0pt] at ({-#5*#7},{(#2+14)*#7})
-        {\includegraphics[width=\ri mm]{#1}};
-    \end{scope}
-    \node[text=gray] at ({(\wa+147.2-\wb)/2},{-\rh/2}) {\scriptsize$\cdots$};
-    \draw[ufscborda, line width=0.5pt] (0,0) rectangle (147.2,-\rh);
-  \end{tikzpicture}\par}
 \newcommand{\passogui}[2]{% #1 recortes, #2 legenda
   \parbox[t][41mm][t]{\textwidth}{#1}\par
   \smallskip
   {\footnotesize #2\par}}
+% Passo 1: os campos do formulário (arquivos, opções, fonte combinada) e o comando inteiro,
+% na mesma escala (147 mm para 1.135 px da captura).
 \begin{frame}{Interface gráfica}
-  \destaque{O comando exibido é o comando executado.}\hfill
-  {\scriptsize\color{black!60} recortes das Figuras 13, 15 e 17 do relatório}\par
+  \only<1>{\destaque{Cada campo vira uma opção do comando executado.}\hfill
+    {\scriptsize\color{black!60} modo combinado}\par}%
+  \only<2->{\destaque{O comando exibido é o comando executado.}\hfill
+    {\scriptsize\color{black!60} recortes das Figuras 15 e 17 do relatório}\par}%
   \smallskip
-  \only<1>{\passogui{%
-    \recorte{figure12-gui-ocioso}{22}{208}{860}{322}{147}\vspace{1.5mm}
-    \comandogui{figure12-gui-ocioso}{645}{30}{218}{282}{556}{0.222}\vspace{1.5mm}
-    \faixa{figure12-gui-ocioso}{735}{768}{16}{100}{775}{1225}{0.2}{guiconsole}}{%
-    \textbf{Ocioso:} um controle para cada opção de uso cotidiano da CLI, com ícone de
-    ajuda, e o comando montado, colorido e somente leitura.}}
+  \only<1>{{\centering
+    \recorte[1200]{gui-combinado}{30}{55}{1165}{147}{136}\vspace{1mm}
+    \recorte[1200]{gui-combinado}{30}{265}{1165}{402}{136}\vspace{1mm}
+    \recorte[1200]{gui-combinado}{30}{498}{1165}{524}{136}\vspace{1mm}
+    \recorte[1200]{gui-combinado}{30}{578}{1165}{650}{136}\vspace{1mm}
+    {\footnotesize\bfseries\color{ufscazul}Comando a ser executado:\par}\vspace{0.5mm}
+    \recorte[1200]{gui-combinado}{28}{806}{1148}{856}{134.2}}}
   \only<2>{\passogui{%
     \recorte{figure14-gui-sucesso}{22}{778}{700}{945}{128}\vspace{1.5mm}
     \faixa{figure14-gui-sucesso}{997}{1020}{0}{125}{780}{1240}{0.22}{guistatus}}{%

@@ -22,24 +22,11 @@
 \newcommand{\avtabela}{\footnotesize\setlength{\tabcolsep}{4pt}%
   \setlength{\aboverulesep}{0.3ex}\setlength{\belowrulesep}{0.4ex}}
 
-% Slide 13: metodologia (relatório §5.1, §5.1.1, §5.1.2, §5.2 e Tabela 13)
+% Slide 15: metodologia (relatório §5.1, §5.1.1, §5.1.2, §5.2 e Tabela 13)
 % \vspace{0pt} no topo das colunas: alinha as minipages [t] pelo topo.
+% Ordem de revelação pedida pelo autor: 1) as QPs, à esquerda; 2) o texto da metodologia, à
+% direita; 3) o ambiente, abaixo das QPs.
 \begin{frame}{Metodologia da avaliação}
-  \begin{minipage}[t]{0.56\textwidth}
-    \vspace{0pt}\footnotesize\raggedright
-    \avitem{Dados sintéticos.}{Gerador determinístico do cenário de e-commerce: a mesma
-      escala $N$ e a mesma semente geram sempre os mesmos arquivos.}
-    \avitem{Volumes.}{Seis, de \num{1024} a \num{262144} linhas; a partir de \num{16384},
-      cada um é o dobro do anterior.}
-    \onslide<2->{%
-      \avitem{Repetições.}{Três por célula (volume e modo), com os SGBDs limpos antes; vale
-        a mediana.}
-      \avitem{Duas campanhas.}{Medir a memória registra cada alocação e deixa a importação
-        $2{,}5\times$ mais lenta, de forma desigual entre as fases. Tempos: campanha sem o
-        registro. Picos de memória: campanha com ele.}
-      \avitem{Bloco e lote.}{Os que a ferramenta escolhe sozinha.}}
-    \avfonte{§5.1 e §5.2 do relatório.}
-  \end{minipage}\hfill
   \begin{minipage}[t]{0.41\textwidth}
     \vspace{0pt}\footnotesize\tcbset{halign=flush left, before skip=0pt, after skip=1.5mm}
     \begin{painel}{Questões de pesquisa (QP)}{}
@@ -49,15 +36,30 @@
       \avqp{QP4}{Custo da validação prévia}
       \avqp{QP5}{Tamanhos do bloco e do lote}
     \end{painel}
-    \onslide<2->{%
+    \onslide<3->{%
     \begin{painel}{Ambiente: um computador}{Windows 11, 8 GB de memória}
       Em Docker: PostgreSQL 16, Redis 7, MongoDB 7, Neo4j~5 e Cassandra 4.1, este em um nó
       com 1~GB de memória Java (\textit{heap}). Cerca de 920~MB livres.
     \end{painel}}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.56\textwidth}
+    \vspace{0pt}\footnotesize\raggedright
+    \onslide<2->{%
+      \avitem{Dados sintéticos.}{Gerador determinístico do cenário de e-commerce: a mesma
+        escala $N$ e a mesma semente geram sempre os mesmos arquivos.}
+      \avitem{Volumes.}{Seis, de \num{1024} a \num{262144} linhas; a partir de \num{16384},
+        cada um é o dobro do anterior.}
+      \avitem{Repetições.}{Três por célula (volume e modo), com os SGBDs limpos antes; vale
+        a mediana.}
+      \avitem{Duas campanhas.}{Medir a memória registra cada alocação e deixa a importação
+        $2{,}5\times$ mais lenta, de forma desigual entre as fases. Tempos: campanha sem o
+        registro. Picos de memória: campanha com ele.}
+      \avitem{Bloco e lote.}{Os que a ferramenta escolhe sozinha.}
+      \avfonte{§5.1 e §5.2 do relatório.}}
   \end{minipage}
 \end{frame}
 
-% Slide 14: onde está o tempo (relatório §5.3.1; Tabela 15 e Tabela 16).
+% Slide 16: onde está o tempo (relatório §5.3.1; Tabela 15 e Tabela 16).
 % Barra empilhada: alturas proporcionais às participações da Tabela 15, multifonte
 % (inferência 6,3%, validação 13,8%, escrita 79,8% = 393,70 de 493,15 s).
 \newcommand{\avH}{24}
@@ -117,7 +119,7 @@
   \avfonte{Tabelas 15 e 16 do relatório; $N = \num{262144}$, multifonte; campanha de tempo.}
 \end{frame}
 
-% Slide 15: multifonte versus combinado (relatório §5.3.2; Tabela 17).
+% Slide 17: multifonte versus combinado (relatório §5.3.2; Tabela 17).
 \begin{frame}{Combinado: 7\% mais tempo (QP2)}
   \begin{minipage}[t]{0.50\textwidth}
     \vspace{0pt}
@@ -143,28 +145,31 @@
   \end{minipage}\hfill
   \begin{minipage}[t]{0.46\textwidth}
     \vspace{0pt}\footnotesize\raggedright
-    \onslide<2->{%
-      \avitem{Tempo:}{o arquivo combinado é 20\% maior, e cada SGBD relê o arquivo inteiro
-        na gravação. No Redis, a escrita passa de 13,95 para 30,39~s.}
-      \avitem{Memória:}{o pico menor vem do bloco (38 contra 63~MB), que a memória livre
-        limitou mais no combinado, e não do modo.}}
-    \onslide<3->{%
-      \avitem{Organização:}{no multifonte, cada arquivo traz só as colunas do seu evento, e
-        \texttt{-{}-source} substitui uma fonte isolada. O combinado é um arquivo só.}}
+    \avitem{Tempo:}{o arquivo combinado é 20\% maior, e cada SGBD relê o arquivo inteiro
+      na gravação. No Redis, a escrita passa de 13,95 para 30,39~s.}
+    \avitem{Memória:}{o pico menor não é mérito do modo. Limitada pela memória livre, a
+      ferramenta escolheu um bloco menor para o combinado (38 contra 63~MB), e o pico
+      acompanha o bloco.}
+    \avitem{Organização:}{no multifonte, cada arquivo traz só as colunas do seu conjunto
+      de dados, que pode ser trocado sozinho sem editar a configuração
+      (\texttt{-{}-source stock=novo.csv}). O combinado é um arquivo só.}
   \end{minipage}\par
   \vfill
   \avfonte{Tabela 17 do relatório; $N = \num{262144}$.}
 \end{frame}
 
-% Slide 16: escalabilidade (relatório §5.3.3; Tabela 18 e Figura 18). O gráfico repete a
+% Slide 18: escalabilidade (relatório §5.3.3; Tabela 18 e Figura 18). O gráfico repete a
 % Figura 18: escala logarítmica nos dois eixos e reta de crescimento linear a partir do
 % ponto de 16.384 linhas do multifonte. Rótulos dos eixos explícitos (o formato numérico do
-% tema não se aplica aos rótulos de eixos logarítmicos).
-\begin{frame}{O tempo cresce linearmente com o volume (QP3)}
-  \begin{minipage}[t]{0.53\textwidth}
-    \vspace{0pt}
+% tema não se aplica aos rótulos de eixos logarítmicos). A pedido do orientador, o slide só
+% tem o gráfico e a conclusão; os números de apoio (tempo por linha de 1,8 a 2,5 ms,
+% expoentes 0,90 e 0,95, pico de memória que acompanha o bloco) ficam para a fala e a
+% arguição.
+\begin{frame}{Tempo linear: a ferramenta é escalável (QP3)}
+  \begin{minipage}[c]{0.64\textwidth}
+    \centering
     \begin{tikzpicture}
-      \begin{loglogaxis}[avgrafico, scale only axis, width=55mm, height=29mm,
+      \begin{loglogaxis}[avgrafico, scale only axis, width=74mm, height=36mm,
           xlabel={Linhas ($N$)}, ylabel={Tempo total (s)},
           xmin=700, xmax=400000, ymin=5, ymax=1000,
           xtick={1024,16384,65536,262144},
@@ -180,26 +185,26 @@
         \legend{multifonte, combinado, linear}
       \end{loglogaxis}
     \end{tikzpicture}\par
-    \avlegenda{Tempo total por volume, em escala logarítmica nos dois eixos.}
+    \smallskip
+    {\footnotesize Tempo total por volume, em escala logarítmica nos dois eixos.\par}
   \end{minipage}\hfill
-  \begin{minipage}[t]{0.44\textwidth}
-    \vspace{0pt}\footnotesize\raggedright
-    \onslide<2->{%
-      \avitem{Tempo por linha estável:}{de 1,8 a 2,5~ms a partir de \num{16384} linhas.}
-      \avitem{Expoente do crescimento:}{0,90 no multifonte e 0,95 no combinado (1 é o
-        crescimento proporcional ao volume).}}
-    \onslide<3->{%
-      \avitem{A memória acompanha o bloco, não o volume:}{com 256 vezes mais dados, o pico
-        vai de 10,5 para 253,8~MB (24 vezes) no multifonte.}
-      {\color{black!60}Quando a memória livre limita o bloco, o pico deixa de acompanhar o
-       volume: no combinado, cai de 209,3 para 141,9~MB quando o volume dobra.\par}}
+  \begin{minipage}[c]{0.33\textwidth}
+    \begin{tcolorbox}[colback=ufscfundo, colframe=ufscazul, sharp corners, boxrule=0pt,
+        leftrule=1mm, left=2mm, right=2mm, top=2mm, bottom=2mm, boxsep=0pt]
+      \small\raggedright
+      \destaque{Tempo linear no volume}\par
+      \smallskip
+      16 vezes mais dados (de \num{16384} a \num{262144} linhas) custam 12 vezes mais
+      tempo no multifonte e 14 no combinado.\par
+      \medskip
+      {\large\destaque{A ferramenta é escalável.}\par}
+    \end{tcolorbox}
   \end{minipage}\par
   \vfill
-  \avfonte{Tabela 18 e Figura 18 do relatório. Tempos: campanha de tempo. Picos: campanha
-    de memória.}
+  \avfonte{Tabela 18 e Figura 18 do relatório; campanha de tempo.}
 \end{frame}
 
-% Slide 17: custo da validação prévia e tamanhos do bloco e do lote (relatório §5.3.4 e
+% Slide 19: custo da validação prévia e tamanhos do bloco e do lote (relatório §5.3.4 e
 % §5.3.5; Tabelas 19, 20 e 21). A campanha exploratória (bloco e lote) é outra campanha:
 % N = 131.072, multifonte.
 \begin{frame}{Validação prévia e bloco de leitura (QP4, QP5)}

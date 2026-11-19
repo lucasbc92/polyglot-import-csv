@@ -1,7 +1,7 @@
 \roteiro{4}
 
-% Slide 18: contribuições (relatório §1.2; evidências no Cap. 4 e no Cap. 5)
-% Os objetivos repetem a redação do slide 4 (secoes/1-introducao.tex). Cada linha aparece
+% Slide 20: contribuições (relatório §1.2; evidências no Cap. 4 e no Cap. 5)
+% Os objetivos repetem a redação do slide 5 (secoes/1-introducao.tex). Cada linha aparece
 % num passo. Evidências: §4.2 (filters, is_key, schema_column; os dois arquivos e os seus
 % JSON Schema); §4.2.4 e §4.3 (as três etapas de validação e a verificação dos SGBDs, todas
 % antes da primeira gravação); §5.1 e §5.3.3 (QP1-QP5, volumes, crescimento linear); §4.1 e
@@ -41,10 +41,12 @@
   \vspace{2pt}
 \end{frame}
 
-% Slide 19: limitações e trabalhos futuros (relatório Cap. 6, chapters/consideracoes.tex:
+% Slide 21: limitações e trabalhos futuros (relatório Cap. 6, chapters/consideracoes.tex:
 % limitações no 4.º parágrafo; §6.1, atividades futuras). O Elasticsearch não existe no
 % código: é um exemplo de novo destino (decisão do autor), dentro do item "generalização do
-% núcleo de importação" do §6.1.
+% núcleo de importação" do §6.1. Testes: "gerados automaticamente" é informação do autor
+% (2026-11-18), não está no relatório; a cobertura é de instruções (coverage 7.17.3,
+% --source=src/polyglotimportcsv, suíte inteira: 2155 testes, 4722 instruções, 95%).
 \begin{frame}{Limitações e trabalhos futuros}
   \begingroup\footnotesize\tcbset{equal height group=cmfim, halign=flush left}
   \begin{minipage}[t]{0.485\textwidth}\vspace{0pt}
@@ -57,7 +59,8 @@
         \item \destaque{Sem atomicidade entre SGBDs:} uma falha durante a gravação deixa
               uma carga parcial, que a ferramenta não desfaz.
         \item \destaque{Escolha do bloco:} conservadora demais no modo combinado.
-        \item \destaque{Testes:} a maioria é unitária.
+        \item \destaque{Testes:} \num{2155}, gerados automaticamente, cobrem 95\% do
+              código, mas a maioria é unitária.
       \end{itemize}
     \end{painel}
   \end{minipage}\hfill
@@ -80,4 +83,32 @@
   \endgroup
   \vfill
   {\scriptsize\color{black!60}Fonte: Cap.~6 do relatório.\par}
+\end{frame}
+
+% Slide 22: onde obter a ferramenta (pedido do orientador: mostrar, antes da contracapa, que
+% a ferramenta é livre). Repositório público com licença MIT (LICENSE); a release v3.2.0
+% traz os executáveis da CLI e da GUI para Windows e Linux (polyglotimportcsv[-gui]-v3.2.0-
+% {windows,linux}-x64.zip), que dispensam a instalação do Python (relatório §4.1, nota).
+\begin{frame}{A ferramenta é livre}
+  \begin{minipage}[c]{0.62\textwidth}
+    \destaque{Código aberto no GitHub}\par
+    \smallskip
+    {\href{https://github.com/lucasbc92/polyglot-import-csv}%
+      {\texttt{github.com/lucasbc92/polyglot-import-csv}}\par}
+    \bigskip
+    \footnotesize
+    \setlength{\leftmargini}{1.1em}
+    \begin{itemize}
+      \setlength{\itemsep}{3pt}
+      \item \destaque{Licença MIT:} uso, cópia e modificação livres, inclusive comerciais.
+      \item \destaque{Executáveis} da CLI e da GUI para Windows e Linux, que dispensam a
+            instalação do Python (versão 3.2.0, na página de \textit{releases}).
+      \item \destaque{Cenário de e-commerce} no repositório, pronto para testar: os
+            arquivos de configuração e os CSVs usados nesta apresentação.
+    \end{itemize}
+  \end{minipage}\hfill
+  \begin{minipage}[c]{0.32\textwidth}
+    \centering
+    \qrcode[height=36mm]{https://github.com/lucasbc92/polyglot-import-csv}\par
+  \end{minipage}
 \end{frame}

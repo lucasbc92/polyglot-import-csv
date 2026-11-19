@@ -1,15 +1,26 @@
 \roteiro{1}
 
-% Slide 3: persistência poliglota e o problema (relatório §1.1, §2.1, §2.2, §3.1, Fig. 1)
+% Slide 3: persistência poliglota no domínio do e-commerce (relatório §1.1, §2.1). A imagem
+% (images/polyglot_persistence_e-commerce.jpeg) dá a visão geral do domínio e dos seus
+% subdomínios antes de o slide 4 mostrar a importação desejada.
+\begin{frame}{Persistência poliglota}
+  \destaque{Persistência poliglota:} cada tipo de dado fica no SGBD mais adequado.\par
+  \medskip
+  \centering
+  \includegraphics[height=51mm]{polyglot_persistence_e-commerce}\par
+  \smallskip
+  {\scriptsize\color{black!60}Fonte: adaptado de
+   \url{https://www.nitendratech.com/database/polyglot-persistence/}.\par}
+\end{frame}
+
+% Slide 4: o problema (relatório §2.2, §3.1, Fig. 1)
 % A Fig. 1 do relatório (images/figure1-polyglot-ecommerce.png) rende texto de ~4,7 pt em
 % largura total; o desenho abaixo repete o seu conteúdo em TikZ, com texto legível, e traz o
 % paradigma de cada SGBD (Cap. 2).
-\begin{frame}{Persistência poliglota e o problema}
+\begin{frame}{O problema}
   \begin{itemize}
-    \item \destaque{Persistência poliglota}: cada tipo de dado fica no SGBD (sistema
-          gerenciador de banco de dados) mais adequado.
     \item Cada SGBD tem o seu \destaque{importador nativo} de CSV, que atende só a ele.
-    \item<2-> \destaque{Problema:} nenhuma ferramenta encontrada importa o mesmo CSV nos
+    \item \destaque{Problema:} nenhuma ferramenta encontrada importa o mesmo CSV nos
           cinco.
   \end{itemize}
   \vfill
@@ -35,10 +46,11 @@
     \draw[seta] (csv.east) -- (tool.west);
   \end{tikzpicture}\par
   \smallskip
-  {\footnotesize Cada dado do e-commerce no SGBD mais adequado (Figura~1 do relatório).\par}
+  {\footnotesize A importação desejada: cada dado do e-commerce no SGBD mais adequado
+   (Figura~1 do relatório).\par}
 \end{frame}
 
-% Slide 4: objetivos (relatório §1.2)
+% Slide 5: objetivos (relatório §1.2)
 \begin{frame}{Objetivos}
   \begin{painel}{Objetivo geral}{}
     Desenvolver a ferramenta \textit{Polyglot Import CSV}, que importa CSV para

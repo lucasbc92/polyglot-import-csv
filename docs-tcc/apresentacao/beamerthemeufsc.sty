@@ -10,6 +10,7 @@
 \RequirePackage{tcolorbox}
 \RequirePackage{listings}
 \RequirePackage{booktabs}
+\RequirePackage{qrcode}
 \RequirePackage{array}
 \RequirePackage{appendixnumberbeamer}
 % Gráficos e números da avaliação: mesmas opções do docs-tcc/main.tex (formato brasileiro).
@@ -101,22 +102,37 @@
    \begin{frame}[plain]\typeout{FECHAMENTO-NUMERO=\the\c@framenumber}\end{frame}}}
 
 % ---------------------------------------------------------------- roteiro
-% \roteiro{0}: frame numerado com os quatro blocos iguais.
-% \roteiro{n}, n = 1..4: frame [noframenumbering] com o bloco n em destaque.
-\newcommand{\ufsc@bloco}[2]{%
+% \roteiro{0}: frame numerado que apresenta o roteiro, um bloco por página. A frase de cada
+%   bloco aparece só na página dele (o espaço fica reservado, para os títulos não saltarem).
+% \roteiro{n}, n = 1..4: frame [noframenumbering] com o bloco n em destaque e só a frase
+%   dele; os outros blocos ficam só com o título.
+% \ufsc@bloco{n}{título}{explicação}
+\newcommand{\ufsc@expl}[2]{{\normalsize\leftskip=1.6em\color{#1}#2\par}}
+\newcommand{\ufsc@bloco}[3]{%
   \ifnum\ufsc@atual=0\relax
-    {\color{ufscazul}\bfseries\makebox[1.6em][l]{#1}}#2%
+    \onslide<#1->\relax
+    {\color{ufscazul}\bfseries\makebox[1.6em][l]{#1}}#2\par
+    \onslide<#1>\relax
+    \ufsc@expl{black!65}{#3}%
+    \onslide<#1->\relax
   \else\ifnum\ufsc@atual=#1\relax
-    {\color{ufscazul}\bfseries\makebox[1.6em][l]{#1}#2}%
+    {\color{ufscazul}\bfseries\makebox[1.6em][l]{#1}#2}\par
+    \ufsc@expl{black!65}{#3}%
   \else
-    {\color{black!40}\makebox[1.6em][l]{#1}#2}%
-  \fi\fi\par}
+    {\color{black!40}\makebox[1.6em][l]{#1}#2}\par
+  \fi\fi}
 \newcommand{\ufsc@roteiro}{%
   \large
-  \ufsc@bloco{1}{Contexto e trabalhos relacionados}\medskip
-  \ufsc@bloco{2}{A ferramenta Polyglot Import CSV}\medskip
-  \ufsc@bloco{3}{Avaliação de desempenho}\medskip
-  \ufsc@bloco{4}{Conclusão}}
+  \ufsc@bloco{1}{Contexto e trabalhos relacionados}
+    {Persistência poliglota, o problema, os objetivos e os trabalhos relacionados.}\bigskip
+  \ufsc@bloco{2}{A ferramenta Polyglot Import CSV}
+    {Visão geral da ferramenta: configuração em JSON validada por JSON Schema, validação
+     prévia, fluxo de execução e interface gráfica.}\bigskip
+  \ufsc@bloco{3}{Avaliação de desempenho}
+    {O desempenho da ferramenta em cinco questões de pesquisa, com destaque para a
+     \textbf{escalabilidade}.}\bigskip
+  \ufsc@bloco{4}{Conclusão}
+    {Contribuições do trabalho, limitações e trabalhos futuros.}}
 \newcommand{\roteiro}[1]{%
   \def\ufsc@atual{#1}%
   \ifnum#1=0\relax
