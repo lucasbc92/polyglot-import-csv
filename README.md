@@ -280,6 +280,11 @@ suffixed `-dirty` when `src/` has uncommitted changes).
 The `phase` column holds `infer` and `validate`, once per import, and `write`, once
 per DBMS.
 
+### Use of AI tools
+
+This project was developed with the assistance of Claude Code (Anthropic), an AI
+assistant used throughout the work.
+
 ### License
 
 MIT — see [LICENSE](LICENSE).
@@ -564,6 +569,11 @@ gráficos do relatório. Os metadados do JSON também registram o commit medido
 (`git_commit`, com o sufixo `-dirty` quando `src/` tem mudanças não commitadas).
 A coluna `phase` traz `infer` e `validate`, uma vez por importação, e `write`, uma
 vez por SGBD.
+
+### Uso de ferramentas de IA
+
+Este projeto foi desenvolvido com o auxílio do Claude Code (Anthropic), assistente de
+IA usado ao longo do trabalho.
 
 ### Licença
 
