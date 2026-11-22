@@ -1,0 +1,491 @@
+% Roteiro de estudo da apresentação v2.2 da defesa do TCC2 (Polyglot Import CSV).
+% Para estudar antes da defesa, até a fala ficar fluida; não é para ler durante a fala.
+% Compilar com: bash verificar-roteiro.sh  (compila o deck antes, se preciso)
+%
+% Cada seção corresponde a um slide do deck e tira a miniatura de apresentacao.pdf pelo
+% rótulo do frame (label=...), na última página de revelação: \slideroteiro{rótulo}{última
+% revelação}{segundos}{título}. Os rótulos vêm de apresentacao.aux (xr-hyper, prefixo ap-).
+% Todo número do texto vem do relatório v3.1 (docs-tcc/chapters) ou do comentário do frame.
+\documentclass[a4paper,11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[brazilian]{babel}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage[a4paper, margin=2.2cm]{geometry}
+\usepackage{graphicx}
+\usepackage[table]{xcolor}
+\usepackage{enumitem}
+\usepackage{siunitx}
+\sisetup{output-decimal-marker={,}, group-separator={.}, group-minimum-digits=4, mode=text}
+\usepackage{xr-hyper}
+\usepackage[hidelinks]{hyperref}
+\usepackage{refcount}
+\externaldocument[ap-]{apresentacao}
+
+\definecolor{ufscazul}{HTML}{1A4D8F}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+\setlist{itemsep=2pt, topsep=2pt}
+
+% Tempo em m:ss a partir de segundos (divisão inteira truncada).
+\newcommand{\mmss}[1]{%
+  \the\numexpr(#1+30)/60-1\relax:%
+  \ifnum\numexpr#1-60*((#1+30)/60-1)\relax<10 0\fi\the\numexpr#1-60*((#1+30)/60-1)\relax}
+\newcount\acumulado
+\acumulado=0
+
+% \slideroteiro{rótulo}{última revelação}{segundos}{título}
+\newcommand{\slideroteiro}[4]{%
+  \clearpage
+  \global\advance\acumulado by #3\relax
+  {\Large\bfseries\color{ufscazul}Slide \getrefnumber{ap-#1}: #4\par}
+  \medskip
+  \begin{minipage}[t]{0.58\textwidth}\vspace{0pt}
+    \fbox{\includegraphics[width=\linewidth, page=\getpagerefnumber{ap-#1<#2>}]{apresentacao.pdf}}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.38\textwidth}\vspace{0pt}
+    \textbf{Tempo-alvo:} \mmss{#3}\par
+    \textbf{Ao terminar:} \mmss{\the\acumulado} de fala\par
+  \end{minipage}\par
+  \medskip}
+\newcommand{\oquedizer}{\subsubsection*{\color{ufscazul}O que dizer}}
+\newenvironment{naoesquecer}{\subsubsection*{\color{ufscazul}Não esquecer}\begin{itemize}}
+  {\end{itemize}}
+\newcommand{\seperguntarem}[1]{\subsubsection*{\color{ufscazul}Se perguntarem}#1\par}
+% \avanca: o ponto da fala em que se avança para a próxima revelação do slide.
+\newcommand{\avanca}{{\color{ufscazul}\small\textbf{[avança]}}}
+\newcommand{\pendente}{{\color{red!70!black}[texto de apoio a escrever]}\par}
+
+\begin{document}
+
+\begin{titlepage}
+  {\Huge\bfseries\color{ufscazul} Roteiro de estudo\par}
+  \medskip
+  {\Large Apresentação da defesa do TCC2: Polyglot Import CSV (v2.2)\par}
+  \bigskip
+  Lucas Bueno Cesario\par
+  \vspace{2cm}
+  \textbf{Como usar.} Este roteiro é para estudar \emph{antes} da defesa, até a fala ficar
+  fluida; ele não é lido durante a apresentação. Cada página traz um slide (na última etapa de
+  revelação), o tempo-alvo dele, o tempo acumulado ao terminá-lo e:
+  \begin{itemize}
+    \item \textbf{O que dizer:} a explicação que saiu do slide, em linguagem falada, e a frase
+          de passagem para o próximo;
+    \item \textbf{Não esquecer:} os pontos que não podem faltar;
+    \item \textbf{Se perguntarem:} a carta na manga (B1 a B13) que responde à pergunta
+          provável.
+  \end{itemize}
+  \textbf{Orçamento.} 20 slides de conteúdo em 14 min 15 s, mais 30 s de abertura: 14 min 45 s,
+  dentro da janela de 15 minutos (teto de 20).
+  \begin{center}
+    \begin{tabular}{lrr}
+      \textbf{Bloco} & \textbf{Slides} & \textbf{Tempo} \\
+      1 Contexto e trabalhos relacionados & 4 & 2:15 \\
+      2 A ferramenta (Cap.~4) & 9 & 6:15 \\
+      3 Avaliação de desempenho (Cap.~5) & 4 & 4:00 \\
+      4 Conclusão & 3 & 1:45 \\
+    \end{tabular}
+  \end{center}
+\end{titlepage}
+
+\slideroteiro{roteiro}{4}{30}{Abertura e roteiro}
+\oquedizer
+Bom dia a todos. Agradeço à banca, Prof.ª Carina e Prof. Jônata, e ao meu orientador, Prof.
+Ronaldo. Sou Lucas Bueno Cesario e apresento o Polyglot Import CSV, uma ferramenta que importa
+arquivos CSV para cinco bancos de dados diferentes numa só execução.
+
+A apresentação tem quatro partes. \avanca{} Primeiro, o contexto e os trabalhos relacionados.
+\avanca{} Depois, a ferramenta. \avanca{} Em seguida, a avaliação de desempenho, com destaque
+para a escalabilidade. \avanca{} E, por fim, a conclusão.
+
+\begin{naoesquecer}
+  \item Agradecer à banca e ao orientador logo no começo.
+  \item A ferramenta e a avaliação são o centro da fala; o contexto é breve.
+\end{naoesquecer}
+
+\slideroteiro{persistencia}{1}{30}{Persistência poliglota}
+\oquedizer
+Num sistema como um e-commerce, os dados têm formas e usos diferentes. Pedidos e estoque pedem
+transações; o catálogo muda de formato de um produto para outro; o carrinho precisa de acesso
+muito rápido; o histórico de atividade cresce sem parar; e as recomendações dependem das
+relações entre clientes e produtos.
+
+\textbf{Persistência poliglota} é guardar cada tipo de dado no SGBD mais adequado a ele, em vez
+de forçar tudo num banco só. A imagem mostra essa ideia no domínio do e-commerce.
+
+\begin{naoesquecer}
+  \item A definição em uma frase: cada tipo de dado no SGBD mais adequado.
+  \item A imagem é adaptada de outra fonte; o crédito está no rodapé do slide.
+\end{naoesquecer}
+
+\slideroteiro{problema}{1}{45}{O problema}
+\oquedizer
+Cada SGBD tem o seu importador nativo de CSV: o \texttt{COPY} do PostgreSQL, o
+\texttt{mongoimport}, o \texttt{cqlsh} no Cassandra, o \texttt{neo4j-admin import} e, no Redis,
+um arquivo com os comandos já prontos. Mas cada um atende só ao seu SGBD, com formato e regras
+próprios. Quem adota persistência poliglota e tem os dados em CSV precisa escrever e manter uma
+rotina de importação para cada banco.
+
+Na pesquisa do Capítulo~3, não encontrei nenhuma ferramenta que importe o mesmo CSV nos cinco.
+O desenho mostra a importação desejada: os CSVs do e-commerce entram na ferramenta, que, guiada
+por uma configuração em JSON, grava cada dado no SGBD mais adequado: relacional, documento,
+chave-valor, colunar e grafo.
+
+\begin{naoesquecer}
+  \item Os importadores nativos existem, mas são um por SGBD.
+  \item O problema: nenhuma ferramenta encontrada importa o mesmo CSV nos cinco.
+\end{naoesquecer}
+\seperguntarem{``O que cada SGBD já oferece?'' $\rightarrow$ carta \textbf{B2} (importadores
+nativos).}
+
+\slideroteiro{objetivos}{1}{30}{Objetivos}
+\oquedizer
+O objetivo geral é desenvolver essa ferramenta. Os específicos são quatro. Primeiro, uma
+configuração em JSON, em que se declaram filtros, a chave primária e o nome de cada coluna no
+destino. Segundo, uma validação prévia: um erro na configuração ou nos dados impede qualquer
+gravação. Terceiro, avaliar o desempenho com diferentes volumes e modelos de dados. E quarto,
+dar acesso por linha de comando e por interface gráfica. Volto a cada um na conclusão.
+
+\begin{naoesquecer}
+  \item O slide só tem os rótulos: o detalhe de cada objetivo vem da fala.
+  \item Os mesmos quatro objetivos fecham a apresentação, no slide de contribuições.
+\end{naoesquecer}
+
+\slideroteiro{relacionados}{2}{30}{Trabalhos relacionados}
+\oquedizer
+A tabela compara os trabalhos do Capítulo~3: nenhum deles importa o mesmo CSV em vários
+paradigmas com um mapeamento validado.
+
+\avanca{} A última linha é este trabalho: importação de CSV para cinco SGBDs de cinco
+paradigmas, com mapeamento declarativo validado por JSON Schema e uma revisão sem gravar, o
+\texttt{-{}-dry-run}.
+
+\begin{naoesquecer}
+  \item Ler só a última linha e as três colunas da direita; não percorrer a tabela inteira.
+\end{naoesquecer}
+\seperguntarem{``O que o trabalho resolve e o que fica em aberto?'' $\rightarrow$ \textbf{B3}.
+Referências citadas $\rightarrow$ \textbf{B13}.}
+
+\slideroteiro{visao}{3}{40}{Visão geral}
+\oquedizer
+Passo à ferramenta. A entrada são três coisas: o \textbf{arquivo de importação}, que diz de onde
+vêm os dados e o que gravar em cada SGBD; o \textbf{arquivo de conexão}, que diz onde cada SGBD
+está; e os \textbf{arquivos de dados}, em um de dois modos: multifonte, um CSV por conjunto de
+dados, ou combinado, um CSV único com uma coluna que diz a origem de cada linha.
+
+\avanca{} O processamento é um comando de linha, que valida e importa. \avanca{} A saída são os
+cinco SGBDs. A ideia central: o comando valida as configurações e os dados e só então grava.
+
+\begin{naoesquecer}
+  \item Os dois modos de entrada, multifonte e combinado: voltam na avaliação (QP2).
+  \item ``Valida e só então grava'' é o fio da apresentação.
+\end{naoesquecer}
+
+\slideroteiro{configuracao}{1}{45}{Configuração em dois arquivos JSON}
+\oquedizer
+O arquivo de importação começa por \texttt{sources}, que dá um nome a cada CSV; aqui,
+\texttt{stock} é o arquivo de estoque. Depois vem um bloco por SGBD destino. Dentro dele,
+\texttt{entities} são as tabelas, coleções, partições, chaves ou nós, e cada entidade diz de
+qual fonte lê. Em \texttt{columns} ficam as colunas, com a chave primária, \texttt{is\_key}, e o
+tipo no SGBD, \texttt{db\_type}.
+
+Neste trecho, a fonte \texttt{stock} alimenta a tabela \texttt{inventory} do PostgreSQL, com
+\texttt{product\_id} como chave. O arquivo de conexão fica à parte, só com os endereços dos
+SGBDs: o mesmo arquivo de importação serve no Windows e no Linux, trocando só o de conexão.
+
+\begin{naoesquecer}
+  \item \texttt{sources} $\rightarrow$ um bloco por SGBD $\rightarrow$ \texttt{entities}
+        $\rightarrow$ \texttt{columns}.
+  \item O ``\ldots'' do trecho marca o que foi omitido do arquivo real.
+\end{naoesquecer}
+\seperguntarem{``Por que escrever o mapeamento à mão?'' $\rightarrow$ \textbf{B1}.}
+
+\slideroteiro{esquemas}{1}{40}{Contribuição: mapeamento declarativo e validado}
+\oquedizer
+Esta é a contribuição da parte de configuração. O mapeamento é \textbf{declarado}, sem
+programar, e cada um dos dois arquivos é conferido por um \textbf{JSON Schema}. Os esquemas têm
+um bloco por SGBD (tabelas, documentos, partições, chave-valor, nós e arestas), e nada fora deles
+passa: nome de campo, tipo ou operador errado é recusado, e o erro aponta o caminho do campo. Os
+mesmos esquemas valem na CLI e na GUI.
+
+No exemplo, um erro de digitação, \texttt{postgress} com dois ``s'', é recusado antes de abrir
+qualquer CSV ou de conectar a um SGBD: nada é gravado. Nenhum dos trabalhos relacionados oferece
+um mapeamento declarativo validado.
+
+\begin{naoesquecer}
+  \item O erro mostrado é a saída real da CLI.
+  \item O diferencial em relação ao Capítulo~3.
+\end{naoesquecer}
+
+\slideroteiro{validacao}{2}{30}{Validação prévia: etapas 1 e 2}
+\oquedizer
+A validação prévia tem três etapas, todas antes de gravar. As duas primeiras conferem os
+arquivos de configuração, sem abrir nenhum CSV. A etapa 1 é o JSON Schema que acabei de
+mostrar: a estrutura e os tipos de cada arquivo. Uma falha em qualquer etapa encerra a execução,
+e nada é gravado.
+
+\avanca{} A etapa 2 confere a consistência entre os dois arquivos: todo SGBD do arquivo de
+importação está no de conexão? Resta ao menos um destino?
+
+\begin{naoesquecer}
+  \item As etapas 1 e 2 olham só os arquivos de configuração.
+  \item ``Nada é gravado'' vale para qualquer etapa.
+\end{naoesquecer}
+
+\slideroteiro{validacao3}{2}{35}{Validação prévia: etapa 3 e gravação}
+\oquedizer
+A etapa 3 confere o mapeamento contra os próprios CSVs, em duas partes: a 3.1, os cabeçalhos,
+isto é, se as colunas, os filtros e os relacionamentos citados existem; e a 3.2, os dados:
+todas as linhas, preparadas como seriam na gravação, mas sem gravar. Uma falha aqui também
+encerra a execução sem gravar nada.
+
+\avanca{} Só depois das três etapas a ferramenta grava nos SGBDs.
+
+\begin{naoesquecer}
+  \item 3.1 são os cabeçalhos; 3.2, os dados. As duas reaparecem no fluxo, nos passos 2 e 5.
+\end{naoesquecer}
+\seperguntarem{``E se um SGBD cair no meio da gravação?'' $\rightarrow$ \textbf{B5} (a
+ferramenta não desfaz uma carga parcial; é uma limitação). ``Como o tipo é decidido?''
+$\rightarrow$ \textbf{B4}.}
+
+\slideroteiro{fluxo}{3}{75}{Fluxo de execução}
+\oquedizer
+O fluxo de execução tem nove passos. Os três primeiros não leem as linhas de dados: o passo 1
+valida as configurações, com as etapas 1 e 2; o passo 2 confere os cabeçalhos, a etapa 3.1; e o
+passo 3 verifica se os SGBDs estão no ar. Se um estiver fora, a ferramenta termina e mostra como
+iniciá-lo. No \texttt{-{}-dry-run}, essa verificação não acontece.
+
+\avanca{} Depois vêm as leituras dos dados. O passo 4, a \textbf{leitura de inferência},
+percorre cada CSV inteiro, em blocos, e fixa o tipo de cada coluna. O passo 5, a
+\textbf{leitura de validação}, é a etapa 3.2: lê todas as linhas e as prepara como na gravação,
+sem gravar, e aponta valor inválido para o tipo ou para o SGBD, chave vazia e referência sem
+destino. Se houver erro, nada é gravado; com \texttt{-{}-dry-run}, a ferramenta para aqui e
+mostra as contagens.
+
+\avanca{} Os passos 6 a 9 são a \textbf{leitura de gravação}, um SGBD destino por vez: prepara o
+SGBD, relê as fontes dele em blocos e grava em lotes. A saída são as contagens por entidade e
+as métricas por fase.
+
+\begin{naoesquecer}
+  \item Três leituras dos dados: inferência, validação e gravação; só a última grava.
+  \item A etapa 3.1 é o passo 2; a 3.2, o passo 5.
+\end{naoesquecer}
+\seperguntarem{``Como fica uma execução?'' $\rightarrow$ \textbf{B6}. ``Como o tipo é
+decidido?'' $\rightarrow$ \textbf{B4}. ``E se um SGBD cair no meio?'' $\rightarrow$
+\textbf{B5}.}
+
+\slideroteiro{resultado}{1}{35}{Resultado: um cenário em cinco modelos de dados}
+\oquedizer
+Este é o resultado de uma importação real do cenário, seguindo um cliente, o \texttt{user1}, e
+um produto, o \texttt{Product2}. No PostgreSQL, relacional, o produto vira uma linha da tabela
+\texttt{inventory}. No MongoDB, documento, vira um documento do catálogo, com a categoria e o
+estoque aninhados. No Cassandra, colunar, as atividades do \texttt{user1} ficam numa partição,
+em ordem de horário: estoque, seleção, carrinho e compra. No Redis, chave-valor, o carrinho e a
+sessão viram pares de chave e valor. E no Neo4j, grafo, usuário e produto viram nós ligados por
+uma aresta \texttt{PURCHASED}.
+
+\begin{naoesquecer}
+  \item A seta em cada painel diz de qual CSV o dado veio.
+  \item Um mesmo cenário em cinco modelos de dados.
+\end{naoesquecer}
+
+\slideroteiro{escrita}{1}{30}{Escrita em lote e leitura em blocos}
+\oquedizer
+Duas decisões de projeto explicam o desempenho. A \textbf{escrita em lote} converte uma coluna
+inteira de uma vez e grava muitos registros por comando: ficou 9,3 vezes mais rápida que gravar
+linha a linha. A \textbf{leitura em blocos} lê cada arquivo aos pedaços: o pico de memória ficou
+12,5 vezes menor que materializar a fonte inteira, isto é, carregá-la toda na memória, com 10\%
+a mais de tempo.
+
+\begin{naoesquecer}
+  \item Os ganhos foram medidos com uma versão anterior da ferramenta e só justificam as
+        decisões; o Capítulo~5 mede a versão final.
+  \item Se pedirem os números: 14,54 contra 135,74~s em dez mil linhas, no modo multifonte;
+        pico de 75,9 contra 950,7~MB em cem mil linhas.
+\end{naoesquecer}
+
+\slideroteiro{gui}{2}{45}{Interface gráfica}
+\oquedizer
+Por fim, a interface gráfica. Cada campo do formulário (os arquivos de configuração, as opções e
+as fontes CSV) vira uma opção do comando, e o comando completo aparece embaixo, sempre visível.
+Aqui, no modo combinado e com \texttt{-{}-dry-run}. A GUI não tem um caminho próprio: ela monta e
+executa o mesmo comando da CLI, e valida as configurações e os cabeçalhos antes de executar.
+
+\avanca{} O comando exibido é o comando executado. Este é o resultado de uma simulação: o
+console mostra as contagens e as métricas por fase, e a barra de estado mostra o desfecho e o
+arquivo de log da sessão. Com isso, passo à avaliação.
+
+\begin{naoesquecer}
+  \item A GUI executa a CLI: não há dois comportamentos.
+  \item Frase de passagem para o bloco 3.
+\end{naoesquecer}
+
+\slideroteiro{metodologia}{2}{55}{Metodologia da avaliação}
+\oquedizer
+A avaliação responde a cinco questões de pesquisa: a QP1, quanto custa cada fase e cada SGBD; a
+QP2, como o modo multifonte se compara ao combinado; a QP3, se a ferramenta escala; a QP4,
+quanto custa a validação prévia; e a QP5, como os tamanhos do bloco e do lote afetam o tempo e
+a memória.
+
+\avanca{} Os dados são sintéticos, de um gerador determinístico do cenário de e-commerce: a
+mesma escala e a mesma semente geram sempre os mesmos arquivos. São seis volumes, de
+\num{1024} a \num{262144} linhas. Cada medida foi repetida três vezes, com os SGBDs limpos
+antes, e vale a mediana. Tempo e memória vêm de campanhas separadas, porque medir a memória
+registra cada alocação e deixa a importação 2,5 vezes mais lenta. Tudo rodou num computador só,
+com Windows~11 e 8~GB, e os cinco SGBDs em Docker.
+
+\begin{naoesquecer}
+  \item Volumes: \num{1024} e, a partir de \num{16384}, cada um o dobro do anterior.
+  \item Versões, se pedirem: PostgreSQL 16, Redis 7, MongoDB 7, Neo4j 5 e Cassandra 4.1, este
+        num nó com 1~GB de \textit{heap}.
+  \item Duas campanhas: tempo sem o registro de memória; memória com ele.
+  \item Bloco e lote são os que a ferramenta escolhe sozinha.
+\end{naoesquecer}
+\seperguntarem{``Quanto isso vale fora deste computador?'' $\rightarrow$ \textbf{B12} (ameaças
+à validade).}
+
+\slideroteiro{fases}{2}{50}{Escrita domina; validação prévia custa 1/5}
+\oquedizer
+Primeiro, onde está o tempo, a QP1. No maior volume, \num{262144} linhas no modo multifonte, a
+importação leva 493 segundos, e a escrita é 79,8\% disso; a validação, 13,8\%; a inferência,
+6,3\%. Entre os SGBDs, o Cassandra pesa mais: 54,9\% da importação inteira, porque grava os
+eventos das quatro fontes num nó com só 1~GB de \textit{heap}.
+
+\avanca{} As duas fatias de cima da barra, inferência e validação, são o custo da validação
+prévia, a QP4: entre 18\% e 23\% do tempo total, de \num{16384} linhas em diante. É o preço de
+um erro nos dados ser barrado antes de qualquer gravação.
+
+\begin{naoesquecer}
+  \item Escrita: 79,8\% do tempo; o Cassandra, 54,9\% da importação.
+  \item Vazão, se pedirem: o Redis grava \num{9310} linhas por segundo; o Cassandra, 969.
+\end{naoesquecer}
+\seperguntarem{``Qual a vazão de cada SGBD?'' $\rightarrow$ \textbf{B9}. ``Por que o Cassandra
+é tão lento?'' $\rightarrow$ \textbf{B8}. ``Quanto custa a validação em cada volume?''
+$\rightarrow$ \textbf{B11}.}
+
+\slideroteiro{escala}{1}{55}{Tempo linear: a ferramenta é escalável (QP3)}
+\oquedizer
+Este é o dado mais importante da avaliação: a escalabilidade, a QP3. O gráfico está em escala
+logarítmica nos dois eixos, e a reta tracejada é o crescimento linear. As duas curvas acompanham
+a reta: de \num{16384} a \num{262144} linhas, 16 vezes mais dados custam 12 vezes mais tempo no
+multifonte e 14 no combinado. O tempo por linha fica entre 1,8 e 2,5 milissegundos, sem
+tendência de alta, e o expoente do crescimento é 0,90 no multifonte e 0,95 no combinado, perto
+de 1. A ferramenta é escalável nos volumes medidos.
+
+\begin{naoesquecer}
+  \item Falar devagar: é a conclusão principal da avaliação.
+  \item ``Escalável nos volumes medidos'': até \num{262144} linhas, não além.
+\end{naoesquecer}
+\seperguntarem{``Quanto isso vale fora deste computador?'' $\rightarrow$ \textbf{B12}.}
+
+\slideroteiro{modos}{2}{80}{Multifonte mais organizado; bloco automático}
+\oquedizer
+Por fim, os modos e o bloco. QP2: o combinado leva 7\% mais tempo. O arquivo combinado é 20\%
+maior por causa das células vazias: todos os tipos de evento dividem um cabeçalho só, de 39
+colunas, e cada linha preenche só as do seu tipo, o que deixa 44\% das células vazias. E, na
+gravação, cada SGBD relê o arquivo inteiro: no Redis, a escrita passa de 13,95 para 30,39
+segundos. Mas a maior vantagem do multifonte é a organização: cada arquivo traz só as colunas
+do seu conjunto de dados, pode vir de um sistema diferente e ser trocado sozinho, com a opção
+\texttt{-{}-source}.
+
+\avanca{} QP5: numa campanha exploratória com \num{131072} linhas, ler a maior fonte inteira
+num bloco só foi o mais rápido; um bloco maior só ocupa memória, e o lote não teve efeito
+mensurável. Daí a escolha automática: o lote fica em 2048 linhas, nos dois modos, e o bloco é o
+que lê a maior fonte inteira, limitado pela memória livre. E aqui está a ligação com a QP2: como
+o arquivo combinado é maior, sobra menos memória para o bloco, 38 contra 63~MB. Por isso o pico
+do combinado é menor, 141,9 contra 253,8~MB: o mérito é do bloco, não do modo.
+
+\begin{naoesquecer}
+  \item Combinado: +7\% de tempo, por causa das células vazias; organização é a vantagem do
+        multifonte.
+  \item O pico menor do combinado vem do bloco menor, não do modo.
+\end{naoesquecer}
+\seperguntarem{Tabela do combinado $\rightarrow$ \textbf{B10}. Tempos de cada bloco
+$\rightarrow$ \textbf{B11}. ``Como o bloco é escolhido?'' $\rightarrow$ \textbf{B7}.}
+
+\slideroteiro{contribuicoes}{5}{45}{Contribuições}
+\oquedizer
+Retomo os quatro objetivos, com a evidência de cada um. Primeiro, a configuração em JSON, com
+filtros, chave e nome de coluna, e um JSON Schema para cada arquivo. \avanca{} Segundo, a
+validação prévia em três etapas, mais a verificação dos SGBDs, tudo antes da primeira gravação.
+\avanca{} Terceiro, a avaliação: cinco questões de pesquisa, de \num{1024} a \num{262144}
+linhas, nos cinco SGBDs; o tempo cresce linearmente, e a validação prévia custa cerca de um
+quinto dele. \avanca{} Quarto, o acesso pela CLI, com \texttt{-{}-dry-run}, \texttt{-{}-only}
+e \texttt{-{}-check-dbms}, e pela GUI, que monta e executa o comando, mantendo-o visível.
+
+\avanca{} Em resumo: uma ferramenta importa o mesmo CSV para cinco SGBDs de paradigmas
+diferentes.
+
+\begin{naoesquecer}
+  \item Uma linha por objetivo; a frase-resumo fecha o slide.
+\end{naoesquecer}
+
+\slideroteiro{limitacoes}{2}{45}{Limitações e trabalhos futuros}
+\oquedizer
+As limitações. O ambiente: um computador só, com os cinco SGBDs em contêineres, o que pesa
+sobretudo na escrita do Cassandra. Não há atomicidade entre SGBDs: se a gravação falhar no
+meio, fica uma carga parcial, que a ferramenta não desfaz. A escolha automática do bloco é
+conservadora demais no modo combinado. E os \num{2155} testes cobrem 95\% do código, mas a
+maioria é unitária.
+
+\avanca{} Como trabalhos futuros: editar a configuração na própria GUI, com validação durante a
+digitação; avaliar com milhões de linhas e SGBDs dedicados; aceitar outras entradas, como TSV e
+planilhas Excel; e novos destinos no mesmo núcleo de importação, como um motor de busca.
+
+\begin{naoesquecer}
+  \item O Elasticsearch é só um exemplo de novo destino; não existe no código.
+  \item A falta de atomicidade é a limitação que a banca mais provavelmente vai explorar.
+\end{naoesquecer}
+\seperguntarem{``E se um SGBD cair no meio?'' $\rightarrow$ \textbf{B5}. Validade dos
+resultados $\rightarrow$ \textbf{B12}.}
+
+\slideroteiro{livre}{1}{15}{A ferramenta é livre}
+\oquedizer
+Por fim, a ferramenta é livre: está no GitHub, com licença MIT, e a página de
+\textit{releases} traz os executáveis da CLI e da GUI para Windows e Linux, sem precisar
+instalar o Python. O QR code leva ao repositório.
+
+\begin{naoesquecer}
+  \item O rodapé declara que o trabalho contou com o auxílio do Claude Code (Anthropic).
+\end{naoesquecer}
+
+\slideroteiro{fechamento}{1}{0}{Fechamento}
+\oquedizer
+Obrigado. Fico à disposição para as perguntas.
+
+\begin{naoesquecer}
+  \item As cartas B1 a B13 vêm depois deste slide; o anexo deste roteiro diz a pergunta que
+        cada uma responde.
+\end{naoesquecer}
+
+\clearpage
+\section*{\color{ufscazul}Anexo: cartas na manga}
+Cada carta responde a uma pergunta provável da banca. Elas vêm depois do fechamento, com
+numeração própria (B1 a B13), na ordem em que a teoria de cada uma aparece no relatório.
+
+\begin{description}[style=nextline, leftmargin=1.2cm]
+  \item[B1 Por que configurar à mão?] Por que o mapeamento é escrito em JSON, e não inferido?
+    (§1.1)
+  \item[B2 Importadores nativos] O que cada SGBD já oferece para importar CSV? (§3.1)
+  \item[B3 Resolve \texorpdfstring{$\times$}{x} em aberto] O que o trabalho resolve e o que fica
+    em aberto na persistência poliglota? (Cap.~3)
+  \item[B4 Coerção de tipos] Como a ferramenta decide e converte o tipo de cada coluna?
+    (§4.2.4)
+  \item[B5 Falha no meio da importação] O que acontece se um SGBD cair durante a gravação?
+    (§4.3)
+  \item[B6 Exemplo de execução] Como fica uma execução (simulação com \texttt{-{}-dry-run}),
+    com as contagens por entidade? (§4.3.4)
+  \item[B7 Escolha automática do bloco] Como a ferramenta escolhe o tamanho do bloco?
+    (§4.5.2)
+  \item[B8 Cassandra e o ambiente] Por que o Cassandra é o mais lento? (§5.2)
+  \item[B9 Onde está o tempo, em detalhe] Qual a vazão de cada SGBD? (§5.3.1)
+  \item[B10 Multifonte \texorpdfstring{$\times$}{x} combinado, em detalhe] Quais os números
+    da comparação entre os modos? (§5.3.2)
+  \item[B11 Validação prévia e bloco de leitura, em detalhe] Quanto custa a validação em
+    cada volume, e quanto tempo cada bloco levou? (§5.3.4 e §5.3.5)
+  \item[B12 Ameaças à validade] Quanto os resultados valem fora deste ambiente? (§5.4.1)
+  \item[B13 Referências] Quais obras os slides citam?
+\end{description}
+
+\end{document}

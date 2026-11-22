@@ -4,6 +4,9 @@
 % foi copiado do relatório: campanha final da versão 3.2.0 (benchmarks/v4), cinco questões de
 % pesquisa, seis volumes de 1.024 a 262.144 linhas, bloco e lote da escolha automática.
 % Tempo e memória vêm de campanhas distintas: cada slide declara a sua na "Fonte:".
+% v2.2 (ordem pedida pelo autor): metodologia; QP1 e QP4 (onde está o tempo); QP3 sozinha (o
+% dado mais importante); QP2 e QP5 (os modos e o bloco, ligados pela escolha automática).
+% O que saiu dos slides está nas cartas B8 a B11 e no roteiro de estudo.
 \newcommand{\avfonte}[1]{{\scriptsize\raggedright\color{black!60}Fonte: #1\par}}
 % Legenda abaixo de cada gráfico (regra do orientador); o título do slide diz a conclusão.
 \newcommand{\avlegenda}[1]{{\footnotesize\raggedright #1\par}}
@@ -18,15 +21,21 @@
   avescuro/.style={fill=ufscazul, draw=ufscazul}}
 \newcommand{\avitem}[2]{\destaque{#1}\enspace #2\par\smallskip}
 \newcommand{\avqp}[2]{\makebox[2.4em][l]{\destaque{#1}}#2\par}
-% Tabelas compactas.
+% Tabelas compactas (usadas nas cartas B10 e B11).
 \newcommand{\avtabela}{\footnotesize\setlength{\tabcolsep}{4pt}%
   \setlength{\aboverulesep}{0.3ex}\setlength{\belowrulesep}{0.4ex}}
+% Altura da barra empilhada (slide QP1 e QP4 e carta B9).
+\newcommand{\avH}{24}
+% Painel de conclusão: #1 título, #2 número em destaque, #3 explicação.
+\newcommand{\avconclusao}[3]{%
+  \begin{painel}{#1}{}
+    \centering{\Large\bfseries\color{ufscazul}#2\par}
+    \smallskip\raggedright #3\par
+  \end{painel}}
 
-% Slide 15: metodologia (relatório §5.1, §5.1.1, §5.1.2, §5.2 e Tabela 13)
-% \vspace{0pt} no topo das colunas: alinha as minipages [t] pelo topo.
-% Ordem de revelação pedida pelo autor: 1) as QPs, à esquerda; 2) o texto da metodologia, à
-% direita; 3) o ambiente, abaixo das QPs.
-\begin{frame}{Metodologia da avaliação}
+% Metodologia (relatório §5.1, §5.1.1, §5.1.2, §5.2 e Tabela 13): as QPs e três itens; o
+% ambiente vai para o rodapé, e o custo de medir a memória (2,5x mais lenta) vai para a fala.
+\begin{frame}[label=metodologia]{Metodologia da avaliação}
   \begin{minipage}[t]{0.41\textwidth}
     \vspace{0pt}\footnotesize\tcbset{halign=flush left, before skip=0pt, after skip=1.5mm}
     \begin{painel}{Questões de pesquisa (QP)}{}
@@ -36,136 +45,67 @@
       \avqp{QP4}{Custo da validação prévia}
       \avqp{QP5}{Tamanhos do bloco e do lote}
     \end{painel}
-    \onslide<3->{%
-    \begin{painel}{Ambiente: um computador}{Windows 11, 8 GB de memória}
-      Em Docker: PostgreSQL 16, Redis 7, MongoDB 7, Neo4j~5 e Cassandra 4.1, este em um nó
-      com 1~GB de memória Java (\textit{heap}). Cerca de 920~MB livres.
-    \end{painel}}
   \end{minipage}\hfill
   \begin{minipage}[t]{0.56\textwidth}
-    \vspace{0pt}\footnotesize\raggedright
+    \vspace{0pt}\small\raggedright
     \onslide<2->{%
-      \avitem{Dados sintéticos.}{Gerador determinístico do cenário de e-commerce: a mesma
-        escala $N$ e a mesma semente geram sempre os mesmos arquivos.}
-      \avitem{Volumes.}{Seis, de \num{1024} a \num{262144} linhas; a partir de \num{16384},
-        cada um é o dobro do anterior.}
-      \avitem{Repetições.}{Três por célula (volume e modo), com os SGBDs limpos antes; vale
-        a mediana.}
-      \avitem{Duas campanhas.}{Medir a memória registra cada alocação e deixa a importação
-        $2{,}5\times$ mais lenta, de forma desigual entre as fases. Tempos: campanha sem o
-        registro. Picos de memória: campanha com ele.}
-      \avitem{Bloco e lote.}{Os que a ferramenta escolhe sozinha.}
-      \avfonte{§5.1 e §5.2 do relatório.}}
-  \end{minipage}
+      \avitem{Dados sintéticos}{do cenário de e-commerce, de \num{1024} a \num{262144}
+        linhas.}
+      \avitem{Três repetições}{por medida; vale a mediana.}
+      \avitem{Duas campanhas:}{uma mede o tempo, a outra a memória.}}
+  \end{minipage}\par
+  \vfill
+  \avfonte{§5.1 e §5.2 do relatório. Um computador: Windows 11, 8~GB de memória; os cinco SGBDs
+   em Docker.}
 \end{frame}
 
-% Slide 16: onde está o tempo (relatório §5.3.1; Tabela 15 e Tabela 16).
-% Barra empilhada: alturas proporcionais às participações da Tabela 15, multifonte
-% (inferência 6,3%, validação 13,8%, escrita 79,8% = 393,70 de 493,15 s).
-\newcommand{\avH}{24}
-\begin{frame}{A escrita domina o tempo (QP1)}
-  \begingroup\footnotesize\tcbset{equal height group=avtempo, halign=flush left}
-  \begin{minipage}[t]{0.30\textwidth}
+% QP1 e QP4: onde está o tempo (relatório §5.3.1 e §5.3.4; Tabelas 15 e 19). À esquerda, a
+% barra empilhada da Tabela 15, multifonte (inferência 6,3%, validação 13,8%, escrita 79,8% =
+% 393,70 de 493,15 s); as leituras de inferência e de validação são o custo da validação
+% prévia, e somam 20,2% na Tabela 19 (20,1% com os arredondamentos da Tabela 15). À direita, a
+% faixa da QP4 com a frase do §5.4: "a validação prévia dos dados custa entre 18% e 23% do
+% tempo da importação". A vazão por SGBD e o peso do Cassandra (54,9%) estão na carta B9.
+\newcommand{\avbarra}{%
+  \begin{tikzpicture}[x=1mm, y=1mm, every node/.style={inner sep=1pt}]
+    % de baixo para cima: escrita, validação, inferência
+    \fill[ufscazul]    (0,0)              rectangle (6,{0.798*\avH});
+    \fill[ufscazul!45] (0,{0.798*\avH})   rectangle (6,{0.937*\avH});
+    \fill[ufscborda]   (0,{0.937*\avH})   rectangle (6,\avH);
+    \node[anchor=west, align=left] at (7.5,{0.40*\avH})
+      {\textbf{Escrita} 79,8\%\\{\color{black!60}393,70 de 493,15 s}};
+    \draw[black!45] (6,{0.867*\avH}) -- (7.5,{0.82*\avH})
+      node[anchor=west, text=ufsctexto] {Validação 13,8\%};
+    \draw[black!45] (6,{0.968*\avH}) -- (7.5,{1.05*\avH})
+      node[anchor=west, text=ufsctexto] {Inferência 6,3\%};
+  \end{tikzpicture}}
+\begin{frame}[label=fases]{Escrita domina; validação prévia custa 1/5}
+  \begingroup\footnotesize\tcbset{equal height group=avfases, halign=flush left}
+  \begin{minipage}[t]{0.47\textwidth}
     \vspace{0pt}
-    \begin{painel}{Escrita: 79,8\% do tempo}{}
-      \begin{tikzpicture}[x=1mm, y=1mm, every node/.style={inner sep=1pt}]
-        % de baixo para cima: escrita, validação, inferência
-        \fill[ufscazul]    (0,0)              rectangle (6,{0.798*\avH});
-        \fill[ufscazul!45] (0,{0.798*\avH})   rectangle (6,{0.937*\avH});
-        \fill[ufscborda]   (0,{0.937*\avH})   rectangle (6,\avH);
-        \node[anchor=west, align=left] at (7.5,{0.40*\avH})
-          {\textbf{Escrita} 79,8\%\\{\color{black!60}393,70 de 493,15 s}};
-        \draw[black!45] (6,{0.867*\avH}) -- (7.5,{0.82*\avH})
-          node[anchor=west, text=ufsctexto] {Validação 13,8\%};
-        \draw[black!45] (6,{0.968*\avH}) -- (7.5,{1.05*\avH})
-          node[anchor=west, text=ufsctexto] {Inferência 6,3\%};
-      \end{tikzpicture}\par
+    \begin{painel}{Tempo por fase (QP1)}{}
+      \centering\avbarra\par
       \smallskip
-      \avlegenda{Tempo por fase de uma importação.}
+      \avlegenda{Tempo por fase de uma importação: \num{262144} linhas, multifonte.}
     \end{painel}
   \end{minipage}\hfill
   \onslide<2->{%
-  \begin{minipage}[t]{0.38\textwidth}
+  \begin{minipage}[t]{0.49\textwidth}
     \vspace{0pt}
-    \begin{painel}{Vazão: uma ordem de grandeza}{}
-      \begin{tikzpicture}
-        \begin{axis}[avgrafico, xbar, scale only axis, width=24mm, height=19mm,
-            bar width=7pt, axis x line=none, axis y line*=left,
-            symbolic y coords={Cassandra, Neo4j, PostgreSQL, MongoDB, Redis}, ytick=data,
-            xmin=0, xmax=12500, enlarge y limits=0.15, nodes near coords,
-            nodes near coords style={anchor=west}, point meta=explicit symbolic]
-          \addplot[avescuro] coordinates {(969,Cassandra)[969] (4236,Neo4j)[\num{4236}]
-            (5928,PostgreSQL)[\num{5928}] (6173,MongoDB)[\num{6173}]
-            (9310,Redis)[\num{9310}]};
-        \end{axis}
-      \end{tikzpicture}\par
-      \avlegenda{Vazão de escrita: linhas processadas por segundo.}
-    \end{painel}
-  \end{minipage}}\hfill
-  \onslide<3->{%
-  \begin{minipage}[t]{0.29\textwidth}
-    \vspace{0pt}
-    \begin{painel}{O Cassandra pesa mais}{}
-      \centering
-      {\fontsize{24}{28}\selectfont\bfseries\color{ufscazul}54,9\%\par}
-      {\footnotesize da importação inteira\par}
-      \smallskip\raggedright
-      270,51~s dos 393,70~s da escrita: grava os eventos das quatro fontes, em um nó com
-      1~GB de \textit{heap}.\par
-    \end{painel}
+    \avconclusao{Validação prévia (QP4)}{18\% a 23\%}{do tempo total, de \num{16384} linhas
+      em diante: são as leituras de inferência e de validação, as duas fatias de cima da
+      barra.\par\smallskip
+      \destaque{Em troca:} um erro nos dados é barrado antes de qualquer gravação.}
   \end{minipage}}\par
   \endgroup
   \vfill
-  \avfonte{Tabelas 15 e 16 do relatório; $N = \num{262144}$, multifonte; campanha de tempo.}
+  \avfonte{Tabelas 15 e 19 do relatório; campanha de tempo.}
 \end{frame}
 
-% Slide 17: multifonte versus combinado (relatório §5.3.2; Tabela 17).
-\begin{frame}{Combinado: 7\% mais tempo (QP2)}
-  \begin{minipage}[t]{0.50\textwidth}
-    \vspace{0pt}
-    {\footnotesize\bfseries\color{ufscazul}Multifonte \textit{versus} combinado\par}
-    \smallskip
-    \avtabela
-    \begin{tabular}{@{}l r r@{}}
-      \toprule
-      \bfseries Critério & \bfseries Multifonte & \bfseries Combinado \\
-      \midrule
-      Arquivos (MB)             & 63,26 & 75,92 \\
-      Células vazias            & 0\%   & 44\% \\
-      Bloco de leitura (MB)     & 63    & 38 \\
-      Inferência (s)            & 31,27 & 35,52 \\
-      Validação (s)             & 68,18 & 72,08 \\
-      \destaque{Tempo total (s)} & \destaque{493,15} & \destaque{526,17} \\
-      \destaque{Pico (MB)} & \destaque{253,8} & \destaque{141,9} \\
-      \bottomrule
-    \end{tabular}\par
-    \smallskip
-    {\scriptsize\raggedright\color{black!60}Tempos: campanha de tempo.\\ Picos: campanha de
-     memória.\par}
-  \end{minipage}\hfill
-  \begin{minipage}[t]{0.46\textwidth}
-    \vspace{0pt}\footnotesize\raggedright
-    \avitem{Tempo:}{o arquivo combinado é 20\% maior, e cada SGBD relê o arquivo inteiro
-      na gravação. No Redis, a escrita passa de 13,95 para 30,39~s.}
-    \avitem{Memória:}{o pico menor não é mérito do modo. Limitada pela memória livre, a
-      ferramenta escolheu um bloco menor para o combinado (38 contra 63~MB), e o pico
-      acompanha o bloco.}
-    \avitem{Organização:}{no multifonte, cada arquivo traz só as colunas do seu conjunto
-      de dados, que pode ser trocado sozinho sem editar a configuração
-      (\texttt{-{}-source stock=novo.csv}). O combinado é um arquivo só.}
-  \end{minipage}\par
-  \vfill
-  \avfonte{Tabela 17 do relatório; $N = \num{262144}$.}
-\end{frame}
-
-% Slide 18: escalabilidade (relatório §5.3.3; Tabela 18 e Figura 18). O gráfico repete a
-% Figura 18: escala logarítmica nos dois eixos e reta de crescimento linear a partir do
-% ponto de 16.384 linhas do multifonte. Rótulos dos eixos explícitos (o formato numérico do
-% tema não se aplica aos rótulos de eixos logarítmicos). A pedido do orientador, o slide só
-% tem o gráfico e a conclusão; os números de apoio (tempo por linha de 1,8 a 2,5 ms,
-% expoentes 0,90 e 0,95, pico de memória que acompanha o bloco) ficam para a fala e a
-% arguição.
-\begin{frame}{Tempo linear: a ferramenta é escalável (QP3)}
+% QP3: escalabilidade (relatório §5.3.3; Tabela 18 e Figura 18), num slide só, por ser o dado
+% mais importante. O gráfico repete a Figura 18: escala logarítmica nos dois eixos e reta de
+% crescimento linear a partir do ponto de 16.384 linhas do multifonte. Os números de apoio
+% (tempo por linha de 1,8 a 2,5 ms, expoentes 0,90 e 0,95) ficam para a fala e a arguição.
+\begin{frame}[label=escala]{Tempo linear: a ferramenta é escalável (QP3)}
   \begin{minipage}[c]{0.64\textwidth}
     \centering
     \begin{tikzpicture}
@@ -204,59 +144,33 @@
   \avfonte{Tabela 18 e Figura 18 do relatório; campanha de tempo.}
 \end{frame}
 
-% Slide 19: custo da validação prévia e tamanhos do bloco e do lote (relatório §5.3.4 e
-% §5.3.5; Tabelas 19, 20 e 21). A campanha exploratória (bloco e lote) é outra campanha:
-% N = 131.072, multifonte.
-\begin{frame}{Validação prévia e bloco de leitura (QP4, QP5)}
-  \begin{minipage}[t]{0.36\textwidth}
-    \vspace{0pt}
-    {\footnotesize\raggedright\bfseries\color{ufscazul}Inferência e validação, em \% do
-     tempo total\par}
-    \smallskip
-    \avtabela
-    \begin{tabular}{@{}r r r@{}}
-      \toprule
-      \bfseries Linhas & \bfseries Multifonte & \bfseries Combinado \\
-      \midrule
-      \num{1024}   & 28,9\% & 29,3\% \\
-      \num{16384}  & 19,3\% & 22,9\% \\
-      \num{32768}  & 19,1\% & 23,0\% \\
-      \num{65536}  & 17,9\% & 19,3\% \\
-      \num{131072} & 17,9\% & 18,2\% \\
-      \num{262144} & 20,2\% & 20,4\% \\
-      \bottomrule
-    \end{tabular}\par
-    \smallskip
-    \raggedright\footnotesize
-    \destaque{Em troca:} nenhum problema detectado chega a uma gravação parcial.\par
+% QP2 e QP5 (relatório §5.3.2 e §5.3.5; Tabelas 17, 20 e 21). QP2: o combinado leva 7% mais
+% tempo; o arquivo é 20% maior porque todos os tipos de evento dividem um cabeçalho de 39
+% colunas e 44% das células ficam vazias; a principal vantagem do multifonte é a organização
+% (§5.3.2: "Além do desempenho, o modo multifonte tem vantagens de organização"). QP5: ler a
+% maior fonte inteira é o mais rápido; o lote não tem efeito mensurável e fica fixo em 2.048
+% linhas nos dois modos. Gancho com a QP2 (§5.3.2): a memória livre limitou o bloco, e mais no
+% combinado, cujo arquivo é maior (38 contra 63 MB); daí o pico menor do combinado (141,9
+% contra 253,8 MB), que o lê em cerca de quinze blocos, contra quatro leituras em blocos da
+% maior fonte do multifonte. As tabelas estão nas cartas B10 e B11.
+\begin{frame}[label=modos]{Multifonte mais organizado; bloco automático}
+  \begingroup\footnotesize\tcbset{equal height group=avmodos, halign=flush left}
+  \begin{minipage}[t]{0.485\textwidth}\vspace{0pt}
+    \avconclusao{Multifonte \textit{versus} combinado (QP2)}{+7\%}{de tempo no combinado: o
+      arquivo é 20\% maior por causa das \destaque{células vazias} (44\%; um cabeçalho só,
+      de 39 colunas).\par\smallskip
+      \destaque{Maior vantagem do multifonte: a organização.} Cada arquivo traz só as
+      colunas do seu conjunto de dados e pode ser trocado sozinho (\texttt{-{}-source}).}
   \end{minipage}\hfill
   \onslide<2->{%
-  \begin{minipage}[t]{0.60\textwidth}
-    \vspace{0pt}
-    {\footnotesize\bfseries\color{ufscazul}Tamanho do bloco de leitura (campanha
-     exploratória)\par}
-    \smallskip
-    \avtabela
-    \begin{tabular}{@{}r r r r@{}}
-      \toprule
-      \bfseries Bloco (MB) & \bfseries Tempo (s) & \bfseries Diferença
-        & \bfseries Pico (MB) \\
-      \midrule
-       16 & 275,08 & $+10{,}9\%$ & 103,6 \\
-       32 & 304,36 & $+22{,}7\%$ & 127,9 \\
-       64 & 282,19 & $+13{,}8\%$ & 144,9 \\
-      \destaque{128} & \destaque{248,00} & \textemdash & \destaque{195,5} \\
-      256 & 251,00 & $+1{,}2\%$ & 195,5 \\
-      \bottomrule
-    \end{tabular}\par
-    \smallskip
-    \raggedright\footnotesize
-    \destaque{Bloco:} ler a maior fonte inteira (95,5~MB) é o mais rápido; um bloco maior
-    só ocupa memória.\par
-    \destaque{Lote:} de 512 a \num{8192} linhas, sem efeito acima do ruído da medição.\par
-    \smallskip
-    Daí sai a \destaque{escolha automática} dos dois tamanhos.\par
+  \begin{minipage}[t]{0.485\textwidth}\vspace{0pt}
+    \avconclusao{Bloco e lote (QP5)}{automáticos}{Ler a maior fonte inteira é o mais rápido;
+      o lote não tem efeito e fica em \num{2048} linhas nos dois modos.\par\smallskip
+      \destaque{Ligação com a QP2:} a memória livre limita o bloco, e mais no combinado,
+      que é maior: 38 contra 63~MB. Daí o pico menor do combinado.}
   \end{minipage}}\par
+  \endgroup
   \vfill
-  \avfonte{Tabelas 19, 20 e 21 do relatório. Bloco e lote: $N = \num{131072}$, multifonte.}
+  \avfonte{Tabelas 17, 20 e 21 do relatório; QP2 em \num{262144} linhas; QP5 em \num{131072}
+   linhas, multifonte.}
 \end{frame}

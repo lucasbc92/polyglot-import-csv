@@ -1,7 +1,8 @@
 \roteiro{4}
 
-% Slide 20: contribuições (relatório §1.2; evidências no Cap. 4 e no Cap. 5)
-% Os objetivos repetem a redação do slide 5 (secoes/1-introducao.tex). Cada linha aparece
+% Slide 18 (20 na v2.1): contribuições (relatório §1.2; evidências no Cap. 4 e no Cap. 5)
+% Os objetivos repetem a redação completa do relatório; o slide 5 da v2.2 mostra só os
+% rótulos. Cada linha aparece
 % num passo. Evidências: §4.2 (filters, is_key, schema_column; os dois arquivos e os seus
 % JSON Schema); §4.2.4 e §4.3 (as três etapas de validação e a verificação dos SGBDs, todas
 % antes da primeira gravação); §5.1 e §5.3.3 (QP1-QP5, volumes, crescimento linear); §4.1 e
@@ -9,7 +10,7 @@
 % \leavevmode antes de \onslide: sem ele, cada célula p ganha uma linha em branco no topo.
 \newcommand{\cmobjetivo}[3]{% #1 passo, #2 objetivo, #3 evidência
   \leavevmode\onslide<#1->{#2} & \leavevmode\onslide<#1->{#3} \\}
-\begin{frame}{Contribuições}
+\begin{frame}[label=contribuicoes]{Contribuições}
   \footnotesize
   \setlength{\tabcolsep}{3pt}
   \renewcommand{\arraystretch}{1.25}
@@ -41,13 +42,13 @@
   \vspace{2pt}
 \end{frame}
 
-% Slide 21: limitações e trabalhos futuros (relatório Cap. 6, chapters/consideracoes.tex:
+% Slide 19 (21 na v2.1): limitações e trabalhos futuros (relatório Cap. 6, chapters/consideracoes.tex:
 % limitações no 4.º parágrafo; §6.1, atividades futuras). O Elasticsearch não existe no
 % código: é um exemplo de novo destino (decisão do autor), dentro do item "generalização do
 % núcleo de importação" do §6.1. Testes: "gerados automaticamente" é informação do autor
 % (2026-11-18), não está no relatório; a cobertura é de instruções (coverage 7.17.3,
 % --source=src/polyglotimportcsv, suíte inteira: 2155 testes, 4722 instruções, 95%).
-\begin{frame}{Limitações e trabalhos futuros}
+\begin{frame}[label=limitacoes]{Limitações e trabalhos futuros}
   \begingroup\footnotesize\tcbset{equal height group=cmfim, halign=flush left}
   \begin{minipage}[t]{0.485\textwidth}\vspace{0pt}
     \begin{painel}{Limitações}{}
@@ -85,11 +86,11 @@
   {\scriptsize\color{black!60}Fonte: Cap.~6 do relatório.\par}
 \end{frame}
 
-% Slide 22: onde obter a ferramenta (pedido do orientador: mostrar, antes da contracapa, que
+% Slide 20 (22 na v2.1): onde obter a ferramenta (pedido do orientador: mostrar, antes da contracapa, que
 % a ferramenta é livre). Repositório público com licença MIT (LICENSE); a release v3.2.0
 % traz os executáveis da CLI e da GUI para Windows e Linux (polyglotimportcsv[-gui]-v3.2.0-
 % {windows,linux}-x64.zip), que dispensam a instalação do Python (relatório §4.1, nota).
-\begin{frame}{A ferramenta é livre}
+\begin{frame}[label=livre]{A ferramenta é livre}
   \begin{minipage}[c]{0.62\textwidth}
     \destaque{Código aberto no GitHub}\par
     \smallskip

@@ -38,6 +38,7 @@
 *.snm
 *.vrb
 apresentacao/apresentacao.pdf
+apresentacao/roteiro-estudo.pdf
 apresentacao/render/
 
 # --- Artefatos tex4ht / make4ht / htlatex ---

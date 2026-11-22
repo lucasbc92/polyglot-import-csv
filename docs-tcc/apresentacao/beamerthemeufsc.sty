@@ -99,11 +99,12 @@
       {\huge\bfseries\color{ufscazul} Obrigado! Perguntas?\par}
       \vspace{0.024\paperwidth}
       {\small\bfseries Lucas Bueno Cesario\par}}}%
-   \begin{frame}[plain]\typeout{FECHAMENTO-NUMERO=\the\c@framenumber}\end{frame}}}
+   \begin{frame}[plain,label=fechamento]\typeout{FECHAMENTO-NUMERO=\the\c@framenumber}\end{frame}}}
 
 % ---------------------------------------------------------------- roteiro
 % \roteiro{0}: frame numerado que apresenta o roteiro, um bloco por página. A frase de cada
-%   bloco aparece só na página dele (o espaço fica reservado, para os títulos não saltarem).
+%   bloco aparece só na página dele e depois some sem deixar espaço (pedido do autor na v2.2:
+%   a lista fica compacta depois de apresentada).
 % \roteiro{n}, n = 1..4: frame [noframenumbering] com o bloco n em destaque e só a frase
 %   dele; os outros blocos ficam só com o título.
 % \ufsc@bloco{n}{título}{explicação}
@@ -112,9 +113,7 @@
   \ifnum\ufsc@atual=0\relax
     \onslide<#1->\relax
     {\color{ufscazul}\bfseries\makebox[1.6em][l]{#1}}#2\par
-    \onslide<#1>\relax
-    \ufsc@expl{black!65}{#3}%
-    \onslide<#1->\relax
+    \only<#1>{\ufsc@expl{black!65}{#3}}%
   \else\ifnum\ufsc@atual=#1\relax
     {\color{ufscazul}\bfseries\makebox[1.6em][l]{#1}#2}\par
     \ufsc@expl{black!65}{#3}%
@@ -136,7 +135,7 @@
 \newcommand{\roteiro}[1]{%
   \def\ufsc@atual{#1}%
   \ifnum#1=0\relax
-    \begin{frame}{Roteiro}\ufsc@roteiro\end{frame}%
+    \begin{frame}[label=roteiro]{Roteiro}\ufsc@roteiro\end{frame}%
   \else
     \begin{frame}[noframenumbering]{Roteiro}\ufsc@roteiro\end{frame}%
   \fi}

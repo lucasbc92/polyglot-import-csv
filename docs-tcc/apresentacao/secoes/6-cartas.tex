@@ -1,4 +1,4 @@
-% Cartas na manga (B1-B10): slides de apoio para perguntas previsíveis da banca.
+% Cartas na manga (B1-B13, na ordem em que a teoria aparece no relatório): slides de apoio para perguntas previsíveis da banca.
 % O rodapé mostra B1, B2, ... (\cartasnamanga = \appendix, com appendixnumberbeamer).
 % Sem sobreposições: cada carta aparece inteira quando chamada.
 
@@ -14,90 +14,68 @@
 % Linha de fonte ou observação ao pé da carta.
 \newcommand{\bknota}[1]{{\scriptsize\raggedright\color{black!60}#1\par}}
 
-% B1: exemplo de execução (relatório §4.3.4, Tabela 12)
-% O comando é o lstlisting de ch4proposta.tex (§4.3.4): mesmas opções, mesma ordem, quebras
-% de linha só entre opções. A explicação de --dry-run segue o parágrafo logo abaixo do
-% comando ("executa os passos 1, 2, 4 e 5 ... mas não abre conexão com nenhum SGBD"). As
-% contagens são as de tab:dryrun (linhas a gravar, após os filtros e a divisão por each,
-% antes da eliminação de duplicatas), em duas metades lado a lado.
-\lstdefinestyle{bashgrande}{style=bashslide, basicstyle=\ttfamily\footnotesize}
-\begin{frame}[fragile]{Exemplo de execução}
-  \begin{tcolorbox}[colback=ufscfundo, colframe=ufscborda, boxrule=0.5pt, arc=0.6mm,
-      boxsep=0pt, left=2mm, right=2mm, top=0.6mm, bottom=0.6mm]
-    \footnotesize
-    \begin{tabular}{@{}l@{\hspace{6mm}}l@{}}
-      \lstinline[style=bashgrande]|python -m polyglotimportcsv \|
-        & {\color{black!60}$\leftarrow$}\enspace executa a ferramenta \\
-      \lstinline[style=bashgrande]|  --config data/ecommerce/import_config.json \|
-        & {\color{black!60}$\leftarrow$}\enspace arquivo de importação \\
-      \lstinline[style=bashgrande]|  --dbms-config data/ecommerce/dbms_config.json \|
-        & {\color{black!60}$\leftarrow$}\enspace arquivo de conexão \\
-      \lstinline[style=bashgrande]|  --dry-run|
-        & {\color{black!60}$\leftarrow$}\enspace valida e conta, sem gravar \\
-    \end{tabular}
-  \end{tcolorbox}
-  \par\smallskip
-  \par\vspace{-2mm}\begingroup\footnotesize\bfseries\color{ufscazul} Linhas a gravar, segundo o
-  \texttt{-{}-dry-run}\hfill\scriptsize\mdseries\color{black!60}
-  após os filtros, antes de eliminar duplicatas\par\endgroup
-  \scriptsize
-  \setlength{\tabcolsep}{3pt}
-  \setlength{\aboverulesep}{0.15ex}\setlength{\belowrulesep}{0.3ex}
-  \begin{minipage}[t]{0.49\textwidth}
-    \begin{tabular}[t]{@{}l E{37mm} E{13mm}@{}}
-      \toprule
-      \bfseries SGBD & \bfseries Destino & \bfseries Linhas \\
-      \midrule
-      PostgreSQL & \texttt{categories}         & 8 \\
-      PostgreSQL & \texttt{products}           & 8 \\
-      PostgreSQL & \texttt{inventory}          & 8 \\
-      PostgreSQL & \texttt{orders}             & 8 \\
-      MongoDB    & \texttt{product\_catalog}   & 8 \\
-      MongoDB    & \texttt{orders\_state\_SP}  & 2 \\
-      MongoDB    & \texttt{orders\_state\_}CA, RJ, RS, SC, SE e TO & 1 cada \\
-      \bottomrule
-    \end{tabular}
-  \end{minipage}\hfill
-  \begin{minipage}[t]{0.49\textwidth}
-    \begin{tabular}[t]{@{}l l E{27mm}@{}}
-      \toprule
-      \bfseries SGBD & \bfseries Destino & \bfseries Linhas \\
-      \midrule
-      Cassandra & \texttt{user\_activity\_log} & 32 (união das 4 fontes) \\
-      Redis & \texttt{shopping\_cart}     & 8 \\
-      Redis & \texttt{user\_session}      & 8 \\
-      Neo4j & nó \texttt{User}            & 8 \\
-      Neo4j & nó \texttt{Product}         & 8 \\
-      Neo4j & aresta \texttt{PURCHASED}   & 8 (uma por linha da fonte \texttt{purchase}) \\
-      \bottomrule
-    \end{tabular}
-  \end{minipage}\par
-  {\scriptsize\color{black!60}Fonte: Tabela 12 do relatório.\par}
+% B1: por que configurar à mão? (relatório §1.1: mapeamento declarativo em JSON, que permite
+% a validação prévia; §2.1: a escolha do SGBD depende de como se quer manipular os dados;
+% §4.2: mapeamento automático, tipos inferidos; §3.3: carga inicial e reprodutível).
+% O uso de LLM não existe na ferramenta: o slide o trata como caminho possível, fora do
+% escopo do trabalho.
+\begin{frame}{Por que configurar à mão?}
+  \bkpar{b3}{%
+    \begin{painel}{Mapeamento declarativo}{o que a ferramenta faz hoje}
+      \begin{bklista}
+        \item Quem projeta decide que dado vai para cada SGBD, com chaves, partições e
+              arestas.
+        \item O arquivo pode ser revisto, e o \texttt{-{}-dry-run} o valida sem gravar.
+        \item A mesma configuração reproduz a mesma carga.
+        \item Parte já é automática: sem \texttt{columns}, entram todas as colunas, com
+              tipos inferidos.
+      \end{bklista}
+    \end{painel}}{%
+    \begin{painel}{Mapeamento inferido}{por um modelo de linguagem (LLM)}
+      \begin{bklista}
+        \item Poupa a escrita inicial do arquivo.
+        \item O CSV não diz como a aplicação consulta os dados. É isso que decide o SGBD de
+              cada dado.
+        \item A proposta ainda precisa de revisão.
+      \end{bklista}
+    \end{painel}}
+  \smallskip
+  \footnotesize\destaque{Complementares:} um LLM poderia propor o arquivo de importação, e o
+  \texttt{-{}-dry-run} o conferiria sem gravar. Caminho possível, fora do escopo deste
+  trabalho.\par
 \end{frame}
 
-% B2: falha no meio da importação. Conferido no código da 3.0.0: runner.py (etapas 1 e 2,
-% cabeçalhos e _require_dbms antes de ler as linhas de dados); stream_runner.py (leituras de
-% inferência e de validação antes da primeira gravação; depois, um SGBD por vez, na ordem de
-% validation.DBMS_NAMES, sem desfazer; uma falha na gravação termina com código 1 e a mensagem
-% "already written: ..."); sinks: ON CONFLICT DO NOTHING com chave no PostgreSQL, INSERT do
-% Cassandra (upsert), SET do Redis, MERGE do Neo4j, insert_many do MongoDB (sem _id derivado
-% da chave; com um _id mapeado, a reexecução para na chave repetida). Coerente com o slide 23.
-\begin{frame}{Falha no meio da importação}
-  \small
-  \begin{itemize}
-    \setlength{\itemsep}{5pt}
-    \item \destaque{Antes de gravar}, as três etapas de validação conferem configuração e
-          dados, e todos os SGBDs destino precisam responder. Qualquer falha: nada é gravado.
-    \item \destaque{Um SGBD por vez}, em lotes: PostgreSQL, MongoDB, Cassandra, Redis, Neo4j.
-    \item \destaque{Sem atomicidade entre SGBDs} (em aberto, carta B3): não há transação
-          comum nem desfazer (\textit{rollback}).
-    \item \destaque{Falha durante a gravação}, como a queda de um SGBD: os anteriores ficam
-          gravados, o atual fica parcial, os seguintes ficam vazios; a saída lista os já
-          gravados.
-    \item \destaque{Reexecução} com \texttt{-{}-only}: com chave, PostgreSQL, Cassandra, Redis
-          e Neo4j não duplicam. No MongoDB, sem \texttt{\_id} mapeado, duplica documentos;
-          com \texttt{\_id}, para na chave repetida.
-  \end{itemize}
+% B2: importadores nativos (relatório §3.1, com a documentação oficial de cada SGBD).
+% Comparação só qualitativa: o Cap. 5 não mede o desempenho desses importadores.
+\begin{frame}{Importadores nativos: o que cada um exige}
+  \footnotesize
+  \setlength{\tabcolsep}{3pt}
+  \renewcommand{\arraystretch}{1.1}
+  \begin{tabular}{@{}E{0.12\textwidth}E{0.25\textwidth}E{0.59\textwidth}@{}}
+    \toprule
+    \bfseries SGBD & \bfseries Importador & \bfseries O que exige \\
+    \midrule
+    PostgreSQL & \texttt{COPY}
+      & colunas na ordem do CSV; arquivo na máquina do servidor; permissão de
+        superusuário \\
+    Redis & \texttt{redis-cli -{}-pipe}
+      & arquivo prévio com os comandos (\texttt{SET chave valor}); resumo só com os totais
+        de erros e respostas \\
+    MongoDB & \texttt{mongoimport}
+      & banco, coleção e formato por parâmetros; uma coleção por comando \\
+    Cassandra & \texttt{cqlsh}, \texttt{sstableloader}
+      & tipos e colunas iguais aos da tabela; o \texttt{sstableloader} exige SSTables (formato próprio) \\
+    Neo4j & \texttt{neo4j-admin import}
+      & CSVs separados para nós e para relacionamentos; banco novo, vazio \\
+    \midrule
+    \multicolumn{2}{@{}l}{\destaque{Polyglot Import CSV}}
+      & \destaque{o mesmo CSV nos cinco SGBDs: um arquivo de importação, validação prévia e
+        \texttt{-{}-dry-run}} \\
+    \bottomrule
+  \end{tabular}\par
+  \vfill
+  \bknota{Comparação qualitativa: o Cap.~5 não mede esses importadores. Fonte: §3.1 do
+    relatório.}
 \end{frame}
 
 % B3: resolve x em aberto (Araujo, Silva e Mello, ERBD 2025, §6 Conclusão, p. 9 do PDF):
@@ -174,71 +152,137 @@
   \bknota{Política de coerção configurável: trabalho futuro (Cap.~6 do relatório).}
 \end{frame}
 
-% B5: por que configurar à mão? (relatório §1.1: mapeamento declarativo em JSON, que permite
-% a validação prévia; §2.1: a escolha do SGBD depende de como se quer manipular os dados;
-% §4.2: mapeamento automático, tipos inferidos; §3.3: carga inicial e reprodutível).
-% O uso de LLM não existe na ferramenta: o slide o trata como caminho possível, fora do
-% escopo do trabalho.
-\begin{frame}{Por que configurar à mão?}
-  \bkpar{b3}{%
-    \begin{painel}{Mapeamento declarativo}{o que a ferramenta faz hoje}
-      \begin{bklista}
-        \item Quem projeta decide que dado vai para cada SGBD, com chaves, partições e
-              arestas.
-        \item O arquivo pode ser revisto, e o \texttt{-{}-dry-run} o valida sem gravar.
-        \item A mesma configuração reproduz a mesma carga.
-        \item Parte já é automática: sem \texttt{columns}, entram todas as colunas, com
-              tipos inferidos.
-      \end{bklista}
-    \end{painel}}{%
-    \begin{painel}{Mapeamento inferido}{por um modelo de linguagem (LLM)}
-      \begin{bklista}
-        \item Poupa a escrita inicial do arquivo.
-        \item O CSV não diz como a aplicação consulta os dados. É isso que decide o SGBD de
-              cada dado.
-        \item A proposta ainda precisa de revisão.
-      \end{bklista}
-    \end{painel}}
-  \smallskip
-  \footnotesize\destaque{Complementares:} um LLM poderia propor o arquivo de importação, e o
-  \texttt{-{}-dry-run} o conferiria sem gravar. Caminho possível, fora do escopo deste
-  trabalho.\par
+% B5: falha no meio da importação. Conferido no código da 3.0.0: runner.py (etapas 1 e 2,
+% cabeçalhos e _require_dbms antes de ler as linhas de dados); stream_runner.py (leituras de
+% inferência e de validação antes da primeira gravação; depois, um SGBD por vez, na ordem de
+% validation.DBMS_NAMES, sem desfazer; uma falha na gravação termina com código 1 e a mensagem
+% "already written: ..."); sinks: ON CONFLICT DO NOTHING com chave no PostgreSQL, INSERT do
+% Cassandra (upsert), SET do Redis, MERGE do Neo4j, insert_many do MongoDB (sem _id derivado
+% da chave; com um _id mapeado, a reexecução para na chave repetida). Coerente com o slide 23.
+\begin{frame}{Falha no meio da importação}
+  \small
+  \begin{itemize}
+    \setlength{\itemsep}{5pt}
+    \item \destaque{Antes de gravar}, as três etapas de validação conferem configuração e
+          dados, e todos os SGBDs destino precisam responder. Qualquer falha: nada é gravado.
+    \item \destaque{Um SGBD por vez}, em lotes: PostgreSQL, MongoDB, Cassandra, Redis, Neo4j.
+    \item \destaque{Sem atomicidade entre SGBDs} (em aberto, carta B3): não há transação
+          comum nem desfazer (\textit{rollback}).
+    \item \destaque{Falha durante a gravação}, como a queda de um SGBD: os anteriores ficam
+          gravados, o atual fica parcial, os seguintes ficam vazios; a saída lista os já
+          gravados.
+    \item \destaque{Reexecução} com \texttt{-{}-only}: com chave, PostgreSQL, Cassandra, Redis
+          e Neo4j não duplicam. No MongoDB, sem \texttt{\_id} mapeado, duplica documentos;
+          com \texttt{\_id}, para na chave repetida.
+  \end{itemize}
 \end{frame}
 
-% B6: importadores nativos (relatório §3.1, com a documentação oficial de cada SGBD).
-% Comparação só qualitativa: o Cap. 5 não mede o desempenho desses importadores.
-\begin{frame}{Importadores nativos: o que cada um exige}
-  \footnotesize
+% B6: exemplo de execução (relatório §4.3.4, Tabela 12)
+% O comando é o lstlisting de ch4proposta.tex (§4.3.4): mesmas opções, mesma ordem, quebras
+% de linha só entre opções. A explicação de --dry-run segue o parágrafo logo abaixo do
+% comando ("executa os passos 1, 2, 4 e 5 ... mas não abre conexão com nenhum SGBD"). As
+% contagens são as de tab:dryrun (linhas a gravar, após os filtros e a divisão por each,
+% antes da eliminação de duplicatas), em duas metades lado a lado.
+\lstdefinestyle{bashgrande}{style=bashslide, basicstyle=\ttfamily\footnotesize}
+\begin{frame}[fragile]{Exemplo de execução}
+  \begin{tcolorbox}[colback=ufscfundo, colframe=ufscborda, boxrule=0.5pt, arc=0.6mm,
+      boxsep=0pt, left=2mm, right=2mm, top=0.6mm, bottom=0.6mm]
+    \footnotesize
+    \begin{tabular}{@{}l@{\hspace{6mm}}l@{}}
+      \lstinline[style=bashgrande]|python -m polyglotimportcsv \|
+        & {\color{black!60}$\leftarrow$}\enspace executa a ferramenta \\
+      \lstinline[style=bashgrande]|  --config data/ecommerce/import_config.json \|
+        & {\color{black!60}$\leftarrow$}\enspace arquivo de importação \\
+      \lstinline[style=bashgrande]|  --dbms-config data/ecommerce/dbms_config.json \|
+        & {\color{black!60}$\leftarrow$}\enspace arquivo de conexão \\
+      \lstinline[style=bashgrande]|  --dry-run|
+        & {\color{black!60}$\leftarrow$}\enspace valida e conta, sem gravar \\
+    \end{tabular}
+  \end{tcolorbox}
+  \par\smallskip
+  \par\vspace{-2mm}\begingroup\footnotesize\bfseries\color{ufscazul} Linhas a gravar, segundo o
+  \texttt{-{}-dry-run}\hfill\scriptsize\mdseries\color{black!60}
+  após os filtros, antes de eliminar duplicatas\par\endgroup
+  \scriptsize
   \setlength{\tabcolsep}{3pt}
-  \renewcommand{\arraystretch}{1.1}
-  \begin{tabular}{@{}E{0.12\textwidth}E{0.25\textwidth}E{0.59\textwidth}@{}}
-    \toprule
-    \bfseries SGBD & \bfseries Importador & \bfseries O que exige \\
-    \midrule
-    PostgreSQL & \texttt{COPY}
-      & colunas na ordem do CSV; arquivo na máquina do servidor; permissão de
-        superusuário \\
-    Redis & \texttt{redis-cli -{}-pipe}
-      & arquivo prévio com os comandos (\texttt{SET chave valor}); resumo só com os totais
-        de erros e respostas \\
-    MongoDB & \texttt{mongoimport}
-      & banco, coleção e formato por parâmetros; uma coleção por comando \\
-    Cassandra & \texttt{cqlsh}, \texttt{sstableloader}
-      & tipos e colunas iguais aos da tabela; o \texttt{sstableloader} exige SSTables (formato próprio) \\
-    Neo4j & \texttt{neo4j-admin import}
-      & CSVs separados para nós e para relacionamentos; banco novo, vazio \\
-    \midrule
-    \multicolumn{2}{@{}l}{\destaque{Polyglot Import CSV}}
-      & \destaque{o mesmo CSV nos cinco SGBDs: um arquivo de importação, validação prévia e
-        \texttt{-{}-dry-run}} \\
-    \bottomrule
-  \end{tabular}\par
-  \vfill
-  \bknota{Comparação qualitativa: o Cap.~5 não mede esses importadores. Fonte: §3.1 do
-    relatório.}
+  \setlength{\aboverulesep}{0.15ex}\setlength{\belowrulesep}{0.3ex}
+  \begin{minipage}[t]{0.49\textwidth}
+    \begin{tabular}[t]{@{}l E{37mm} E{13mm}@{}}
+      \toprule
+      \bfseries SGBD & \bfseries Destino & \bfseries Linhas \\
+      \midrule
+      PostgreSQL & \texttt{categories}         & 8 \\
+      PostgreSQL & \texttt{products}           & 8 \\
+      PostgreSQL & \texttt{inventory}          & 8 \\
+      PostgreSQL & \texttt{orders}             & 8 \\
+      MongoDB    & \texttt{product\_catalog}   & 8 \\
+      MongoDB    & \texttt{orders\_state\_SP}  & 2 \\
+      MongoDB    & \texttt{orders\_state\_}CA, RJ, RS, SC, SE e TO & 1 cada \\
+      \bottomrule
+    \end{tabular}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.49\textwidth}
+    \begin{tabular}[t]{@{}l l E{27mm}@{}}
+      \toprule
+      \bfseries SGBD & \bfseries Destino & \bfseries Linhas \\
+      \midrule
+      Cassandra & \texttt{user\_activity\_log} & 32 (união das 4 fontes) \\
+      Redis & \texttt{shopping\_cart}     & 8 \\
+      Redis & \texttt{user\_session}      & 8 \\
+      Neo4j & nó \texttt{User}            & 8 \\
+      Neo4j & nó \texttt{Product}         & 8 \\
+      Neo4j & aresta \texttt{PURCHASED}   & 8 (uma por linha da fonte \texttt{purchase}) \\
+      \bottomrule
+    \end{tabular}
+  \end{minipage}\par
+  {\scriptsize\color{black!60}Fonte: Tabela 12 do relatório.\par}
 \end{frame}
 
-% B7: Cassandra e o ambiente (relatório §5.2; tab:escrita-sgbd = Tabela 16, N = 262.144,
+% B7: a escolha automática do bloco (relatório §4.5.2 e §5.3.5; tab:qp5-auto = Tabela 22;
+% conferência do modelo de pico no último parágrafo do §5.3.5).
+\begin{frame}{A escolha automática do bloco}
+  \begin{minipage}[t]{0.42\textwidth}
+    \vspace{0pt}
+    {\footnotesize\raggedright\bfseries\color{ufscazul}Bloco escolhido na campanha final,
+     em MB\par}
+    \smallskip
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \renewcommand{\arraystretch}{1.1}
+    \begin{tabular}{@{}r r r@{}}
+      \toprule
+      \bfseries Linhas & \bfseries Multifonte & \bfseries Combinado \\
+      \midrule
+      \num{1024}   & 16 & 16 \\
+      \num{16384}  & 16 & 35 \\
+      \num{32768}  & 24 & 71 \\
+      \num{65536}  & 48 & 141 \\
+      \num{131072} & 97 & 116$^{*}$ \\
+      \num{262144} & 63$^{*}$ & 38$^{*}$ \\
+      \bottomrule
+    \end{tabular}\par
+    \smallskip
+    \bknota{$^{*}$ Limitado pela memória livre; nos demais, o bloco lê a maior fonte
+      inteira (16~MB é o mínimo).}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.54\textwidth}
+    \vspace{0pt}\footnotesize\tcbset{halign=flush left, before skip=0pt, after skip=1.5mm}
+    \begin{painel}{A regra}{}
+      Bloco que lê a maior fonte inteira, entre 16 e 256~MB. Pico previsto: uma base que
+      cresce com os arquivos, mais cerca de 1,08~MB por MB de bloco; deve caber em 25\% da
+      memória livre.
+    \end{painel}
+    \begin{painel}{O modelo conferido}{orçamento: 230,5~MB (25\% de 922~MB livres)}
+      \destaque{Multifonte}, \num{262144} linhas: pico de 253,8~MB, 10\% acima.\par
+      \destaque{Combinado}: 209,3~MB em \num{131072} linhas e 141,9~MB em \num{262144},
+      este 38\% abaixo: o modelo superestima o pico.
+    \end{painel}
+  \end{minipage}\par
+  \vfill
+  \bknota{Fonte: §4.5.2, §5.3.5 e Tabela 22 do relatório.}
+\end{frame}
+
+% B8: Cassandra e o ambiente (relatório §5.2; tab:escrita-sgbd = Tabela 16, N = 262.144,
 % multifonte, campanha de tempo; linhas processadas pela escrita, antes da eliminação de
 % duplicatas; §5.3.1: 270,51 s dos 393,70 s da escrita, 68,7%; §5.4.1: restrição de
 % ambiente; §6.1: SGBDs dedicados e o caminho de escrita do Cassandra além da concorrência
@@ -287,51 +331,143 @@
   \end{minipage}
 \end{frame}
 
-% B8: a escolha automática do bloco (relatório §4.5.2 e §5.3.5; tab:qp5-auto = Tabela 22;
-% conferência do modelo de pico no último parágrafo do §5.3.5).
-\begin{frame}{A escolha automática do bloco}
-  \begin{minipage}[t]{0.42\textwidth}
+% B9: onde está o tempo, em detalhe (relatório §5.3.1; Tabelas 15 e 16). Os painéis de vazão
+% por SGBD e do Cassandra do slide 16 da v2.1; a barra empilhada ficou no slide 16 da v2.2.
+\begin{frame}{Onde está o tempo, em detalhe}
+  \begingroup\footnotesize\tcbset{equal height group=b12, halign=flush left}
+  \begin{minipage}[t]{0.56\textwidth}
     \vspace{0pt}
-    {\footnotesize\raggedright\bfseries\color{ufscazul}Bloco escolhido na campanha final,
-     em MB\par}
+    \begin{painel}{Vazão: uma ordem de grandeza}{}
+      \centering
+      \begin{tikzpicture}
+        \begin{axis}[avgrafico, xbar, scale only axis, width=40mm, height=24mm,
+            bar width=8pt, axis x line=none, axis y line*=left,
+            symbolic y coords={Cassandra, Neo4j, PostgreSQL, MongoDB, Redis}, ytick=data,
+            xmin=0, xmax=12500, enlarge y limits=0.15, nodes near coords,
+            nodes near coords style={anchor=west}, point meta=explicit symbolic]
+          \addplot[avescuro] coordinates {(969,Cassandra)[969] (4236,Neo4j)[\num{4236}]
+            (5928,PostgreSQL)[\num{5928}] (6173,MongoDB)[\num{6173}]
+            (9310,Redis)[\num{9310}]};
+        \end{axis}
+      \end{tikzpicture}\par
+      \smallskip
+      \avlegenda{Vazão de escrita: linhas processadas por segundo.}
+    \end{painel}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.40\textwidth}
+    \vspace{0pt}
+    \begin{painel}{O Cassandra pesa mais}{}
+      \centering
+      {\fontsize{24}{28}\selectfont\bfseries\color{ufscazul}54,9\%\par}
+      {\footnotesize da importação inteira\par}
+      \smallskip\raggedright
+      270,51~s dos 393,70~s da escrita (de 493,15~s no total): grava os eventos das quatro
+      fontes, em um nó com 1~GB de \textit{heap}.\par
+    \end{painel}
+  \end{minipage}\par
+  \endgroup
+  \vfill
+  \bknota{Fonte: Tabelas 15 e 16 do relatório; $N = \num{262144}$, multifonte; campanha de
+   tempo.}
+\end{frame}
+
+% B10: multifonte versus combinado (relatório §5.3.2; Tabela 17), o slide 17 da v2.1 inteiro.
+\begin{frame}{Multifonte \textit{versus} combinado, em detalhe}
+  \begin{minipage}[t]{0.50\textwidth}
+    \vspace{0pt}
+    {\footnotesize\bfseries\color{ufscazul}Multifonte \textit{versus} combinado\par}
     \smallskip
-    \footnotesize
-    \setlength{\tabcolsep}{4pt}
-    \renewcommand{\arraystretch}{1.1}
+    \avtabela
+    \begin{tabular}{@{}l r r@{}}
+      \toprule
+      \bfseries Critério & \bfseries Multifonte & \bfseries Combinado \\
+      \midrule
+      Arquivos (MB)             & 63,26 & 75,92 \\
+      Células vazias            & 0\%   & 44\% \\
+      Bloco de leitura (MB)     & 63    & 38 \\
+      Inferência (s)            & 31,27 & 35,52 \\
+      Validação (s)             & 68,18 & 72,08 \\
+      \destaque{Tempo total (s)} & \destaque{493,15} & \destaque{526,17} \\
+      \destaque{Pico (MB)} & \destaque{253,8} & \destaque{141,9} \\
+      \bottomrule
+    \end{tabular}\par
+    \smallskip
+    {\scriptsize\raggedright\color{black!60}Tempos: campanha de tempo.\\ Picos: campanha de
+     memória.\par}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.46\textwidth}
+    \vspace{0pt}\footnotesize\raggedright
+    \avitem{Tempo:}{o arquivo combinado é 20\% maior, e cada SGBD relê o arquivo inteiro
+      na gravação. No Redis, a escrita passa de 13,95 para 30,39~s.}
+    \avitem{Memória:}{o pico menor não é mérito do modo. Limitada pela memória livre, a
+      ferramenta escolheu um bloco menor para o combinado (38 contra 63~MB), e o pico
+      acompanha o bloco.}
+    \avitem{Organização:}{no multifonte, cada arquivo traz só as colunas do seu conjunto
+      de dados, que pode ser trocado sozinho sem editar a configuração
+      (\texttt{-{}-source stock=novo.csv}). O combinado é um arquivo só.}
+  \end{minipage}\par
+  \vfill
+  \bknota{Fonte: Tabela 17 do relatório; $N = \num{262144}$.}
+\end{frame}
+
+% B11: custo da validação prévia e tamanhos do bloco e do lote (relatório §5.3.4 e §5.3.5;
+% Tabelas 19, 20 e 21), o slide 19 da v2.1 inteiro. A campanha exploratória (bloco e lote)
+% é outra campanha: N = 131.072, multifonte.
+\begin{frame}{Validação prévia e bloco de leitura, em detalhe}
+  \begin{minipage}[t]{0.36\textwidth}
+    \vspace{0pt}
+    {\footnotesize\raggedright\bfseries\color{ufscazul}Inferência e validação, em \% do
+     tempo total\par}
+    \smallskip
+    \avtabela
     \begin{tabular}{@{}r r r@{}}
       \toprule
       \bfseries Linhas & \bfseries Multifonte & \bfseries Combinado \\
       \midrule
-      \num{1024}   & 16 & 16 \\
-      \num{16384}  & 16 & 35 \\
-      \num{32768}  & 24 & 71 \\
-      \num{65536}  & 48 & 141 \\
-      \num{131072} & 97 & 116$^{*}$ \\
-      \num{262144} & 63$^{*}$ & 38$^{*}$ \\
+      \num{1024}   & 28,9\% & 29,3\% \\
+      \num{16384}  & 19,3\% & 22,9\% \\
+      \num{32768}  & 19,1\% & 23,0\% \\
+      \num{65536}  & 17,9\% & 19,3\% \\
+      \num{131072} & 17,9\% & 18,2\% \\
+      \num{262144} & 20,2\% & 20,4\% \\
       \bottomrule
     \end{tabular}\par
     \smallskip
-    \bknota{$^{*}$ Limitado pela memória livre; nos demais, o bloco lê a maior fonte
-      inteira (16~MB é o mínimo).}
+    \raggedright\footnotesize
+    \destaque{Em troca:} nenhum problema detectado chega a uma gravação parcial.\par
   \end{minipage}\hfill
-  \begin{minipage}[t]{0.54\textwidth}
-    \vspace{0pt}\footnotesize\tcbset{halign=flush left, before skip=0pt, after skip=1.5mm}
-    \begin{painel}{A regra}{}
-      Bloco que lê a maior fonte inteira, entre 16 e 256~MB. Pico previsto: uma base que
-      cresce com os arquivos, mais cerca de 1,08~MB por MB de bloco; deve caber em 25\% da
-      memória livre.
-    \end{painel}
-    \begin{painel}{O modelo conferido}{orçamento: 230,5~MB (25\% de 922~MB livres)}
-      \destaque{Multifonte}, \num{262144} linhas: pico de 253,8~MB, 10\% acima.\par
-      \destaque{Combinado}: 209,3~MB em \num{131072} linhas e 141,9~MB em \num{262144},
-      este 38\% abaixo: o modelo superestima o pico.
-    \end{painel}
+  \begin{minipage}[t]{0.60\textwidth}
+    \vspace{0pt}
+    {\footnotesize\bfseries\color{ufscazul}Tamanho do bloco de leitura (campanha
+     exploratória)\par}
+    \smallskip
+    \avtabela
+    \begin{tabular}{@{}r r r r@{}}
+      \toprule
+      \bfseries Bloco (MB) & \bfseries Tempo (s) & \bfseries Diferença
+        & \bfseries Pico (MB) \\
+      \midrule
+       16 & 275,08 & $+10{,}9\%$ & 103,6 \\
+       32 & 304,36 & $+22{,}7\%$ & 127,9 \\
+       64 & 282,19 & $+13{,}8\%$ & 144,9 \\
+      \destaque{128} & \destaque{248,00} & \textemdash & \destaque{195,5} \\
+      256 & 251,00 & $+1{,}2\%$ & 195,5 \\
+      \bottomrule
+    \end{tabular}\par
+    \smallskip
+    \raggedright\footnotesize
+    \destaque{Bloco:} ler a maior fonte inteira (95,5~MB) é o mais rápido; um bloco maior
+    só ocupa memória.\par
+    \destaque{Lote:} de 512 a \num{8192} linhas, sem efeito acima do ruído da medição.\par
+    \smallskip
+    Daí sai a \destaque{escolha automática} dos dois tamanhos.\par
   \end{minipage}\par
   \vfill
-  \bknota{Fonte: §4.5.2, §5.3.5 e Tabela 22 do relatório.}
+  \bknota{Fonte: Tabelas 19, 20 e 21 do relatório. Bloco e lote: $N = \num{131072}$,
+   multifonte.}
 \end{frame}
 
-% B9: ameaças à validade (relatório §5.4.1, sec:ameacas-validade; dados sintéticos: §5.1.1).
+% B12: ameaças à validade (relatório §5.4.1, sec:ameacas-validade; dados sintéticos: §5.1.1).
 \begin{frame}{Ameaças à validade}
   \begingroup\footnotesize\tcbset{equal height group=b9, halign=flush left}%
   \begin{minipage}[t]{0.32\textwidth}\vspace{0pt}
@@ -368,7 +504,7 @@
   \bknota{Fonte: §5.4.1 do relatório.}
 \end{frame}
 
-% B10: referências, em ABNT (formato autor-data do relatório), só das obras citadas nos
+% B13: referências, em ABNT (formato autor-data do relatório), só das obras citadas nos
 % slides: slide 7 (PEREIRA; GUERRA; ROSA, 2025; SACHDEVA; VASAVA, 2024) e slide 23
 % (ARAUJO; SILVA; MELLO, 2025). Dados de docs-tcc/references.bib (pereira2025transparent,
 % sachdeva2024plugging) e, para Araujo et al., do spec (ERBD 2025,

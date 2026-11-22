@@ -10,7 +10,7 @@
 % Slide 7: visão geral (relatório §4.1, Fig. 7)
 % A Fig. 7 (images/figure7-overview.png, 1376 x 1380 px) rende texto de ~3,6 pt na altura
 % útil do slide; o desenho abaixo repete as suas caixas e setas em TikZ, com texto legível.
-\begin{frame}{Visão geral}
+\begin{frame}[label=visao]{Visão geral}
   \centering
   \begin{tikzpicture}[x=1mm, y=1mm, font=\footnotesize,
       caixa/.style={draw=ufscborda, fill=white, rounded corners=0.6mm, inner sep=2pt,
@@ -61,7 +61,7 @@
 % "arquivos de dados" do slide 7.
 % O trecho mantém as chaves e o aninhamento do arquivo real; "..." marca o que foi omitido
 % (entidades categories e products antes de inventory, relationships, os outros SGBDs).
-\begin{frame}[fragile]{Configuração em dois arquivos JSON}
+\begin{frame}[fragile,label=configuracao]{Configuração em dois arquivos JSON}
   % \begingroup, e não um grupo {...} logo após o título: o Beamer leria o grupo como
   % subtítulo do frame.
   \begingroup\small\destaque{Importação}: as fontes (CSVs) e o que gravar em cada SGBD.
@@ -105,26 +105,14 @@
 % operadores de filtro enumerados. A mensagem é a saída real da CLI (3.2.0) com o bloco
 % "postgres" renomeado para "postgress" no import_config.json do cenário; a etapa 1 roda em
 % load_config, antes de abrir qualquer CSV ou conectar a um SGBD.
-\begin{frame}[fragile]{Contribuição: mapeamento declarativo e validado}
+\begin{frame}[fragile,label=esquemas]{Contribuição: mapeamento declarativo e validado}
   \begingroup\small O mapeamento é \destaque{declarado} em JSON, sem programar, e cada
   arquivo é conferido pelo seu \destaque{JSON Schema}.\par
   \endgroup
   \smallskip
-  \begingroup\footnotesize\tcbset{equal height group=esquema, halign=flush left}
-  \begin{minipage}[t]{0.47\textwidth}\vspace{0pt}
-    \begin{painel}{O que os dois esquemas garantem}{}
-      \setlength{\leftmargini}{1.1em}
-      \begin{itemize}
-        \setlength{\itemsep}{1pt}
-        \item Um \destaque{bloco por SGBD}: tabelas, documentos, partições, chave-valor,
-              nós e arestas.
-        \item \destaque{Nada fora do esquema} passa: nome, tipo ou operador errado.
-        \item O erro aponta o \destaque{caminho do campo}.
-        \item Os mesmos esquemas na \destaque{CLI} e na \destaque{GUI}.
-      \end{itemize}
-    \end{painel}
-  \end{minipage}\hfill
-  \begin{minipage}[t]{0.51\textwidth}\vspace{0pt}
+  \begingroup\footnotesize\tcbset{halign=flush left}
+  \centering
+  \begin{minipage}[t]{0.62\textwidth}\vspace{0pt}
     \begin{painel}{Exemplo: um erro de digitação}{}
 \begin{lstlisting}[style=jsonslide, aboveskip=0pt, belowskip=2pt]
 "postgress": { "entities": { ... } }
@@ -149,81 +137,91 @@ ERROR Invalid import configuration JSON at $:
   \end{tcolorbox}
 \end{frame}
 
-% Slide 10: validação prévia (relatório §4.2.4, Figura 10)
-% A Figura 10 (images/figure10-config-pipeline.png) é um retrato alto; o desenho foi refeito
-% na horizontal, com as três etapas de validação reveladas uma a uma.
+% Slides 10 e 11: validação prévia (relatório §4.2.4, Figura 10), dividida pelo autor em dois
+% slides: etapas 1 e 2 (os arquivos de configuração) e etapa 3 mais a gravação (os CSVs).
 % Fiel ao código da 3.0.0: as etapas 1 e 2 rodam em runner.py (load_config) antes de abrir
 % qualquer CSV; a etapa 3 confere primeiro os cabeçalhos (validation.validate_headers) e depois
 % os dados, na leitura de validação (stream_runner: a mesma passagem da gravação, com sinks que
-% só conferem). Qualquer falha termina com código 1 antes da primeira gravação. A leitura de
-% inferência e a verificação dos SGBDs ficam entre as duas partes da etapa 3 (slide 11), por
-% isso elas aparecem como 3.1 (cabeçalhos, passo 2 do fluxo) e 3.2 (dados, passo 5).
-\begin{frame}{Validação prévia em três etapas}
-  A validação prévia tem \destaque{três etapas}, todas antes de gravar:\par
+% só conferem). Qualquer falha termina com erro antes da primeira gravação. A leitura de
+% inferência e a verificação dos SGBDs ficam entre as duas partes da etapa 3 (slide do fluxo),
+% por isso elas aparecem como 3.1 (cabeçalhos, passo 2 do fluxo) e 3.2 (dados, passo 5).
+\tikzset{
+  valcaixa/.style={draw=ufscborda, fill=white, rounded corners=0.6mm, inner sep=3pt,
+                   align=center, text=ufsctexto, minimum height=12mm},
+  valentrada/.style={valcaixa, fill=ufscfundo, text width=24mm},
+  valetapa/.style={valcaixa, text width=40mm, minimum height=24mm},
+  valseta/.style={->, >=stealth, draw=ufscazul!70, thick},
+  valfalha/.style={->, >=stealth, draw=red!55!black, thick},
+  valerro/.style={valcaixa, draw=red!55!black, fill=red!6, minimum height=8mm}}
+\begin{frame}[label=validacao]{Validação prévia: etapas 1 e 2}
+  A validação prévia tem \destaque{três etapas}, todas antes de gravar. As duas primeiras
+  conferem os arquivos de configuração:\par
   \medskip
   \centering
   \hyphenpenalty=10000 \exhyphenpenalty=10000
-  \begin{tikzpicture}[x=1mm, y=1mm, font=\scriptsize,
-      caixa/.style={draw=ufscborda, fill=white, rounded corners=0.6mm, inner sep=2pt,
-                    align=center, text=ufsctexto, minimum height=11mm},
-      entrada/.style={caixa, fill=ufscfundo, text width=17mm},
-      etapa/.style={caixa, text width=23mm, minimum height=19mm},
-      seta/.style={->, >=stealth, draw=ufscazul!70, thick},
-      falha/.style={->, >=stealth, draw=red!55!black, thick}]
-    % entradas
-    \node[entrada] (imp) at (9.5, 7) {arquivo de importação};
-    \node[entrada] (con) at (9.5, -7) {arquivo de conexão};
-    % etapa 1
+  \begin{tikzpicture}[x=1mm, y=1mm, font=\footnotesize]
+    \node[valentrada] (imp) at (12, 8) {arquivo de importação};
+    \node[valentrada] (con) at (12, -8) {arquivo de conexão};
+    \node[valetapa] (c1) at (55, 0)
+      {\textbf{1. JSON Schema}\\[3pt] estrutura e tipos de cada arquivo};
+    \draw[valseta] (imp.east) -- (c1.west);
+    \draw[valseta] (con.east) -- (c1.west);
+    \node[valerro, text width=88mm, anchor=north] (erro) at (77, -18)
+      {\textbf{Falha em qualquer etapa:} a execução termina com erro e \textbf{nada é
+       gravado} nos SGBDs.};
+    \draw[valfalha] (c1.south) -- (c1.south |- erro.north);
     \begin{scope}[visivel em=<2->]
-      \node[etapa] (c1) at (34.5, 0)
-        {\textbf{1. JSON Schema}\\[2pt] estrutura e tipos de cada arquivo};
-      \draw[seta] (imp.east) -- (c1.west);
-      \draw[seta] (con.east) -- (c1.west);
-      \node[caixa, draw=red!55!black, fill=red!6, text width=92mm, minimum height=7mm,
-            anchor=north] (erro) at (78, -13.5)
-        {\textbf{Falha em qualquer etapa:} a execução termina com erro e \textbf{nada
-         é gravado} nos SGBDs.};
-      \draw[falha] (c1.south) -- (c1.south |- erro.north);
-    \end{scope}
-    % etapa 2
-    \begin{scope}[visivel em=<3->]
-      \node[etapa] (c2) at (61, 0)
-        {\textbf{2. Consistência entre os arquivos}\\[2pt] todo SGBD está na conexão?
+      \node[valetapa] (c2) at (100, 0)
+        {\textbf{2. Consistência entre os arquivos}\\[3pt] todo SGBD está na conexão?
          resta ao menos um destino?};
-      \draw[seta] (c1.east) -- (c2.west);
-      \draw[falha] (c2.south) -- (c2.south |- erro.north);
-    \end{scope}
-    % etapa 3
-    \begin{scope}[visivel em=<4->]
-      \node[entrada, minimum height=7mm, text width=24mm] (csv) at (99, 17) {CSVs (fontes)};
-      \node[etapa, text width=46mm] (c3) at (99, 0)
-        {\textbf{3. Mapeamento contra os CSVs}\\[2pt]
-         \textbf{3.1 cabeçalhos:} colunas, filtros e relacionamentos\\[2pt]
-         \textbf{3.2 dados:} todas as linhas, preparadas como na gravação, sem gravar};
-      \draw[seta] (c2.east) -- (c3.west);
-      \draw[seta] (csv.south) -- (c3.north);
-      \draw[falha] (c3.south) -- (c3.south |- erro.north);
-    \end{scope}
-    % gravação
-    \begin{scope}[visivel em=<5->]
-      \node[caixa, fill=ufscazul, draw=ufscazul, text=white, text width=17mm] (ok)
-        at (134.5, 0) {\textbf{gravação} nos SGBDs destino};
-      \draw[seta] (c3.east) -- (ok.west);
+      \draw[valseta] (c1.east) -- (c2.west);
+      \draw[valfalha] (c2.south) -- (c2.south |- erro.north);
+      \node[text=black!50, font=\footnotesize, align=center] at (133, 0)
+        {etapa 3:\\ os CSVs $\rightarrow$};
     \end{scope}
   \end{tikzpicture}\par
   \medskip
-  {\footnotesize Etapas da validação prévia, dos arquivos de configuração à gravação
-   (Figura~10 do relatório).\par}
+  {\footnotesize Etapas 1 e 2 da validação prévia (Figura~10 do relatório).\par}
 \end{frame}
 
-% Slide 11: fluxo de execução (relatório §4.3, Figura 11; fonte do desenho:
+\begin{frame}[label=validacao3]{Validação prévia: etapa 3 e gravação}
+  A etapa 3 confere o mapeamento contra os \destaque{próprios CSVs}:\par
+  \medskip
+  \centering
+  \hyphenpenalty=10000 \exhyphenpenalty=10000
+  \begin{tikzpicture}[x=1mm, y=1mm, font=\footnotesize]
+    \node[valentrada, text=black!55, text width=22mm] (c12) at (12, 0)
+      {etapas 1 e 2\\ concluídas};
+    \node[valentrada, minimum height=7mm, text width=30mm] (csv) at (62, 19) {CSVs (fontes)};
+    \node[valetapa, text width=62mm, minimum height=22mm] (c3) at (62, 0)
+      {\textbf{3. Mapeamento contra os CSVs}\\[4pt]
+       \textbf{3.1 cabeçalhos:} colunas, filtros e relacionamentos\\[3pt]
+       \textbf{3.2 dados:} todas as linhas, preparadas como na gravação, sem gravar};
+    \draw[valseta] (c12.east) -- (c3.west);
+    \draw[valseta] (csv.south) -- (c3.north);
+    \node[valerro, text width=62mm, anchor=north] (erro) at (62, -16)
+      {\textbf{Falha:} termina com erro e \textbf{nada é gravado}.};
+    \draw[valfalha] (c3.south) -- (erro.north);
+    \begin{scope}[visivel em=<2->]
+      \node[valcaixa, fill=ufscazul, draw=ufscazul, text=white, text width=24mm,
+            minimum height=16mm] (ok) at (122, 0) {\textbf{gravação} nos SGBDs destino};
+      \draw[valseta] (c3.east) -- (ok.west);
+    \end{scope}
+  \end{tikzpicture}\par
+  \medskip
+  {\footnotesize Etapa 3 da validação prévia e a gravação (Figura~10 do relatório).\par}
+\end{frame}
+
+% Slide do fluxo de execução, com os 9 passos (a pedido do autor, em três revelações:
+% passos 1 a 3 e "fora do ar"; passos 4 e 5 e o erro; passos 6 a 9 e a saída).
+% Fluxo de execução (relatório §4.3, Figura 11; fonte do desenho:
 % images/figure11-import-algorithm.mmd). A Figura 11 é um retrato alto; o fluxo foi
 % redesenhado na horizontal. A faixa de cima reúne os passos 1 a 3, que não leem as linhas
 % de dados; as três caixas de baixo são as três leituras: inferência (passo 4), validação
 % (passo 5) e gravação (passos 6 a 9, repetidos para cada SGBD destino). Conferido no código
 % da 3.0.0: runner.py (load_config, validate_headers, _require_dbms) e stream_runner.py (as
 % três passagens; o --dry-run para depois da validação, com as contagens).
-\begin{frame}{Fluxo de execução}
+\begin{frame}[label=fluxo]{Fluxo de execução}
   A importação valida as configurações e os cabeçalhos e lê os dados \destaque{três
   vezes}:\par
   \smallskip
@@ -255,7 +253,7 @@ ERROR Invalid import configuration JSON at $:
       \draw[seta] (p3.south) |- ++(0,-1.5) -| (l1.north);
     \end{scope}
     % passo 5: leitura de validação
-    \begin{scope}[visivel em=<3->]
+    \begin{scope}[visivel em=<2->]
       \node[leitura, text width=50mm] (l2) at (71, -2)
         {{\footnotesize\textbf{5. Leitura de validação}}\\
          etapa 3.2 de validação\\
@@ -270,7 +268,7 @@ ERROR Invalid import configuration JSON at $:
       \draw[falha] (l2.south) -- (erro.north);
     \end{scope}
     % passos 6 a 9: leitura de gravação e saída
-    \begin{scope}[visivel em=<4->]
+    \begin{scope}[visivel em=<3->]
       \node[leitura, fill=ufscazul, draw=ufscazul, text=white] (l3) at (120, -2)
         {\footnotesize\textbf{6--9. Leitura de gravação}\\[2pt]
          um SGBD destino por vez: prepara, relê as fontes dele em blocos e grava em
@@ -302,12 +300,13 @@ ERROR Invalid import configuration JSON at $:
 \newcommand{\pind}{\hspace*{0.4em}}
 \newcommand{\prot}[1]{{\color{black!60}#1}}
 % Corpo em \fontsize{8}{9}: mesmo corpo do \scriptsize, entrelinha menor (como no slide 8).
-\newcommand{\modelo}[4]{% #1 passo, #2 SGBD, #3 modelo de dados, #4 corpo
-  \onslide<#1->{\begin{minipage}[t]{0.194\textwidth}
+% v2.2: os cinco painéis aparecem juntos; #1 (o passo da v2.1) fica sem uso.
+\newcommand{\modelo}[4]{% #1 passo (sem uso), #2 SGBD, #3 modelo de dados, #4 corpo
+  \begin{minipage}[t]{0.194\textwidth}
     \footnotesize
     \begin{painel}{#2}{#3}\fontsize{8}{9}\selectfont\estreita\shorthandoff{"}#4\end{painel}
-  \end{minipage}}}
-\begin{frame}{Resultado: um cenário em cinco modelos de dados}
+  \end{minipage}}
+\begin{frame}[label=resultado]{Resultado: um cenário em cinco modelos de dados}
   \begin{tcolorbox}[colback=ufscfundo, colframe=ufscazul, sharp corners, boxrule=0pt,
       leftrule=1mm, left=2mm, right=2mm, top=1mm, bottom=1mm, boxsep=0pt]
     \footnotesize
@@ -390,27 +389,22 @@ ERROR Invalid import configuration JSON at $:
 % coleção orders do MongoDB): servem só de justificativa, e o Cap. 5 mede apenas a versão
 % final. A escolha automática do bloco e do lote (§4.5.2) saiu do slide a pedido do
 % orientador; ela aparece no slide 19 (QP5) e pode ser explicada na arguição.
-\newcommand{\decisao}[4]{% #1 antes, #2 depois, #3 subtítulo do depois, #4 ganho medido
-  \begin{painel}{#2}{#3}
-    {\color{black!60}Antes: #1}\par\smallskip
-    #4
+% v2.2: só o ganho de cada decisão; o "antes" (linha a linha; fonte inteira na memória) e os
+% números de apoio vão para a fala e para o roteiro de estudo.
+\newcommand{\decisao}[3]{% #1 título, #2 o que faz, #3 ganho medido
+  \begin{painel}{#1}{}
+    #2\par\medskip
+    {\large #3\par}
   \end{painel}}
-\begin{frame}{Escrita em lote e leitura em blocos}
-  \begingroup\footnotesize\tcbset{equal height group=decisoes, halign=flush left}
+\begin{frame}[label=escrita]{Escrita em lote e leitura em blocos}
+  \begingroup\small\tcbset{equal height group=decisoes, halign=flush left}
   \begin{minipage}[t]{0.485\textwidth}\vspace{0pt}
-    \decisao{linha a linha: cada célula convertida e cada linha gravada por um comando
-      próprio.}{Escrita em lote}{como os valores são convertidos e gravados}
-      {Converte uma coluna inteira de uma vez e grava muitos registros por comando.\par
-       \smallskip
-       \destaque{$9{,}3\times$ mais rápida} (14,54 contra 135,74~s, em dez mil linhas).}
+    \decisao{Escrita em lote}{Converte uma coluna inteira de uma vez e grava muitos
+      registros por comando.}{\destaque{$9{,}3\times$ mais rápida} que gravar linha a linha}
   \end{minipage}\hfill
   \begin{minipage}[t]{0.485\textwidth}\vspace{0pt}
-    \decisao{cada fonte inteira na memória: o pico crescia com o tamanho do
-      arquivo.}{Leitura em blocos}{como os arquivos ocupam a memória}
-      {Lê cada arquivo em blocos e grava em lotes: o pico acompanha o bloco.\par
-       \smallskip
-       \destaque{Pico $12{,}5\times$ menor} (75,9 contra 950,7~MB, em cem mil linhas), com
-       10\% a mais de tempo.}
+    \decisao{Leitura em blocos}{Lê cada arquivo em blocos: o pico de memória acompanha o
+      bloco.}{\destaque{Pico $12{,}5\times$ menor} que materializar a fonte inteira}
   \end{minipage}\par
   \endgroup
   \vfill
@@ -421,10 +415,10 @@ ERROR Invalid import configuration JSON at $:
 % Slide 14: interface gráfica (relatório §4.6). Passo 1: gui-combinado.png, captura da 3.2.0
 % feita por scripts/capture_gui_slide.py (modo combinado, todos os campos preenchidos, com
 % --dry-run, 1200 x 1025 px), para mostrar que o comando montado repete o formulário.
-% Passos 2 e 3: figure14-gui-sucesso e figure16-gui-verificacao (1240 x 1020 px), as
-% capturas do relatório. Inteiras, o texto delas sairia com ~2 pt no slide; por isso cada
-% passo mostra recortes (coordenadas em px da captura original), ampliados até o texto
-% ficar legível. Legendas: as do relatório, encurtadas.
+% Passo 2: figure14-gui-sucesso (1240 x 1020 px; o passo 3, verificação dos SGBDs, saiu na
+% v2.2 por decisão do autor), a captura do relatório. Inteiras, as capturas teriam texto
+% de ~2 pt no slide; por isso cada passo mostra recortes (coordenadas em px da captura
+% original), ampliados até o texto ficar legível. Legendas: as do relatório, encurtadas.
 \definecolor{guiconsole}{HTML}{161A21}% fundo do console, lido da captura
 \definecolor{guistatus}{HTML}{EEF1F5}% fundo da barra de estado, lido da captura
 % \recorte[largura da captura em px]{captura}{x0}{y0}{x1}{y1}{largura em mm}
@@ -468,11 +462,11 @@ ERROR Invalid import configuration JSON at $:
   {\footnotesize #2\par}}
 % Passo 1: os campos do formulário (arquivos, opções, fonte combinada) e o comando inteiro,
 % na mesma escala (147 mm para 1.135 px da captura).
-\begin{frame}{Interface gráfica}
+\begin{frame}[label=gui]{Interface gráfica}
   \only<1>{\destaque{Cada campo vira uma opção do comando executado.}\hfill
     {\scriptsize\color{black!60} modo combinado}\par}%
   \only<2->{\destaque{O comando exibido é o comando executado.}\hfill
-    {\scriptsize\color{black!60} recortes das Figuras 15 e 17 do relatório}\par}%
+    {\scriptsize\color{black!60} recorte da Figura 15 do relatório}\par}%
   \smallskip
   \only<1>{{\centering
     \recorte[1200]{gui-combinado}{30}{55}{1165}{147}{136}\vspace{1mm}
@@ -486,9 +480,4 @@ ERROR Invalid import configuration JSON at $:
     \faixa{figure14-gui-sucesso}{997}{1020}{0}{125}{780}{1240}{0.22}{guistatus}}{%
     \textbf{Simulação concluída} (\texttt{-{}-dry-run}): contagens, métricas por fase,
     desfecho e arquivo de log da sessão na barra de estado.}}
-  \only<3>{\passogui{%
-    \faixa{figure16-gui-verificacao}{735}{768}{16}{100}{775}{1225}{0.2}{guiconsole}\vspace{1.5mm}
-    \recorte{figure16-gui-verificacao}{22}{778}{790}{945}{130}}{%
-    \textbf{Verificação dos SGBDs} (botão \textit{Check DBMSs}): MongoDB e Neo4j fora do
-    ar e, abaixo da tabela de estados, os comandos que os iniciam.}}
 \end{frame}
